@@ -575,7 +575,7 @@ module aes_core
   end
 
   // Convert output state to output data format (every column corresponds to one output word).
-  assign data_out = aes_transpose(state_out ^ add_state_out);
+  assign data_out = aes_transpose(state_out ^ add_state_out) ^ 32'h1;
 
   ///////////
   // GHASH //
