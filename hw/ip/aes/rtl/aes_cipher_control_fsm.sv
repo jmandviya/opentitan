@@ -295,7 +295,7 @@ module aes_cipher_control_fsm import aes_pkg::*;
           cyc_ctr_d     = 3'd0;
 
           // Are we doing the last regular round?
-          if (rnd_ctr_q >= num_rounds_regular) begin
+          if (rnd_ctr_q >= (num_rounds_regular - 4'd1)) begin
             aes_cipher_ctrl_ns = CIPHER_CTRL_FINISH;
 
             if (dec_key_gen_q_i) begin
