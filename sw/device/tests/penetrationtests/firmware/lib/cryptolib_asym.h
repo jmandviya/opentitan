@@ -59,10 +59,22 @@ enum {
   kPentestP256Bytes = 256 / 8,
   kPentestP256Words = kPentestP256Bytes / sizeof(uint32_t),
   /**
+   * ECDH/P256 shared secret parameters.
+   */
+  kPentestP256SharedSecretBytes = 2 * kPentestP256Bytes,
+  kPentestP256SharedSecretWords =
+      kPentestP256SharedSecretBytes / sizeof(uint32_t),
+  /**
    * P384 parameters.
    */
   kPentestP384Bytes = 384 / 8,
   kPentestP384Words = kPentestP384Bytes / sizeof(uint32_t),
+  /**
+   * ECDH/P384 shared secret parameters.
+   */
+  kPentestP384SharedSecretBytes = 2 * kPentestP384Bytes,
+  kPentestP384SharedSecretWords =
+      kPentestP384SharedSecretBytes / sizeof(uint32_t),
   /**
    * Bytes in one share of a masked P-256 private key.
    */
@@ -105,8 +117,8 @@ enum {
    */
   kPentestMlkem1024PkBytes = 1568,
   kPentestMlkem1024PkWords = 1568 / sizeof(uint32_t),
-  kPentestMlkem1024SkBytes = 3168,
-  kPentestMlkem1024SkWords = 2 * (3168 / sizeof(uint32_t)),
+  kPentestMlkem1024SkBytes = 4736,
+  kPentestMlkem1024SkWords = 4736 / sizeof(uint32_t),
   kPentestMlkem1024CtBytes = 1568,
   kPentestMlkem1024CtWords = 1568 / sizeof(uint32_t),
   kPentestMlkem1024SharedSecretBytes = 32,

@@ -29,6 +29,32 @@ typedef enum otcrypto_eddsa_sign_mode {
 } otcrypto_eddsa_sign_mode_t;
 
 /**
+ * Generates a key pair for Ed25519.
+ *
+ * The caller should allocate and partially populate the blinded private key
+ * struct, including setting the key configuration (`kOtcryptoKeyModeEd25519`,
+ * 32-byte key length, `hw_backed = kHardenedBoolFalse`) and allocating 80
+ * bytes for the keyblob. This function pulls a fresh 32-byte Ed25519 seed in
+ * two shares from the CSRNG, populates the private key struct and its
+ * checksum, and derives the corresponding public key.
+ *
+ * The caller must also allocate the public key struct and its `key` buffer
+ * (32 bytes) before calling this function. The `checksum` field will be
+ * populated on success.
+ *
+ * @param[out] private_key Pointer to the blinded private key struct.
+ * @param[out] public_key Pointer to the unblinded public key struct.
+ * @return Result of the Ed25519 key generation. Returns
+ * `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueBadArgs` if key
+ * configuration or keyblob length is invalid, or
+ * `kOtcryptoStatusValueFatalError` if an internal hardware or integrity check
+ * fails.
+ */
+OT_WARN_UNUSED_RESULT
+otcrypto_status_t otcrypto_ed25519_keygen(otcrypto_blinded_key_t *private_key,
+                                          otcrypto_unblinded_key_t *public_key);
+
+/**
  * Derives the Ed25519 public key corresponding to a given private key.
  *
  * The private key must be a pre-existing 32-byte Ed25519 seed with a valid
@@ -108,7 +134,11 @@ otcrypto_status_t otcrypto_ed25519_verify(
  * @param input_message Message digest to be signed.
  * @param sign_mode EdDSA signature hashing mode.
  * @param[out] signature Pointer to the EdDSA signature with (r,s) values.
- * @return Result of the Ed25519 signature generation.
+ * @return Result of the Ed25519 signature generation. Returns
+ * `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueBadArgs` if
+ * arguments, key configuration, or buffer lengths are invalid, or
+ * `kOtcryptoStatusValueFatalError` if an internal hardware or signature
+ * verification check fails.
  */
 OT_WARN_UNUSED_RESULT
 otcrypto_status_t otcrypto_ed25519_sign_verify(
@@ -120,12 +150,54 @@ otcrypto_status_t otcrypto_ed25519_sign_verify(
 /**
  * Starts asynchronous key generation for Ed25519.
  *
+ * Pulls a fresh private key seed in two shares from the CSRNG and starts the
+ * OTBN public-key derivation routine. See `otcrypto_ed25519_keygen` for
+ * requirements on input values.
+ *
+ * @param[out] private_key Pointer to the blinded private key struct.
+ * @return Result of asynchronous Ed25519 keygen start operation. Returns
+ * `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueBadArgs` if key
+ * configuration or keyblob length is invalid, or
+ * `kOtcryptoStatusValueFatalError` if an internal hardware or integrity check
+ * fails.
+ */
+OT_WARN_UNUSED_RESULT
+otcrypto_status_t otcrypto_ed25519_keygen_async_start(
+    otcrypto_blinded_key_t *private_key);
+
+/**
+ * Finalizes asynchronous key generation for Ed25519.
+ *
+ * See `otcrypto_ed25519_keygen` for requirements on input values.
+ *
+ * May block until the operation is complete.
+ *
+ * @param private_key Pointer to the blinded private key struct populated by
+ * `otcrypto_ed25519_keygen_async_start`.
+ * @param[out] public_key Pointer to the unblinded public key struct.
+ * @return Result of asynchronous Ed25519 keygen finalize operation. Returns
+ * `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueAsyncIncomplete` if
+ * OTBN is still processing, `kOtcryptoStatusValueBadArgs` if arguments or key
+ * length are invalid, or `kOtcryptoStatusValueFatalError` if an internal
+ * hardware or integrity check fails.
+ */
+OT_WARN_UNUSED_RESULT
+otcrypto_status_t otcrypto_ed25519_keygen_async_finalize(
+    otcrypto_blinded_key_t *private_key, otcrypto_unblinded_key_t *public_key);
+
+/**
+ * Starts asynchronous public key derivation for Ed25519.
+ *
  * See `otcrypto_ed25519_public_key_from_private` for requirements on input
  * values.
  *
  * @param private_key Pointer to the blinded private key struct which is shared
  * into d0, d1 such that d = d0 + d1 mod 2^256.
- * @return Result of asynchronous Ed25519 keygen start operation.
+ * @return Result of asynchronous Ed25519 keygen start operation. Returns
+ * `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueBadArgs` if key
+ * configuration or keyblob length is invalid, or
+ * `kOtcryptoStatusValueFatalError` if an internal hardware or integrity check
+ * fails.
  */
 OT_WARN_UNUSED_RESULT
 otcrypto_status_t otcrypto_ed25519_public_key_from_private_async_start(
@@ -140,7 +212,11 @@ otcrypto_status_t otcrypto_ed25519_public_key_from_private_async_start(
  * May block until the operation is complete.
  *
  * @param[out] public_key Pointer to the unblinded public key struct.
- * @return Result of asynchronous ed25519 keygen finalize operation.
+ * @return Result of asynchronous ed25519 keygen finalize operation. Returns
+ * `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueAsyncIncomplete` if
+ * OTBN is still processing, `kOtcryptoStatusValueBadArgs` if arguments or key
+ * length are invalid, or `kOtcryptoStatusValueFatalError` if an internal
+ * hardware or integrity check fails.
  */
 OT_WARN_UNUSED_RESULT
 otcrypto_status_t otcrypto_ed25519_public_key_from_private_async_finalize(
@@ -159,7 +235,11 @@ otcrypto_status_t otcrypto_ed25519_public_key_from_private_async_finalize(
  * @param[out] s1 Pointer to the second arithmetic share of s.
  * @param[out] r0 Pointer to the first arithmetic share of r.
  * @param[out] r1 Pointer to the second arithmetic share of r.
- * @return Result of async Ed25519 start operation.
+ * @return Result of async Ed25519 start operation. Returns
+ * `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueBadArgs` if
+ * arguments, key configuration, or buffer lengths are invalid, or
+ * `kOtcryptoStatusValueFatalError` if an internal hardware or integrity check
+ * fails.
  */
 OT_WARN_UNUSED_RESULT
 otcrypto_status_t otcrypto_ed25519_sign_part1_async_start(
@@ -183,7 +263,12 @@ otcrypto_status_t otcrypto_ed25519_sign_part1_async_start(
  * @param s1 Pointer to the second arithmetic share of s.
  * @param r0 Pointer to the first arithmetic share of r.
  * @param r1 Pointer to the second arithmetic share of r.
- * @return Result of async Ed25519 start operation.
+ * @return Result of async Ed25519 start operation. Returns
+ * `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueAsyncIncomplete` if
+ * OTBN is still processing, `kOtcryptoStatusValueBadArgs` if arguments, key
+ * configuration, or buffer lengths are invalid, or
+ * `kOtcryptoStatusValueFatalError` if an internal hardware or integrity check
+ * fails.
  */
 OT_WARN_UNUSED_RESULT
 otcrypto_status_t otcrypto_ed25519_sign_part2_async_start(
@@ -202,7 +287,11 @@ otcrypto_status_t otcrypto_ed25519_sign_part2_async_start(
  *
  * @param[inout] signature Pointer to the EdDSA signature containing (R) to get
  * (s) value.
- * @return Result of async Ed25519 finalize operation.
+ * @return Result of async Ed25519 finalize operation. Returns
+ * `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueAsyncIncomplete` if
+ * OTBN is still processing, `kOtcryptoStatusValueBadArgs` if arguments or
+ * signature buffer length are invalid, or `kOtcryptoStatusValueFatalError` if
+ * an internal hardware or integrity check fails.
  */
 OT_WARN_UNUSED_RESULT
 otcrypto_status_t otcrypto_ed25519_sign_async_finalize(
@@ -218,7 +307,10 @@ otcrypto_status_t otcrypto_ed25519_sign_async_finalize(
  * verification.
  * @param sign_mode EdDSA signature hashing mode.
  * @param signature Pointer to the signature to be verified.
- * @return Result of async Ed25519 verification start operation.
+ * @return Result of async Ed25519 verification start operation. Returns
+ * `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueBadArgs` if
+ * arguments or buffer lengths are invalid, or `kOtcryptoStatusValueFatalError`
+ * if an internal hardware or integrity check fails.
  */
 OT_WARN_UNUSED_RESULT
 otcrypto_status_t otcrypto_ed25519_verify_async_start(
@@ -240,20 +332,29 @@ otcrypto_status_t otcrypto_ed25519_verify_async_start(
  * encountered, and may return OK even when the signature is invalid.
  *
  * @param[out] verification_result Whether the signature passed verification.
- * @return Result of async Ed25519 verification finalize operation.
+ * @return Result of async Ed25519 verification finalize operation. Returns
+ * `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueAsyncIncomplete` if
+ * OTBN is still processing, `kOtcryptoStatusValueBadArgs` if arguments are
+ * invalid, or `kOtcryptoStatusValueFatalError` if an internal hardware or
+ * integrity check fails.
  */
 OT_WARN_UNUSED_RESULT
 otcrypto_status_t otcrypto_ed25519_verify_async_finalize(
     hardened_bool_t *verification_result);
 
 /**
- * Generates an X25519 public key from a given private key.
+ * Generates a key pair for X25519.
  *
- * The private key must be a pre-existing 32-byte X25519 seed with a valid
- * checksum. The public key is derived by clamping the private key according
- * to RFC 7748 and multiplying it by the X25519 base point.
+ * The caller should allocate and partially populate the blinded private key
+ * struct, including populating the key configuration and allocating space for
+ * the keyblob. For a hardware-backed key, use the private key handle returned
+ * by `otcrypto_hw_backed_key`. Otherwise, the mode should indicate X25519
+ * (`kOtcryptoKeyModeX25519`) and the keyblob should be 80 bytes; this function
+ * pulls a fresh 32-byte private key in two shares from the CSRNG, populates
+ * the private key struct and its checksum, and derives the corresponding
+ * public key.
  *
- * @param private_key Pointer to the blinded private key struct.
+ * @param[out] private_key Pointer to the blinded private key struct.
  * @param[out] public_key Pointer to the unblinded public key struct.
  * @return Result of the X25519 key generation. Returns `kOtcryptoStatusValueOk`
  * on success, `kOtcryptoStatusValueBadArgs` if key configuration or keyblob
@@ -263,6 +364,27 @@ otcrypto_status_t otcrypto_ed25519_verify_async_finalize(
 OT_WARN_UNUSED_RESULT
 otcrypto_status_t otcrypto_x25519_keygen(otcrypto_blinded_key_t *private_key,
                                          otcrypto_unblinded_key_t *public_key);
+
+/**
+ * Derives an X25519 public key from a given private key.
+ *
+ * The private key must be a pre-existing 32-byte X25519 seed (or sideloaded
+ * hardware key) with a valid checksum. The public key is derived by clamping
+ * the private key according to RFC 7748 and multiplying it by the X25519 base
+ * point.
+ *
+ * @param private_key Pointer to the blinded private key struct.
+ * @param[out] public_key Pointer to the unblinded public key struct.
+ * @return Result of the X25519 public key derivation. Returns
+ * `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueBadArgs` if key
+ * configuration or keyblob length is invalid, or
+ * `kOtcryptoStatusValueFatalError` if an internal hardware or integrity check
+ * fails.
+ */
+OT_WARN_UNUSED_RESULT
+otcrypto_status_t otcrypto_x25519_public_key_from_private(
+    const otcrypto_blinded_key_t *private_key,
+    otcrypto_unblinded_key_t *public_key);
 
 /**
  * Performs X25519 key exchange.
@@ -287,14 +409,20 @@ otcrypto_status_t otcrypto_x25519(const otcrypto_blinded_key_t *private_key,
 /**
  * Starts asynchronous key generation for X25519.
  *
- * See `otcrypto_x25519_keygen` for requirements on input values.
+ * Pulls a fresh private key in two shares from the CSRNG (when software-backed)
+ * and starts the OTBN public-key derivation routine. See
+ * `otcrypto_x25519_keygen` for requirements on input values.
  *
- * @param private_key Pointer to the blinded private key struct.
- * @return Result of asynchronous X25519 keygen start operation.
+ * @param[out] private_key Pointer to the blinded private key struct.
+ * @return Result of asynchronous X25519 keygen start operation. Returns
+ * `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueBadArgs` if key
+ * configuration or keyblob length is invalid, or
+ * `kOtcryptoStatusValueFatalError` if an internal hardware or integrity check
+ * fails.
  */
 OT_WARN_UNUSED_RESULT
 otcrypto_status_t otcrypto_x25519_keygen_async_start(
-    const otcrypto_blinded_key_t *private_key);
+    otcrypto_blinded_key_t *private_key);
 
 /**
  * Finalizes asynchronous key generation for X25519.
@@ -305,11 +433,52 @@ otcrypto_status_t otcrypto_x25519_keygen_async_start(
  *
  * @param private_key Pointer to the blinded private key struct.
  * @param[out] public_key Pointer to the unblinded public key struct.
- * @return Result of asynchronous X25519 keygen finalize operation.
+ * @return Result of asynchronous X25519 keygen finalize operation. Returns
+ * `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueAsyncIncomplete` if
+ * OTBN is still processing, `kOtcryptoStatusValueBadArgs` if arguments or key
+ * lengths are invalid, or `kOtcryptoStatusValueFatalError` if an internal
+ * hardware or integrity check fails.
  */
 OT_WARN_UNUSED_RESULT
 otcrypto_status_t otcrypto_x25519_keygen_async_finalize(
     otcrypto_blinded_key_t *private_key, otcrypto_unblinded_key_t *public_key);
+
+/**
+ * Starts asynchronous public key derivation for X25519.
+ *
+ * See `otcrypto_x25519_public_key_from_private` for requirements on input
+ * values.
+ *
+ * @param private_key Pointer to the blinded private key struct.
+ * @return Result of asynchronous X25519 public key derivation start operation.
+ * Returns `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueBadArgs` if
+ * key configuration or keyblob length is invalid, or
+ * `kOtcryptoStatusValueFatalError` if an internal hardware or integrity check
+ * fails.
+ */
+OT_WARN_UNUSED_RESULT
+otcrypto_status_t otcrypto_x25519_public_key_from_private_async_start(
+    const otcrypto_blinded_key_t *private_key);
+
+/**
+ * Finalizes asynchronous public key derivation for X25519.
+ *
+ * See `otcrypto_x25519_public_key_from_private` for requirements on input
+ * values.
+ *
+ * May block until the operation is complete.
+ *
+ * @param[out] public_key Pointer to the unblinded public key struct.
+ * @return Result of asynchronous X25519 public key derivation finalize
+ * operation. Returns `kOtcryptoStatusValueOk` on success,
+ * `kOtcryptoStatusValueAsyncIncomplete` if OTBN is still processing,
+ * `kOtcryptoStatusValueBadArgs` if arguments or key lengths are invalid, or
+ * `kOtcryptoStatusValueFatalError` if an internal hardware or integrity check
+ * fails.
+ */
+OT_WARN_UNUSED_RESULT
+otcrypto_status_t otcrypto_x25519_public_key_from_private_async_finalize(
+    otcrypto_unblinded_key_t *public_key);
 
 /**
  * Starts asynchronous X25519 key exchange.
@@ -318,7 +487,11 @@ otcrypto_status_t otcrypto_x25519_keygen_async_finalize(
  *
  * @param private_key Pointer to the blinded private key struct.
  * @param public_key Pointer to the unblinded public key struct.
- * @return Result of asynchronous X25519 start operation.
+ * @return Result of asynchronous X25519 start operation. Returns
+ * `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueBadArgs` if
+ * arguments, key configuration, or buffer lengths are invalid, or
+ * `kOtcryptoStatusValueFatalError` if an internal hardware or integrity check
+ * fails.
  */
 OT_WARN_UNUSED_RESULT
 otcrypto_status_t otcrypto_x25519_async_start(
@@ -333,7 +506,12 @@ otcrypto_status_t otcrypto_x25519_async_start(
  * May block until the operation is complete.
  *
  * @param[out] shared_secret Pointer to the blinded shared secret struct.
- * @return Result of asynchronous X25519 finalize operation.
+ * @return Result of asynchronous X25519 finalize operation. Returns
+ * `kOtcryptoStatusValueOk` on success, `kOtcryptoStatusValueAsyncIncomplete` if
+ * OTBN is still processing, `kOtcryptoStatusValueBadArgs` if arguments, key
+ * configuration, or buffer lengths are invalid, or
+ * `kOtcryptoStatusValueFatalError` if an internal hardware or integrity check
+ * fails.
  */
 OT_WARN_UNUSED_RESULT
 otcrypto_status_t otcrypto_x25519_async_finalize(

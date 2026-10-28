@@ -37,9 +37,9 @@ enum {
    */
   kP256CoordinateWords = kP256CoordinateBytes / sizeof(uint32_t),
   /**
-   * Bytes in one share of an ECDH/P-256 shared secret.
+   * Bytes in one share of an ECDH/P-256 shared secret (affine point, x || y).
    */
-  kP256SharedSecretBytes = 32,
+  kP256SharedSecretBytes = 64,
   /**
    * Bytes in one share of an unmasked P-384 private key.
    */
@@ -61,15 +61,15 @@ enum {
    */
   kP384CoordinateWords = kP384CoordinateBytes / sizeof(uint32_t),
   /**
-   * Bytes in one share of an ECDH/P-384 shared secret.
+   * Bytes in one share of an ECDH/P-384 shared secret (affine point, x || y).
    */
-  kP384SharedSecretBytes = 48,
+  kP384SharedSecretBytes = 96,
 };
 
 /**
  * Run ECDH with curve P-256.
  *
- * The caller should ensure at least kP256SharedSecretBytes of space are
+ * The caller should ensure at least kP256CoordinateBytes of space are
  * allocated at `ss`.
  *
  * If the cryptolib returns an error saying the input is invalid, the shared
@@ -78,7 +78,7 @@ enum {
  * @param d Private key.
  * @param qx Public key x coordinate.
  * @param qy Public key y coordinate.
- * @param[out] ss Shared secret key.
+ * @param[out] ss Shared secret key (x-coordinate of the shared point).
  * @param[out] valid Whether the input arguments were valid.
  * @return Status code (OK or error).
  */
@@ -135,7 +135,7 @@ static status_t ecdh_p256(cryptotest_ecdh_private_key_t d,
       otcrypto_ecc_p256_private_key_import(share0, share1, &private_key);
   if (priv_status.value == kOtcryptoStatusValueBadArgs) {
     *valid = false;
-    memset(ss, 0, kP256SharedSecretBytes);
+    memset(ss, 0, kP256CoordinateBytes);
     return OK_STATUS();
   }
   TRY(priv_status);
@@ -162,7 +162,7 @@ static status_t ecdh_p256(cryptotest_ecdh_private_key_t d,
       otcrypto_ecc_p256_public_key_import(x, y, &public_key);
   if (pub_status.value == kOtcryptoStatusValueBadArgs) {
     *valid = false;
-    memset(ss, 0, kP256SharedSecretBytes);
+    memset(ss, 0, kP256CoordinateBytes);
     return OK_STATUS();
   }
   TRY(pub_status);
@@ -195,7 +195,7 @@ static status_t ecdh_p256(cryptotest_ecdh_private_key_t d,
     case kOtcryptoStatusValueBadArgs: {
       // If the input was rejected (e.g. invalid public key, exit early.
       *valid = false;
-      memset(ss, 0, kP256SharedSecretBytes);
+      memset(ss, 0, kP256CoordinateBytes);
       return OK_STATUS();
     }
     default: {
@@ -212,14 +212,32 @@ static status_t ecdh_p256(cryptotest_ecdh_private_key_t d,
   otcrypto_word32_buf_t share1_buf = OTCRYPTO_MAKE_BUF(
       otcrypto_word32_buf_t, dest_share1, ARRAYSIZE(dest_share1));
   TRY(otcrypto_export_blinded_key(&shared_secret, &share0_buf, &share1_buf));
-  TRY(hardened_xor(dest_share0, dest_share1, shared_secret_words, ss));
+  uint32_t shared_point[shared_secret_words];
+  TRY(hardened_xor(dest_share0, dest_share1, shared_secret_words,
+                   shared_point));
+
+  // Check that the unmasked shared point (x || y) lies on the curve.
+  otcrypto_unblinded_key_t shared_point_key = {
+      .key_mode = kOtcryptoKeyModeEcdhP256,
+      .key_length = kP256SharedSecretBytes,
+      .key = shared_point,
+  };
+  hardened_bool_t on_curve = kHardenedBoolFalse;
+  TRY(otcrypto_ecc_p256_point_on_curve(&shared_point_key, &on_curve));
+  if (on_curve != kHardenedBoolTrue) {
+    LOG_ERROR("ECDH/P-256 shared point is not on the curve");
+    return INTERNAL();
+  }
+
+  // Only the x-coordinate of the shared point is returned to the host.
+  memcpy(ss, shared_point, kP256CoordinateBytes);
   return OK_STATUS();
 }
 
 /**
  * Run ECDH with curve P-384.
  *
- * The caller should ensure at least kP384SharedSecretBytes of space are
+ * The caller should ensure at least kP384CoordinateBytes of space are
  * allocated at `ss`.
  *
  * If the cryptolib returns an error saying the input is invalid, the shared
@@ -228,7 +246,7 @@ static status_t ecdh_p256(cryptotest_ecdh_private_key_t d,
  * @param d Private key.
  * @param qx Public key x coordinate.
  * @param qy Public key y coordinate.
- * @param[out] ss Shared secret key.
+ * @param[out] ss Shared secret key (x-coordinate of the shared point).
  * @param[out] valid Whether the input arguments were valid.
  * @return Status code (OK or error).
  */
@@ -287,7 +305,7 @@ static status_t ecdh_p384(cryptotest_ecdh_private_key_t d,
       otcrypto_ecc_p384_private_key_import(share0, share1, &private_key);
   if (priv_status.value == kOtcryptoStatusValueBadArgs) {
     *valid = false;
-    memset(ss, 0, kP384SharedSecretBytes);
+    memset(ss, 0, kP384CoordinateBytes);
     return OK_STATUS();
   }
   TRY(priv_status);
@@ -314,7 +332,7 @@ static status_t ecdh_p384(cryptotest_ecdh_private_key_t d,
       otcrypto_ecc_p384_public_key_import(x, y, &public_key);
   if (pub_status.value == kOtcryptoStatusValueBadArgs) {
     *valid = false;
-    memset(ss, 0, kP384SharedSecretBytes);
+    memset(ss, 0, kP384CoordinateBytes);
     return OK_STATUS();
   }
   TRY(pub_status);
@@ -347,7 +365,7 @@ static status_t ecdh_p384(cryptotest_ecdh_private_key_t d,
     case kOtcryptoStatusValueBadArgs: {
       // If the input was rejected (e.g. invalid public key, exit early.
       *valid = false;
-      memset(ss, 0, kP384SharedSecretBytes);
+      memset(ss, 0, kP384CoordinateBytes);
       return OK_STATUS();
     }
     default: {
@@ -364,7 +382,25 @@ static status_t ecdh_p384(cryptotest_ecdh_private_key_t d,
   otcrypto_word32_buf_t share1_buf = OTCRYPTO_MAKE_BUF(
       otcrypto_word32_buf_t, dest_share1, ARRAYSIZE(dest_share1));
   TRY(otcrypto_export_blinded_key(&shared_secret, &share0_buf, &share1_buf));
-  TRY(hardened_xor(dest_share0, dest_share1, shared_secret_words, ss));
+  uint32_t shared_point[shared_secret_words];
+  TRY(hardened_xor(dest_share0, dest_share1, shared_secret_words,
+                   shared_point));
+
+  // Check that the unmasked shared point (x || y) lies on the curve.
+  otcrypto_unblinded_key_t shared_point_key = {
+      .key_mode = kOtcryptoKeyModeEcdhP384,
+      .key_length = kP384SharedSecretBytes,
+      .key = shared_point,
+  };
+  hardened_bool_t on_curve = kHardenedBoolFalse;
+  TRY(otcrypto_ecc_p384_point_on_curve(&shared_point_key, &on_curve));
+  if (on_curve != kHardenedBoolTrue) {
+    LOG_ERROR("ECDH/P-384 shared point is not on the curve");
+    return INTERNAL();
+  }
+
+  // Only the x-coordinate of the shared point is returned to the host.
+  memcpy(ss, shared_point, kP384CoordinateBytes);
   return OK_STATUS();
 }
 
@@ -385,19 +421,19 @@ status_t handle_ecdh(ujson_t *uj) {
   bool valid;
   switch (uj_curve) {
     case kCryptotestEcdhCurveP256: {
-      uint32_t shared_secret_words[kP256SharedSecretBytes / sizeof(uint32_t)];
+      uint32_t shared_secret_words[kP256CoordinateBytes / sizeof(uint32_t)];
       TRY(ecdh_p256(uj_private_key, uj_qx, uj_qy, shared_secret_words, &valid));
       memcpy(uj_output.shared_secret, shared_secret_words,
-             kP256SharedSecretBytes);
-      uj_output.shared_secret_len = kP256SharedSecretBytes;
+             kP256CoordinateBytes);
+      uj_output.shared_secret_len = kP256CoordinateBytes;
       break;
     }
     case kCryptotestEcdhCurveP384: {
-      uint32_t shared_secret_words[kP384SharedSecretBytes / sizeof(uint32_t)];
+      uint32_t shared_secret_words[kP384CoordinateBytes / sizeof(uint32_t)];
       TRY(ecdh_p384(uj_private_key, uj_qx, uj_qy, shared_secret_words, &valid));
       memcpy(uj_output.shared_secret, shared_secret_words,
-             kP384SharedSecretBytes);
-      uj_output.shared_secret_len = kP384SharedSecretBytes;
+             kP384CoordinateBytes);
+      uj_output.shared_secret_len = kP384CoordinateBytes;
       break;
     }
     default:

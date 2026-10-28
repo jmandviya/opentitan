@@ -43,6 +43,7 @@ module top_darjeeling #(
   parameter int SramCtrlRetNumPrinceRoundsHalf = 3,
   parameter int SramCtrlRetNumAddrScrRounds = 2,
   parameter bit SramCtrlRetEccCorrection = 0,
+  parameter bit SecSramCtrlRetZeroInit = 0,
   // parameters for rv_dm
   parameter logic [31:0] RvDmIdcodeValue = 32'h 0000_0001,
   parameter bit RvDmUseDmiInterface = 1,
@@ -57,6 +58,7 @@ module top_darjeeling #(
   parameter bit SecAesSkipPRNGReseeding = 1'b0,
   // parameters for kmac
   parameter bit KmacEnMasking = 1,
+  parameter bit KmacEnFullKmac = 1,
   parameter bit KmacSwKeyMasked = 0,
   parameter int SecKmacCmdDelay = 0,
   parameter bit SecKmacIdleAcceptSwMsg = 0,
@@ -89,6 +91,7 @@ module top_darjeeling #(
   parameter int SramCtrlMainNumPrinceRoundsHalf = 3,
   parameter int SramCtrlMainNumAddrScrRounds = 2,
   parameter bit SramCtrlMainEccCorrection = 0,
+  parameter bit SecSramCtrlMainZeroInit = 0,
   // parameters for sram_ctrl_mbox
   parameter int SramCtrlMboxInstSize = 4096,
   parameter int SramCtrlMboxNumRamInst = 1,
@@ -96,6 +99,7 @@ module top_darjeeling #(
   parameter int SramCtrlMboxNumPrinceRoundsHalf = 3,
   parameter int SramCtrlMboxNumAddrScrRounds = 2,
   parameter bit SramCtrlMboxEccCorrection = 0,
+  parameter bit SecSramCtrlMboxZeroInit = 0,
   // parameters for rom_ctrl0
   parameter RomCtrl0BootRomInitFile = "",
   parameter bit SecRomCtrl0DisableScrambling = 1'b0,
@@ -123,7 +127,7 @@ module top_darjeeling #(
   parameter ibex_pkg::pmp_mseccfg_t RvCoreIbexPMPRstMsecCfg = ibex_pmp_reset_pkg::PmpMseccfgRst,
   parameter bit RvCoreIbexRV32E = 0,
   parameter ibex_pkg::rv32m_e RvCoreIbexRV32M = ibex_pkg::RV32MSingleCycle,
-  parameter ibex_pkg::rv32b_e RvCoreIbexRV32B = ibex_pkg::RV32BOTEarlGrey,
+  parameter ibex_pkg::rv32b_e RvCoreIbexRV32B = ibex_pkg::RV32BFull,
   parameter ibex_pkg::rv32zc_e RvCoreIbexRV32ZC = ibex_pkg::RV32ZcaZcbZcmp,
   parameter ibex_pkg::regfile_e RvCoreIbexRegFile = ibex_pkg::RegFileFF,
   parameter bit RvCoreIbexBranchTargetALU = 1,
@@ -265,7 +269,6 @@ module top_darjeeling #(
   input  logic [1:0] por_n_i,
   output rstmgr_pkg::rstmgr_out_t       rstmgr_resets_o,
   output rstmgr_pkg::rstmgr_rst_en_t       rstmgr_rst_en_o,
-  input  logic [31:0] fpga_info_i,
   input  tlul_pkg::tl_h2d_t       ctn_misc_tl_h2d_i,
   output tlul_pkg::tl_d2h_t       ctn_misc_tl_d2h_o,
   input  logic       soc_wkup_async_i,
@@ -374,6 +377,7 @@ module top_darjeeling #(
   .SecAesAllowForcingMasks(SecAesAllowForcingMasks),
   .SecAesSkipPRNGReseeding(SecAesSkipPRNGReseeding),
   .KmacEnMasking(KmacEnMasking),
+  .KmacEnFullKmac(KmacEnFullKmac),
   .KmacSwKeyMasked(KmacSwKeyMasked),
   .SecKmacCmdDelay(SecKmacCmdDelay),
   .SecKmacIdleAcceptSwMsg(SecKmacIdleAcceptSwMsg),
@@ -397,12 +401,14 @@ module top_darjeeling #(
   .SramCtrlMainNumPrinceRoundsHalf(SramCtrlMainNumPrinceRoundsHalf),
   .SramCtrlMainNumAddrScrRounds(SramCtrlMainNumAddrScrRounds),
   .SramCtrlMainEccCorrection(SramCtrlMainEccCorrection),
+  .SecSramCtrlMainZeroInit(SecSramCtrlMainZeroInit),
   .SramCtrlMboxInstSize(SramCtrlMboxInstSize),
   .SramCtrlMboxNumRamInst(SramCtrlMboxNumRamInst),
   .SramCtrlMboxInstrExec(SramCtrlMboxInstrExec),
   .SramCtrlMboxNumPrinceRoundsHalf(SramCtrlMboxNumPrinceRoundsHalf),
   .SramCtrlMboxNumAddrScrRounds(SramCtrlMboxNumAddrScrRounds),
   .SramCtrlMboxEccCorrection(SramCtrlMboxEccCorrection),
+  .SecSramCtrlMboxZeroInit(SecSramCtrlMboxZeroInit),
   .RomCtrl0BootRomInitFile(RomCtrl0BootRomInitFile),
   .SecRomCtrl0DisableScrambling(SecRomCtrl0DisableScrambling),
   .RomCtrl1BootRomInitFile(RomCtrl1BootRomInitFile),
@@ -615,7 +621,6 @@ module top_darjeeling #(
     .otp_ext_voltage_h_io,
     .otp_obs_o,
     .otp_cfg_i,
-    .fpga_info_i,
     .sck_monitor_o,
     .soc_dbg_policy_bus_o,
     .debug_halt_cpu_boot_i,
@@ -638,7 +643,8 @@ module top_darjeeling #(
   .SramCtrlRetInstrExec(SramCtrlRetInstrExec),
   .SramCtrlRetNumPrinceRoundsHalf(SramCtrlRetNumPrinceRoundsHalf),
   .SramCtrlRetNumAddrScrRounds(SramCtrlRetNumAddrScrRounds),
-  .SramCtrlRetEccCorrection(SramCtrlRetEccCorrection)
+  .SramCtrlRetEccCorrection(SramCtrlRetEccCorrection),
+  .SecSramCtrlRetZeroInit(SecSramCtrlRetZeroInit)
   ) darjeeling_pd_aon (
     // All externally supplied clocks
     .clk_main_i(ast_base_clks_i.clk_sys),

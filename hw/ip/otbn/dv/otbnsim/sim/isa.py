@@ -102,6 +102,16 @@ class OTBNInsn:
         self._disasm = (pc, disasm)
         return disasm
 
+    def reads_urnd_first_cycle(self) -> bool:
+        '''Whether insn reads URND on its first execute cycle.
+
+        Required to control the PRNG advance logic. If the PRNG is stopped and this instruction
+        uses URND, the predecoder issues an advance one cycle before the instruction executes.
+        Required as URND is the flopped PRNG output.
+
+        Most instructions do not read URND, so this is false by default.'''
+        return False
+
     @staticmethod
     def to_2s_complement(value: int) -> int:
         '''Interpret the signed value as a 2's complement u32'''
@@ -259,8 +269,14 @@ def element_length_in_bits(elen: int) -> int:
     0        | .8s  |  32
     1        | .4d  |  64
     2        | .2q  | 128
+    3        | -    |   0 (reserved)
+
+    No instruction supports the reserved encoding, so the caller stops with an
+    illegal instruction error for it, as for any other unsupported ELEN.
     '''
-    assert 0 <= elen <= 2
+    assert 0 <= elen <= 3
+    if elen == 3:
+        return 0
     return 32 * (1 << elen)
 
 

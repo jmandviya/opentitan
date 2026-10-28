@@ -16,7 +16,7 @@ from reggen.feature import Feature
 from reggen.inter_signal import InterSignal
 from reggen.interrupt import Interrupt
 from reggen.lib import (PART_BOTH, PARTITIONS, PART_PRIMARY, PART_SECONDARY, check_bool,
-                        check_int, check_keys, check_list, check_name)
+                        check_int, check_keys, check_list, check_name, filter_by_partition)
 from reggen.memory import Memory
 from reggen.params import LocalParam, ReggenParams
 from reggen.reg_block import RegBlock
@@ -36,7 +36,7 @@ KNOWN_CIP_IDS = {
     9: 'gpio',
     10: 'hmac',
     11: 'i2c',
-    12: 'keymgr',
+    12: 'keymgr',  # deprecated
     13: 'kmac',
     14: 'lc_ctrl',
     15: 'otbn',
@@ -72,7 +72,7 @@ KNOWN_CIP_IDS = {
     45: 'rram_ctrl',
     46: 'rram_macro',
     47: 'i3c',
-    48: 'cheriot'
+    48: 'cheriot_mem_sys'
 }
 
 REQUIRED_ALIAS_FIELDS = {
@@ -114,6 +114,7 @@ OPTIONAL_FIELDS = {
     'version': ['s', "module version"],
     'life_stage': ['s', "life stage of module"],
     'commit_id': ['s', "commit ID of last stage sign-off"],
+    'reinit_list': ['lnw', "list of register reinitialization inputs"],
     'alert_list': ['lnw', "list of peripheral alerts"],
     'available_inout_list': ['lnw', "list of available peripheral inouts"],
     'available_input_list': ['lnw', "list of available peripheral inputs"],
@@ -238,6 +239,7 @@ class IpBlock:
     inter_signals: list[InterSignal]
     bus_interfaces: BusInterfaces
     clocking: Clocking
+    reinit_list: list[Signal]
     xputs: tuple[Sequence[Signal], Sequence[Signal], Sequence[Signal]]
     wakeups: Sequence[Signal]
     reset_requests: Sequence[Signal]
@@ -400,11 +402,20 @@ class IpBlock:
         is_split_ip = check_bool(rd.get('is_split_ip', False),
                                  'is_split_ip field of ' + what)
 
+        reinits = Signal.from_raw_list('reinit signals for block ' + name,
+                                       rd.get('reinit_list', []))
+        for sig in reinits:
+            if not sig.name.endswith("_i", 1):
+                raise ValueError(
+                    f'reinit signal {sig.name} must be of the format <x>_i for comportability.')
+        reinit_list = list(reinits)
+        init_block.add_reinits(reinit_list)
+
         # Build register block if IP really defined registers. IPs with an empty list of registers
         # but auto-generated registers should still be built.
         if "registers" in rd:
             reg_blocks = RegBlock.build_blocks(init_block, rd["registers"],
-                                               bus_interfaces, clocking, False)
+                                               bus_interfaces, clocking, reinit_list, False)
         else:
             reg_blocks = {}
 
@@ -447,6 +458,10 @@ class IpBlock:
             raise ValueError(
                 f'{what} is marked is_split_ip, but nothing is assigned to '
                 'its secondary partition.')
+        if is_split_ip and not clocking.has_partition(PART_SECONDARY):
+            raise ValueError(
+                f'{what} is marked is_split_ip, but its secondary partition '
+                'declares no clocking.')
         if not is_split_ip and PART_SECONDARY in declared:
             raise ValueError(
                 f'{what} assigns {", ".join(declared[PART_SECONDARY])} to the '
@@ -464,6 +479,23 @@ class IpBlock:
                     f'{what} assigns parameter {param.name} to the '
                     f'{param.partition} partition, but the block has no such '
                     f'partition.')
+
+        # Auto-generated pwrmgr connections (wakeups and reset requests) refer
+        # to the IP's inter-module signal of the same name, qualified by
+        # partition for a split IP. A wakeup or reset request must therefore sit
+        # in the same partition as its matching inter-module signal.
+        im_partitions: dict[str, set[str]] = {}
+        for s in inter_signals:
+            im_partitions.setdefault(s.name, set()).add(s.partition)
+        for kind, sigs in (('wakeup', wakeups), ('reset request', rst_reqs)):
+            for sig in sigs:
+                parts = im_partitions.get(sig.name)
+                if parts is not None and sig.partition not in parts:
+                    raise ValueError(
+                        f'{what} declares {kind} {sig.name!r} in the '
+                        f'{sig.partition} partition, but its inter-module '
+                        f'signal is in the {", ".join(sorted(parts))} '
+                        'partition. They must be in the same partition.')
 
         # A split IP additionally needs an alert count per partition, since each
         # partition module carries only its own alerts. Generated here, once the
@@ -505,8 +537,8 @@ class IpBlock:
 
         return IpBlock(name, cip_id, version, regwidth, params, reg_blocks,
                        memories, interrupts, no_auto_intr, alerts, no_auto_alert,
-                       scan, inter_signals, bus_interfaces, clocking, xputs,
-                       wakeups, rst_reqs, expose_reg_if, scan_reset, scan_en,
+                       scan, inter_signals, bus_interfaces, clocking, reinit_list,
+                       xputs, wakeups, rst_reqs, expose_reg_if, scan_reset, scan_en,
                        countermeasures, features, partitions, node, is_split_ip)
 
     @staticmethod
@@ -594,7 +626,8 @@ class IpBlock:
 
         alias_reg_blocks = RegBlock.build_blocks(init_block, rd['registers'],
                                                  self.bus_interfaces,
-                                                 self.clocking, True)
+                                                 self.clocking,
+                                                 self.reinit_list, True)
 
         # Check that alias register block names are
         # a subset of the already defined register blocks
@@ -674,6 +707,9 @@ class IpBlock:
         if self.is_split_ip:
             ret['is_split_ip'] = self.is_split_ip
 
+        if self.reinit_list:
+            ret['reinit_list'] = self.reinit_list
+
         inouts, inputs, outputs = self.xputs
         if inouts:
             ret['available_inout_list'] = inouts
@@ -730,6 +766,21 @@ class IpBlock:
         '''Return the primary clock of the given partition of a block'''
 
         return self.clocking.get_primary_clock(partition)
+
+    def alerts_for(self, partition: Optional[str] = PART_PRIMARY) -> list[Alert]:
+        return filter_by_partition(self.alerts, partition)
+
+    def interrupts_for(self,
+                       partition: Optional[str] = PART_PRIMARY) -> list[Interrupt]:
+        return filter_by_partition(self.interrupts, partition)
+
+    def xputs_for(
+        self, partition: Optional[str] = PART_PRIMARY
+    ) -> tuple[list[Signal], list[Signal], list[Signal]]:
+        inouts, inputs, outputs = self.xputs
+        return (filter_by_partition(inouts, partition),
+                filter_by_partition(inputs, partition),
+                filter_by_partition(outputs, partition))
 
     def check_cm_annotations(self, rtl_names: dict[str, list[tuple[str, int]]],
                              hjson_path: str) -> bool:

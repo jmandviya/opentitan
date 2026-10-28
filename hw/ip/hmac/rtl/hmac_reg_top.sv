@@ -188,7 +188,9 @@ module hmac_reg_top (
   logic intr_test_fifo_empty_wd;
   logic intr_test_hmac_err_wd;
   logic alert_test_we;
-  logic alert_test_wd;
+  logic alert_test_fatal_fault_wd;
+  logic alert_test_regwen_qs;
+  logic alert_test_regwen_wd;
   logic cfg_re;
   logic cfg_we;
   logic cfg_hmac_en_qs;
@@ -205,6 +207,8 @@ module hmac_reg_top (
   logic [3:0] cfg_digest_size_wd;
   logic [5:0] cfg_key_length_qs;
   logic [5:0] cfg_key_length_wd;
+  logic cfg_sideload_qs;
+  logic cfg_sideload_wd;
   logic cmd_we;
   logic cmd_hash_start_wd;
   logic cmd_hash_process_wd;
@@ -366,6 +370,7 @@ module hmac_reg_top (
   ) u_intr_state_hmac_done (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_state_we),
@@ -393,6 +398,7 @@ module hmac_reg_top (
   ) u_intr_state_fifo_empty (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -420,6 +426,7 @@ module hmac_reg_top (
   ) u_intr_state_hmac_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_state_we),
@@ -449,6 +456,7 @@ module hmac_reg_top (
   ) u_intr_enable_hmac_done (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_enable_we),
@@ -476,6 +484,7 @@ module hmac_reg_top (
   ) u_intr_enable_fifo_empty (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_enable_we),
@@ -503,6 +512,7 @@ module hmac_reg_top (
   ) u_intr_enable_hmac_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_enable_we),
@@ -577,14 +587,18 @@ module hmac_reg_top (
 
   // R[alert_test]: V(True)
   logic alert_test_qe;
-  logic [0:0] alert_test_flds_we;
+  logic [1:0] alert_test_flds_we;
   assign alert_test_qe = &alert_test_flds_we;
+  // Create REGWEN-gated WE signal
+  logic alert_test_gated_we;
+  assign alert_test_gated_we = alert_test_we && alert_test_regwen_qs;
+  //   F[fatal_fault]: 0:0
   prim_subreg_ext #(
     .DW    (1)
-  ) u_alert_test (
+  ) u_alert_test_fatal_fault (
     .re     (1'b0),
-    .we     (alert_test_we),
-    .wd     (alert_test_wd),
+    .we     (alert_test_gated_we),
+    .wd     (alert_test_fatal_fault_wd),
     .d      ('0),
     .qre    (),
     .qe     (alert_test_flds_we[0]),
@@ -594,10 +608,38 @@ module hmac_reg_top (
   );
   assign reg2hw.alert_test.qe = alert_test_qe;
 
+  //   F[regwen]: 31:31
+  prim_subreg #(
+    .DW      (1),
+    .SwAccess(prim_subreg_pkg::SwAccessW0C),
+    .RESVAL  (1'h1),
+    .Mubi    (1'b0)
+  ) u_alert_test_regwen (
+    .clk_i   (clk_i),
+    .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
+
+    // from register interface
+    .we     (alert_test_we),
+    .wd     (alert_test_regwen_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0),
+
+    // to internal hardware
+    .qe     (alert_test_flds_we[1]),
+    .q      (),
+    .ds     (),
+
+    // to register interface (read)
+    .qs     (alert_test_regwen_qs)
+  );
+
 
   // R[cfg]: V(True)
   logic cfg_qe;
-  logic [6:0] cfg_flds_we;
+  logic [7:0] cfg_flds_we;
   assign cfg_qe = &cfg_flds_we;
   //   F[hmac_en]: 0:0
   prim_subreg_ext #(
@@ -710,6 +752,22 @@ module hmac_reg_top (
     .qs     (cfg_key_length_qs)
   );
   assign reg2hw.cfg.key_length.qe = cfg_qe;
+
+  //   F[sideload]: 15:15
+  prim_subreg_ext #(
+    .DW    (1)
+  ) u_cfg_sideload (
+    .re     (cfg_re),
+    .we     (cfg_we),
+    .wd     (cfg_sideload_wd),
+    .d      (hw2reg.cfg.sideload.d),
+    .qre    (),
+    .qe     (cfg_flds_we[7]),
+    .q      (reg2hw.cfg.sideload.q),
+    .ds     (),
+    .qs     (cfg_sideload_qs)
+  );
+  assign reg2hw.cfg.sideload.qe = cfg_qe;
 
 
   // R[cmd]: V(True)
@@ -852,6 +910,7 @@ module hmac_reg_top (
   ) u_err_code (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -2091,7 +2150,9 @@ module hmac_reg_top (
   assign intr_test_hmac_err_wd = reg_wdata[2];
   assign alert_test_we = addr_hit[3] & reg_we & !reg_error;
 
-  assign alert_test_wd = reg_wdata[0];
+  assign alert_test_fatal_fault_wd = reg_wdata[0];
+
+  assign alert_test_regwen_wd = reg_wdata[31];
   assign cfg_re = addr_hit[4] & reg_re & !reg_error;
   assign cfg_we = addr_hit[4] & reg_we & !reg_error;
 
@@ -2108,6 +2169,8 @@ module hmac_reg_top (
   assign cfg_digest_size_wd = reg_wdata[8:5];
 
   assign cfg_key_length_wd = reg_wdata[14:9];
+
+  assign cfg_sideload_wd = reg_wdata[15];
   assign cmd_we = addr_hit[5] & reg_we & !reg_error;
 
   assign cmd_hash_start_wd = reg_wdata[0];
@@ -2377,6 +2440,7 @@ module hmac_reg_top (
 
       addr_hit[3]: begin
         reg_rdata_next[0] = '0;
+        reg_rdata_next[31] = alert_test_regwen_qs;
       end
 
       addr_hit[4]: begin
@@ -2387,6 +2451,7 @@ module hmac_reg_top (
         reg_rdata_next[4] = cfg_key_swap_qs;
         reg_rdata_next[8:5] = cfg_digest_size_qs;
         reg_rdata_next[14:9] = cfg_key_length_qs;
+        reg_rdata_next[15] = cfg_sideload_qs;
       end
 
       addr_hit[5]: begin

@@ -3,62 +3,80 @@
 <!-- BEGIN CMDGEN util/regtool.py -d ./hw/ip/keymgr_dpe/data/keymgr_dpe.hjson -->
 ## Summary
 
-| Name                                                               | Offset   |   Length | Description                                                                |
-|:-------------------------------------------------------------------|:---------|---------:|:---------------------------------------------------------------------------|
-| keymgr_dpe.[`INTR_STATE`](#intr_state)                             | 0x0      |        4 | Interrupt State Register                                                   |
-| keymgr_dpe.[`INTR_ENABLE`](#intr_enable)                           | 0x4      |        4 | Interrupt Enable Register                                                  |
-| keymgr_dpe.[`INTR_TEST`](#intr_test)                               | 0x8      |        4 | Interrupt Test Register                                                    |
-| keymgr_dpe.[`ALERT_TEST`](#alert_test)                             | 0xc      |        4 | Alert Test Register                                                        |
-| keymgr_dpe.[`CFG_REGWEN`](#cfg_regwen)                             | 0x10     |        4 | Key manager configuration enable                                           |
-| keymgr_dpe.[`START`](#start)                                       | 0x14     |        4 | Key manager operation start                                                |
-| keymgr_dpe.[`CONTROL_SHADOWED`](#control_shadowed)                 | 0x18     |        4 | Key manager operation controls                                             |
-| keymgr_dpe.[`SIDELOAD_CLEAR`](#sideload_clear)                     | 0x1c     |        4 | sideload key slots clear                                                   |
-| keymgr_dpe.[`RESEED_INTERVAL_REGWEN`](#reseed_interval_regwen)     | 0x20     |        4 | regwen for reseed interval                                                 |
-| keymgr_dpe.[`RESEED_INTERVAL_SHADOWED`](#reseed_interval_shadowed) | 0x24     |        4 | Reseed interval for key manager entropy reseed                             |
-| keymgr_dpe.[`SLOT_POLICY_REGWEN`](#slot_policy_regwen)             | 0x28     |        4 | Register write enable for SLOT_POLICY                                      |
-| keymgr_dpe.[`SLOT_POLICY`](#slot_policy)                           | 0x2c     |        4 | Policy bits for the child DPE context                                      |
-| keymgr_dpe.[`SW_BINDING_REGWEN`](#sw_binding_regwen)               | 0x30     |        4 | Register write enable for SOFTWARE_BINDING                                 |
-| keymgr_dpe.[`SW_BINDING_0`](#sw_binding)                           | 0x34     |        4 | Software binding input of the key manager.                                 |
-| keymgr_dpe.[`SW_BINDING_1`](#sw_binding)                           | 0x38     |        4 | Software binding input of the key manager.                                 |
-| keymgr_dpe.[`SW_BINDING_2`](#sw_binding)                           | 0x3c     |        4 | Software binding input of the key manager.                                 |
-| keymgr_dpe.[`SW_BINDING_3`](#sw_binding)                           | 0x40     |        4 | Software binding input of the key manager.                                 |
-| keymgr_dpe.[`SW_BINDING_4`](#sw_binding)                           | 0x44     |        4 | Software binding input of the key manager.                                 |
-| keymgr_dpe.[`SW_BINDING_5`](#sw_binding)                           | 0x48     |        4 | Software binding input of the key manager.                                 |
-| keymgr_dpe.[`SW_BINDING_6`](#sw_binding)                           | 0x4c     |        4 | Software binding input of the key manager.                                 |
-| keymgr_dpe.[`SW_BINDING_7`](#sw_binding)                           | 0x50     |        4 | Software binding input of the key manager.                                 |
-| keymgr_dpe.[`SALT_0`](#salt)                                       | 0x54     |        4 | Salt value used as part of output generation                               |
-| keymgr_dpe.[`SALT_1`](#salt)                                       | 0x58     |        4 | Salt value used as part of output generation                               |
-| keymgr_dpe.[`SALT_2`](#salt)                                       | 0x5c     |        4 | Salt value used as part of output generation                               |
-| keymgr_dpe.[`SALT_3`](#salt)                                       | 0x60     |        4 | Salt value used as part of output generation                               |
-| keymgr_dpe.[`SALT_4`](#salt)                                       | 0x64     |        4 | Salt value used as part of output generation                               |
-| keymgr_dpe.[`SALT_5`](#salt)                                       | 0x68     |        4 | Salt value used as part of output generation                               |
-| keymgr_dpe.[`SALT_6`](#salt)                                       | 0x6c     |        4 | Salt value used as part of output generation                               |
-| keymgr_dpe.[`SALT_7`](#salt)                                       | 0x70     |        4 | Salt value used as part of output generation                               |
-| keymgr_dpe.[`KEY_VERSION`](#key_version)                           | 0x74     |        4 | Version used as part of output generation                                  |
-| keymgr_dpe.[`MAX_KEY_VER_REGWEN`](#max_key_ver_regwen)             | 0x78     |        4 | Register write enable for MAX_KEY_VERSION                                  |
-| keymgr_dpe.[`MAX_KEY_VER_SHADOWED`](#max_key_ver_shadowed)         | 0x7c     |        4 | Max key version                                                            |
-| keymgr_dpe.[`SW_SHARE0_OUTPUT_0`](#sw_share0_output)               | 0x80     |        4 | Key manager software output.                                               |
-| keymgr_dpe.[`SW_SHARE0_OUTPUT_1`](#sw_share0_output)               | 0x84     |        4 | Key manager software output.                                               |
-| keymgr_dpe.[`SW_SHARE0_OUTPUT_2`](#sw_share0_output)               | 0x88     |        4 | Key manager software output.                                               |
-| keymgr_dpe.[`SW_SHARE0_OUTPUT_3`](#sw_share0_output)               | 0x8c     |        4 | Key manager software output.                                               |
-| keymgr_dpe.[`SW_SHARE0_OUTPUT_4`](#sw_share0_output)               | 0x90     |        4 | Key manager software output.                                               |
-| keymgr_dpe.[`SW_SHARE0_OUTPUT_5`](#sw_share0_output)               | 0x94     |        4 | Key manager software output.                                               |
-| keymgr_dpe.[`SW_SHARE0_OUTPUT_6`](#sw_share0_output)               | 0x98     |        4 | Key manager software output.                                               |
-| keymgr_dpe.[`SW_SHARE0_OUTPUT_7`](#sw_share0_output)               | 0x9c     |        4 | Key manager software output.                                               |
-| keymgr_dpe.[`SW_SHARE1_OUTPUT_0`](#sw_share1_output)               | 0xa0     |        4 | Key manager software output.                                               |
-| keymgr_dpe.[`SW_SHARE1_OUTPUT_1`](#sw_share1_output)               | 0xa4     |        4 | Key manager software output.                                               |
-| keymgr_dpe.[`SW_SHARE1_OUTPUT_2`](#sw_share1_output)               | 0xa8     |        4 | Key manager software output.                                               |
-| keymgr_dpe.[`SW_SHARE1_OUTPUT_3`](#sw_share1_output)               | 0xac     |        4 | Key manager software output.                                               |
-| keymgr_dpe.[`SW_SHARE1_OUTPUT_4`](#sw_share1_output)               | 0xb0     |        4 | Key manager software output.                                               |
-| keymgr_dpe.[`SW_SHARE1_OUTPUT_5`](#sw_share1_output)               | 0xb4     |        4 | Key manager software output.                                               |
-| keymgr_dpe.[`SW_SHARE1_OUTPUT_6`](#sw_share1_output)               | 0xb8     |        4 | Key manager software output.                                               |
-| keymgr_dpe.[`SW_SHARE1_OUTPUT_7`](#sw_share1_output)               | 0xbc     |        4 | Key manager software output.                                               |
-| keymgr_dpe.[`WORKING_STATE`](#working_state)                       | 0xc0     |        4 | Key manager working state.                                                 |
-| keymgr_dpe.[`OP_STATUS`](#op_status)                               | 0xc4     |        4 | Key manager status.                                                        |
-| keymgr_dpe.[`ERR_CODE`](#err_code)                                 | 0xc8     |        4 | Key manager error code.                                                    |
-| keymgr_dpe.[`FAULT_STATUS`](#fault_status)                         | 0xcc     |        4 | This register represents both synchronous and asynchronous fatal faults.   |
-| keymgr_dpe.[`DEBUG`](#debug)                                       | 0xd0     |        4 | The register holds some debug information that may be convenient if keymgr |
-| keymgr_dpe.[`LOAD_KEY_LOCK`](#load_key_lock)                       | 0xd4     |        4 | Register write lock for the LOAD_KEY command                               |
+| Name                                                                       | Offset   |   Length | Description                                                                                                       |
+|:---------------------------------------------------------------------------|:---------|---------:|:------------------------------------------------------------------------------------------------------------------|
+| keymgr_dpe.[`INTR_STATE`](#intr_state)                                     | 0x0      |        4 | Interrupt State Register                                                                                          |
+| keymgr_dpe.[`INTR_ENABLE`](#intr_enable)                                   | 0x4      |        4 | Interrupt Enable Register                                                                                         |
+| keymgr_dpe.[`INTR_TEST`](#intr_test)                                       | 0x8      |        4 | Interrupt Test Register                                                                                           |
+| keymgr_dpe.[`ALERT_TEST`](#alert_test)                                     | 0xc      |        4 | Alert Test Register                                                                                               |
+| keymgr_dpe.[`CFG_REGWEN`](#cfg_regwen)                                     | 0x10     |        4 | Key manager configuration enable                                                                                  |
+| keymgr_dpe.[`START`](#start)                                               | 0x14     |        4 | Key manager operation start                                                                                       |
+| keymgr_dpe.[`CONTROL_SHADOWED`](#control_shadowed)                         | 0x18     |        4 | Key manager operation controls                                                                                    |
+| keymgr_dpe.[`SIDELOAD_CLEAR`](#sideload_clear)                             | 0x1c     |        4 | sideload key slots clear                                                                                          |
+| keymgr_dpe.[`RESEED_INTERVAL_REGWEN`](#reseed_interval_regwen)             | 0x20     |        4 | regwen for reseed interval                                                                                        |
+| keymgr_dpe.[`RESEED_INTERVAL_SHADOWED`](#reseed_interval_shadowed)         | 0x24     |        4 | Reseed interval for key manager entropy reseed                                                                    |
+| keymgr_dpe.[`SLOT_POLICY_REGWEN`](#slot_policy_regwen)                     | 0x28     |        4 | Register write enable for SLOT_POLICY                                                                             |
+| keymgr_dpe.[`SLOT_POLICY`](#slot_policy)                                   | 0x2c     |        4 | Policy bits for the child DPE context                                                                             |
+| keymgr_dpe.[`SW_BINDING_REGWEN`](#sw_binding_regwen)                       | 0x30     |        4 | Register write enable for SOFTWARE_BINDING                                                                        |
+| keymgr_dpe.[`SW_BINDING_0`](#sw_binding)                                   | 0x34     |        4 | Software binding input of the key manager.                                                                        |
+| keymgr_dpe.[`SW_BINDING_1`](#sw_binding)                                   | 0x38     |        4 | Software binding input of the key manager.                                                                        |
+| keymgr_dpe.[`SW_BINDING_2`](#sw_binding)                                   | 0x3c     |        4 | Software binding input of the key manager.                                                                        |
+| keymgr_dpe.[`SW_BINDING_3`](#sw_binding)                                   | 0x40     |        4 | Software binding input of the key manager.                                                                        |
+| keymgr_dpe.[`SW_BINDING_4`](#sw_binding)                                   | 0x44     |        4 | Software binding input of the key manager.                                                                        |
+| keymgr_dpe.[`SW_BINDING_5`](#sw_binding)                                   | 0x48     |        4 | Software binding input of the key manager.                                                                        |
+| keymgr_dpe.[`SW_BINDING_6`](#sw_binding)                                   | 0x4c     |        4 | Software binding input of the key manager.                                                                        |
+| keymgr_dpe.[`SW_BINDING_7`](#sw_binding)                                   | 0x50     |        4 | Software binding input of the key manager.                                                                        |
+| keymgr_dpe.[`SALT_0`](#salt)                                               | 0x54     |        4 | Salt value used as part of output generation                                                                      |
+| keymgr_dpe.[`SALT_1`](#salt)                                               | 0x58     |        4 | Salt value used as part of output generation                                                                      |
+| keymgr_dpe.[`SALT_2`](#salt)                                               | 0x5c     |        4 | Salt value used as part of output generation                                                                      |
+| keymgr_dpe.[`SALT_3`](#salt)                                               | 0x60     |        4 | Salt value used as part of output generation                                                                      |
+| keymgr_dpe.[`SALT_4`](#salt)                                               | 0x64     |        4 | Salt value used as part of output generation                                                                      |
+| keymgr_dpe.[`SALT_5`](#salt)                                               | 0x68     |        4 | Salt value used as part of output generation                                                                      |
+| keymgr_dpe.[`SALT_6`](#salt)                                               | 0x6c     |        4 | Salt value used as part of output generation                                                                      |
+| keymgr_dpe.[`SALT_7`](#salt)                                               | 0x70     |        4 | Salt value used as part of output generation                                                                      |
+| keymgr_dpe.[`KEY_VERSION`](#key_version)                                   | 0x74     |        4 | Version used as part of output generation                                                                         |
+| keymgr_dpe.[`MAX_KEY_VER_REGWEN`](#max_key_ver_regwen)                     | 0x78     |        4 | Register write enable for MAX_KEY_VERSION                                                                         |
+| keymgr_dpe.[`MAX_KEY_VER_SHADOWED`](#max_key_ver_shadowed)                 | 0x7c     |        4 | Max key version                                                                                                   |
+| keymgr_dpe.[`SW_SHARE0_OUTPUT_0`](#sw_share0_output)                       | 0x80     |        4 | Key manager software output.                                                                                      |
+| keymgr_dpe.[`SW_SHARE0_OUTPUT_1`](#sw_share0_output)                       | 0x84     |        4 | Key manager software output.                                                                                      |
+| keymgr_dpe.[`SW_SHARE0_OUTPUT_2`](#sw_share0_output)                       | 0x88     |        4 | Key manager software output.                                                                                      |
+| keymgr_dpe.[`SW_SHARE0_OUTPUT_3`](#sw_share0_output)                       | 0x8c     |        4 | Key manager software output.                                                                                      |
+| keymgr_dpe.[`SW_SHARE0_OUTPUT_4`](#sw_share0_output)                       | 0x90     |        4 | Key manager software output.                                                                                      |
+| keymgr_dpe.[`SW_SHARE0_OUTPUT_5`](#sw_share0_output)                       | 0x94     |        4 | Key manager software output.                                                                                      |
+| keymgr_dpe.[`SW_SHARE0_OUTPUT_6`](#sw_share0_output)                       | 0x98     |        4 | Key manager software output.                                                                                      |
+| keymgr_dpe.[`SW_SHARE0_OUTPUT_7`](#sw_share0_output)                       | 0x9c     |        4 | Key manager software output.                                                                                      |
+| keymgr_dpe.[`SW_SHARE1_OUTPUT_0`](#sw_share1_output)                       | 0xa0     |        4 | Key manager software output.                                                                                      |
+| keymgr_dpe.[`SW_SHARE1_OUTPUT_1`](#sw_share1_output)                       | 0xa4     |        4 | Key manager software output.                                                                                      |
+| keymgr_dpe.[`SW_SHARE1_OUTPUT_2`](#sw_share1_output)                       | 0xa8     |        4 | Key manager software output.                                                                                      |
+| keymgr_dpe.[`SW_SHARE1_OUTPUT_3`](#sw_share1_output)                       | 0xac     |        4 | Key manager software output.                                                                                      |
+| keymgr_dpe.[`SW_SHARE1_OUTPUT_4`](#sw_share1_output)                       | 0xb0     |        4 | Key manager software output.                                                                                      |
+| keymgr_dpe.[`SW_SHARE1_OUTPUT_5`](#sw_share1_output)                       | 0xb4     |        4 | Key manager software output.                                                                                      |
+| keymgr_dpe.[`SW_SHARE1_OUTPUT_6`](#sw_share1_output)                       | 0xb8     |        4 | Key manager software output.                                                                                      |
+| keymgr_dpe.[`SW_SHARE1_OUTPUT_7`](#sw_share1_output)                       | 0xbc     |        4 | Key manager software output.                                                                                      |
+| keymgr_dpe.[`WORKING_STATE`](#working_state)                               | 0xc0     |        4 | Key manager working state.                                                                                        |
+| keymgr_dpe.[`OP_STATUS`](#op_status)                                       | 0xc4     |        4 | Key manager status.                                                                                               |
+| keymgr_dpe.[`METADATA_LOW_0`](#metadata_low)                               | 0xc8     |        4 | Read metadata (low word) for each HW slot.                                                                        |
+| keymgr_dpe.[`METADATA_LOW_1`](#metadata_low)                               | 0xcc     |        4 | Read metadata (low word) for each HW slot.                                                                        |
+| keymgr_dpe.[`METADATA_LOW_2`](#metadata_low)                               | 0xd0     |        4 | Read metadata (low word) for each HW slot.                                                                        |
+| keymgr_dpe.[`METADATA_LOW_3`](#metadata_low)                               | 0xd4     |        4 | Read metadata (low word) for each HW slot.                                                                        |
+| keymgr_dpe.[`METADATA_LOW_4`](#metadata_low)                               | 0xd8     |        4 | Read metadata (low word) for each HW slot.                                                                        |
+| keymgr_dpe.[`METADATA_LOW_5`](#metadata_low)                               | 0xdc     |        4 | Read metadata (low word) for each HW slot.                                                                        |
+| keymgr_dpe.[`METADATA_LOW_6`](#metadata_low)                               | 0xe0     |        4 | Read metadata (low word) for each HW slot.                                                                        |
+| keymgr_dpe.[`METADATA_LOW_7`](#metadata_low)                               | 0xe4     |        4 | Read metadata (low word) for each HW slot.                                                                        |
+| keymgr_dpe.[`METADATA_HIGH_0`](#metadata_high)                             | 0xe8     |        4 | Read metadata (high word) for each HW slot.                                                                       |
+| keymgr_dpe.[`METADATA_HIGH_1`](#metadata_high)                             | 0xec     |        4 | Read metadata (high word) for each HW slot.                                                                       |
+| keymgr_dpe.[`METADATA_HIGH_2`](#metadata_high)                             | 0xf0     |        4 | Read metadata (high word) for each HW slot.                                                                       |
+| keymgr_dpe.[`METADATA_HIGH_3`](#metadata_high)                             | 0xf4     |        4 | Read metadata (high word) for each HW slot.                                                                       |
+| keymgr_dpe.[`METADATA_HIGH_4`](#metadata_high)                             | 0xf8     |        4 | Read metadata (high word) for each HW slot.                                                                       |
+| keymgr_dpe.[`METADATA_HIGH_5`](#metadata_high)                             | 0xfc     |        4 | Read metadata (high word) for each HW slot.                                                                       |
+| keymgr_dpe.[`METADATA_HIGH_6`](#metadata_high)                             | 0x100    |        4 | Read metadata (high word) for each HW slot.                                                                       |
+| keymgr_dpe.[`METADATA_HIGH_7`](#metadata_high)                             | 0x104    |        4 | Read metadata (high word) for each HW slot.                                                                       |
+| keymgr_dpe.[`ERR_CODE`](#err_code)                                         | 0x108    |        4 | Key manager error code.                                                                                           |
+| keymgr_dpe.[`FAULT_STATUS`](#fault_status)                                 | 0x10c    |        4 | This register represents both synchronous and asynchronous fatal faults.                                          |
+| keymgr_dpe.[`DEBUG`](#debug)                                               | 0x110    |        4 | The register holds some debug information that may be convenient if keymgr                                        |
+| keymgr_dpe.[`LOAD_ROOT_KEY_LOCK`](#load_root_key_lock)                     | 0x114    |        4 | Register lock for the `load root key` operation, see [`CONTROL_SHADOWED.OPERATION.`](#control_shadowed)           |
+| keymgr_dpe.[`LOAD_SECONDARY_ROOT_KEY_LOCK`](#load_secondary_root_key_lock) | 0x118    |        4 | Register lock for the `load secondary root key` operation, see [`CONTROL_SHADOWED.OPERATION.`](#control_shadowed) |
+| keymgr_dpe.[`ENFORCE_SW_BINDING`](#enforce_sw_binding)                     | 0x11c    |        4 | Enforce the software binding value as the only advance input message until the next reset                         |
 
 ## INTR_STATE
 Interrupt State Register
@@ -114,20 +132,21 @@ Interrupt Test Register
 ## ALERT_TEST
 Alert Test Register
 - Offset: `0xc`
-- Reset default: `0x0`
-- Reset mask: `0x3`
+- Reset default: `0x80000000`
+- Reset mask: `0x80000003`
 
 ### Fields
 
 ```wavejson
-{"reg": [{"name": "recov_operation_err", "bits": 1, "attr": ["wo"], "rotate": -90}, {"name": "fatal_fault_err", "bits": 1, "attr": ["wo"], "rotate": -90}, {"bits": 30}], "config": {"lanes": 1, "fontsize": 10, "vspace": 210}}
+{"reg": [{"name": "recov_operation_err", "bits": 1, "attr": ["wo"], "rotate": -90}, {"name": "fatal_fault_err", "bits": 1, "attr": ["wo"], "rotate": -90}, {"bits": 29}, {"name": "regwen", "bits": 1, "attr": ["rw0c"], "rotate": -90}], "config": {"lanes": 1, "fontsize": 10, "vspace": 210}}
 ```
 
-|  Bits  |  Type  |  Reset  | Name                | Description                                      |
-|:------:|:------:|:-------:|:--------------------|:-------------------------------------------------|
-|  31:2  |        |         |                     | Reserved                                         |
-|   1    |   wo   |   0x0   | fatal_fault_err     | Write 1 to trigger one alert event of this kind. |
-|   0    |   wo   |   0x0   | recov_operation_err | Write 1 to trigger one alert event of this kind. |
+|  Bits  |  Type  |  Reset  | Name                | Description                                            |
+|:------:|:------:|:-------:|:--------------------|:-------------------------------------------------------|
+|   31   |  rw0c  |   0x1   | regwen              | Write 0 to disable alert testing until the next reset. |
+|  30:2  |        |         |                     | Reserved                                               |
+|   1    |   wo   |   0x0   | fatal_fault_err     | Write 1 to trigger one alert event of this kind.       |
+|   0    |   wo   |   0x0   | recov_operation_err | Write 1 to trigger one alert event of this kind.       |
 
 ## CFG_REGWEN
 Key manager configuration enable
@@ -177,13 +196,13 @@ Other values are reserved.
 Key manager operation controls
 - Offset: `0x18`
 - Reset default: `0x10`
-- Reset mask: `0x5df070`
+- Reset mask: `0x5df870`
 - Register enable: [`CFG_REGWEN`](#cfg_regwen)
 
 ### Fields
 
 ```wavejson
-{"reg": [{"bits": 4}, {"name": "OPERATION", "bits": 3, "attr": ["rw"], "rotate": -90}, {"bits": 5}, {"name": "DEST_SEL", "bits": 2, "attr": ["rw"], "rotate": -90}, {"name": "SLOT_SRC_SEL", "bits": 3, "attr": ["rw"], "rotate": -90}, {"bits": 1}, {"name": "SLOT_DST_SEL", "bits": 3, "attr": ["rw"], "rotate": -90}, {"bits": 1}, {"name": "SW_BINDING_ONLY", "bits": 1, "attr": ["rw"], "rotate": -90}, {"bits": 9}], "config": {"lanes": 1, "fontsize": 10, "vspace": 170}}
+{"reg": [{"bits": 4}, {"name": "OPERATION", "bits": 3, "attr": ["rw"], "rotate": -90}, {"bits": 4}, {"name": "DEST_SEL", "bits": 3, "attr": ["rw"], "rotate": -90}, {"name": "SLOT_SRC_SEL", "bits": 3, "attr": ["rw"], "rotate": -90}, {"bits": 1}, {"name": "SLOT_DST_SEL", "bits": 3, "attr": ["rw"], "rotate": -90}, {"bits": 1}, {"name": "SW_BINDING_ONLY", "bits": 1, "attr": ["rw"], "rotate": -90}, {"bits": 9}], "config": {"lanes": 1, "fontsize": 10, "vspace": 170}}
 ```
 
 |  Bits  |  Type  |  Reset  | Name                                                  |
@@ -194,13 +213,15 @@ Key manager operation controls
 | 20:18  |   rw   |   0x0   | [SLOT_DST_SEL](#control_shadowed--slot_dst_sel)       |
 |   17   |        |         | Reserved                                              |
 | 16:14  |   rw   |   0x0   | [SLOT_SRC_SEL](#control_shadowed--slot_src_sel)       |
-| 13:12  |   rw   |   0x0   | [DEST_SEL](#control_shadowed--dest_sel)               |
-|  11:7  |        |         | Reserved                                              |
+| 13:11  |   rw   |   0x0   | [DEST_SEL](#control_shadowed--dest_sel)               |
+|  10:7  |        |         | Reserved                                              |
 |  6:4   |   rw   |   0x1   | [OPERATION](#control_shadowed--operation)             |
 |  3:0   |        |         | Reserved                                              |
 
 ### CONTROL_SHADOWED . SW_BINDING_ONLY
 Only apply software binding as a message input to the advance operation.
+
+See [`ENFORCE_SW_BINDING`](#enforce_sw_binding) to make this mandatory for all advance calls until the next reset.
 
 ### CONTROL_SHADOWED . SLOT_DST_SEL
 The destination key slot to be used for the advance and erase operations.
@@ -213,26 +234,30 @@ When the OPERATION field is programmed to generate output, this field selects
 the target cryptograhic use of the key.
 
 This field should be programmed for both HW / SW generation, as this helps diversify the output.
+The remaining values (5 to 7) are invalid and make a generate operation fail with `invalid_op`.
 
-| Value   | Name   | Description                                                                                                                                                                                                                                                                                                                                   |
-|:--------|:-------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 0x0     | None   | No target selected                                                                                                                                                                                                                                                                                                                            |
-| 0x1     | AES    | AES selected                                                                                                                                                                                                                                                                                                                                  |
-| 0x2     | KMAC   | KMAC selected                                                                                                                                                                                                                                                                                                                                 |
-| 0x3     | OTBN   | OTBN selected.  Note for OTBN hardware operations, the generated output is 384-bits, while for all other operations (including OTBN software), it is 256-bits. Generating a hardware 384-bit seed directly for OTBN sideload reduces some of the OTBN code burden for entropy expansion. When generating for software, this is not a concern. |
+| Value   | Name   | Description                                                                                                                                                                                                                                                         |
+|:--------|:-------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0x0     | None   | No target selected                                                                                                                                                                                                                                                  |
+| 0x1     | AES    | AES selected                                                                                                                                                                                                                                                        |
+| 0x2     | KMAC   | KMAC selected                                                                                                                                                                                                                                                       |
+| 0x3     | OTBN   | OTBN selected.  Note for OTBN hardware operations, the generated output is 512-bits. Generating a hardware 512-bit seed directly for OTBN sideload reduces some of the OTBN code burden for entropy expansion. When generating for software, this is not a concern. |
+| 0x4     | HMAC   | HMAC selected.  Note for HMAC hardware operations, the generated output is 512-bits.                                                                                                                                                                                |
 
+Other values are reserved.
 
 ### CONTROL_SHADOWED . OPERATION
 Key manager DPE operation selection
 
-| Value   | Name               | Description                                                                        |
-|:--------|:-------------------|:-----------------------------------------------------------------------------------|
-| 0x0     | Advance            | Advances a key manager DPE slot.                                                   |
-| 0x1     | Erase Slot         | Erases the secrets and resets the valid bit of the destination slot.               |
-| 0x2     | Generate SW Output | Generates a key manager output that is visible to software from the current state. |
-| 0x3     | Generate HW Output | Generates a cryptographic key that is visible only to hardware crypto blocks.      |
-| 0x4     | Disable            | Moves key manager DPE to disabled state.                                           |
-| 0x5     | Load root key      | Loads the root key into the key manager.                                           |
+| Value   | Name                    | Description                                                                                                                                      |
+|:--------|:------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0x0     | Advance                 | Advances a key manager DPE slot.                                                                                                                 |
+| 0x1     | Erase Slot              | Erases the secrets and resets the valid bit of the destination slot.                                                                             |
+| 0x2     | Generate SW Output      | Generates a key manager output that is visible to software from the current state.                                                               |
+| 0x3     | Generate HW Output      | Generates a cryptographic key that is visible only to hardware crypto blocks.                                                                    |
+| 0x4     | Disable                 | Moves key manager DPE to disabled state.                                                                                                         |
+| 0x5     | Load root key           | Loads the root key into the key manager. Can be disabled by [`LOAD_ROOT_KEY_LOCK`](#load_root_key_lock) if needed.                               |
+| 0x6     | Load secondary root key | Loads the secondary root key into the key manager. Can be disabled by [`LOAD_SECONDARY_ROOT_KEY_LOCK`](#load_secondary_root_key_lock) if needed. |
 
 Other values are reserved.
 
@@ -266,6 +291,7 @@ toggle the clear bit again (i.e. disable continuous clearing).
 | 0x1     | AES    | The AES sideload key is continuously cleared with entropy.  |
 | 0x2     | KMAC   | The KMAC sideload key is continuously cleared with entropy. |
 | 0x3     | OTBN   | The OTBN sideload key is continuously cleared with entropy. |
+| 0x4     | HMAC   | The HMAC sideload key is continuously cleared with entropy. |
 
 Other values are reserved.
 
@@ -325,21 +351,22 @@ Register write enable for SLOT_POLICY
 Policy bits for the child DPE context
 - Offset: `0x2c`
 - Reset default: `0x0`
-- Reset mask: `0x7`
+- Reset mask: `0xf`
 - Register enable: [`SLOT_POLICY_REGWEN`](#slot_policy_regwen)
 
 ### Fields
 
 ```wavejson
-{"reg": [{"name": "ALLOW_CHILD", "bits": 1, "attr": ["rw"], "rotate": -90}, {"name": "EXPORTABLE", "bits": 1, "attr": ["rw"], "rotate": -90}, {"name": "RETAIN_PARENT", "bits": 1, "attr": ["rw"], "rotate": -90}, {"bits": 29}], "config": {"lanes": 1, "fontsize": 10, "vspace": 150}}
+{"reg": [{"name": "ALLOW_CHILD", "bits": 1, "attr": ["rw"], "rotate": -90}, {"name": "EXPORTABLE", "bits": 1, "attr": ["rw"], "rotate": -90}, {"name": "RETAIN_PARENT", "bits": 1, "attr": ["rw"], "rotate": -90}, {"name": "ALLOW_KEYGEN", "bits": 1, "attr": ["rw"], "rotate": -90}, {"bits": 28}], "config": {"lanes": 1, "fontsize": 10, "vspace": 150}}
 ```
 
-|  Bits  |  Type  |  Reset  | Name          | Description                                                       |
-|:------:|:------:|:-------:|:--------------|:------------------------------------------------------------------|
-|  31:3  |        |         |               | Reserved                                                          |
-|   2    |   rw   |   0x0   | RETAIN_PARENT | Set whether further advance operations force erasure of the slot. |
-|   1    |   rw   |   0x0   | EXPORTABLE    | Set whether the key for the target slot is exportable.            |
-|   0    |   rw   |   0x0   | ALLOW_CHILD   | Set whether this context allows derivation of further children.   |
+|  Bits  |  Type  |  Reset  | Name          | Description                                                                                                       |
+|:------:|:------:|:-------:|:--------------|:------------------------------------------------------------------------------------------------------------------|
+|  31:4  |        |         |               | Reserved                                                                                                          |
+|   3    |   rw   |   0x0   | ALLOW_KEYGEN  | Set whether this context can be used to generate keys. This applies to both software and sideload key generation. |
+|   2    |   rw   |   0x0   | RETAIN_PARENT | Set whether further advance operations force erasure of the slot.                                                 |
+|   1    |   rw   |   0x0   | EXPORTABLE    | Set whether the key for the target slot is exportable.                                                            |
+|   0    |   rw   |   0x0   | ALLOW_CHILD   | Set whether this context allows derivation of further children.                                                   |
 
 ## SW_BINDING_REGWEN
 Register write enable for SOFTWARE_BINDING
@@ -605,6 +632,109 @@ Operation status.
 | 0x3     | DONE_ERROR   | Operation finished with errors, please see ERR_CODE register.             |
 
 
+## METADATA_LOW
+Read metadata (low word) for each HW slot.
+
+Only the first `NumInstHwSlot` slots are instantiated.
+Entries at index `NumInstHwSlot` and above always read as 0.
+Together with [`METADATA_HIGH`](#metadata_high), this register lets software inspect the non-secret
+metadata of the DPE context.
+- Reset default: `0x0`
+- Reset mask: `0xffffffff`
+
+### Instances
+
+| Name           | Offset   |
+|:---------------|:---------|
+| METADATA_LOW_0 | 0xc8     |
+| METADATA_LOW_1 | 0xcc     |
+| METADATA_LOW_2 | 0xd0     |
+| METADATA_LOW_3 | 0xd4     |
+| METADATA_LOW_4 | 0xd8     |
+| METADATA_LOW_5 | 0xdc     |
+| METADATA_LOW_6 | 0xe0     |
+| METADATA_LOW_7 | 0xe4     |
+
+
+### Fields
+
+```wavejson
+{"reg": [{"name": "MAX_KEY_VERSION", "bits": 32, "attr": ["ro"], "rotate": 0}], "config": {"lanes": 1, "fontsize": 10, "vspace": 80}}
+```
+
+|  Bits  |  Type  |  Reset  | Name            | Description                                                        |
+|:------:|:------:|:-------:|:----------------|:-------------------------------------------------------------------|
+|  31:0  |   ro   |   0x0   | MAX_KEY_VERSION | Maximum key version allowed for key derived from this DPE context. |
+
+## METADATA_HIGH
+Read metadata (high word) for each HW slot.
+
+Only the first `NumInstHwSlot` slots are instantiated.
+Entries at index `NumInstHwSlot` and above always read as 0.
+Together with [`METADATA_LOW`](#metadata_low), this register lets software inspect the non-secret
+metadata of the DPE context.
+- Reset default: `0x0`
+- Reset mask: `0x7f`
+
+### Instances
+
+| Name            | Offset   |
+|:----------------|:---------|
+| METADATA_HIGH_0 | 0xe8     |
+| METADATA_HIGH_1 | 0xec     |
+| METADATA_HIGH_2 | 0xf0     |
+| METADATA_HIGH_3 | 0xf4     |
+| METADATA_HIGH_4 | 0xf8     |
+| METADATA_HIGH_5 | 0xfc     |
+| METADATA_HIGH_6 | 0x100    |
+| METADATA_HIGH_7 | 0x104    |
+
+
+### Fields
+
+```wavejson
+{"reg": [{"name": "VALID", "bits": 1, "attr": ["ro"], "rotate": -90}, {"name": "BOOT_STAGE", "bits": 2, "attr": ["ro"], "rotate": -90}, {"name": "ALLOW_CHILD_POLICY", "bits": 1, "attr": ["ro"], "rotate": -90}, {"name": "EXPORTABLE_POLICY", "bits": 1, "attr": ["ro"], "rotate": -90}, {"name": "RETAIN_PARENT_POLICY", "bits": 1, "attr": ["ro"], "rotate": -90}, {"name": "ALLOW_KEYGEN_POLICY", "bits": 1, "attr": ["ro"], "rotate": -90}, {"bits": 25}], "config": {"lanes": 1, "fontsize": 10, "vspace": 220}}
+```
+
+|  Bits  |  Type  |  Reset  | Name                                                         |
+|:------:|:------:|:-------:|:-------------------------------------------------------------|
+|  31:7  |        |         | Reserved                                                     |
+|   6    |   ro   |   0x0   | [ALLOW_KEYGEN_POLICY](#metadata_high--allow_keygen_policy)   |
+|   5    |   ro   |   0x0   | [RETAIN_PARENT_POLICY](#metadata_high--retain_parent_policy) |
+|   4    |   ro   |   0x0   | [EXPORTABLE_POLICY](#metadata_high--exportable_policy)       |
+|   3    |   ro   |   0x0   | [ALLOW_CHILD_POLICY](#metadata_high--allow_child_policy)     |
+|  2:1   |   ro   |   0x0   | [BOOT_STAGE](#metadata_high--boot_stage)                     |
+|   0    |   ro   |   0x0   | [VALID](#metadata_high--valid)                               |
+
+### METADATA_HIGH . ALLOW_KEYGEN_POLICY
+Read the `allow_keygen` policy applied to the DPE context in this slot.
+
+### METADATA_HIGH . RETAIN_PARENT_POLICY
+Read the `retain_parent` policy applied to the DPE context in this slot.
+
+### METADATA_HIGH . EXPORTABLE_POLICY
+Read the `exportable` policy applied to the DPE context in this slot.
+
+### METADATA_HIGH . ALLOW_CHILD_POLICY
+Read the `allow_child` policy applied to the DPE context in this slot.
+
+### METADATA_HIGH . BOOT_STAGE
+Boot stage associated with the DPE context held in this slot.
+
+| Value | Boot stage        |
+|:-----:|:------------------|
+| 0     | BootStageCreator  |
+| 1     | BootStageOwnerInt |
+| 2     | BootStageOwner    |
+| 3     | BootStageRuntime  |
+
+The naming indicates the next bootstage after a successful key derivation
+e.g. boot stage 1 means the context is the _CreatorRootKey_ and will be
+derived into the _OwnerIntKey_.
+
+### METADATA_HIGH . VALID
+Set if the DPE context held in this slot is valid.
+
 ## ERR_CODE
 Key manager error code.
 This register must be explicitly cleared by software.
@@ -614,7 +744,7 @@ errors.
 
 Synchronous errors refer to those that only happen when a keymgr operation is
 invoked, while asynchronous refers to errors that can happen at any time.
-- Offset: `0xc8`
+- Offset: `0x108`
 - Reset default: `0x0`
 - Reset mask: `0x7`
 
@@ -637,7 +767,7 @@ This register represents both synchronous and asynchronous fatal faults.
 Synchronous faults refer to those that only happen when a keymgr operation is
 invoked, while asynchronous refers to faults that can happen at any time.
 
-- Offset: `0xcc`
+- Offset: `0x10c`
 - Reset default: `0x0`
 - Reset mask: `0x3fff`
 
@@ -668,32 +798,33 @@ invoked, while asynchronous refers to faults that can happen at any time.
 ## DEBUG
 The register holds some debug information that may be convenient if keymgr
 misbehaves.
-- Offset: `0xd0`
+- Offset: `0x110`
 - Reset default: `0x0`
-- Reset mask: `0x1ff`
+- Reset mask: `0x3ff`
 
 ### Fields
 
 ```wavejson
-{"reg": [{"name": "INVALID_CREATOR_SEED", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INVALID_OWNER_SEED", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INVALID_DEV_ID", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INVALID_HEALTH_STATE", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INVALID_KEY_VERSION", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INVALID_KEY", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INVALID_DIGEST", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INVALID_ROOT_KEY", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INACTIVE_LC_EN", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"bits": 23}], "config": {"lanes": 1, "fontsize": 10, "vspace": 220}}
+{"reg": [{"name": "INVALID_CREATOR_SEED", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INVALID_OWNER_SEED", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INVALID_DEV_ID", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INVALID_HEALTH_STATE", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INVALID_KEY_VERSION", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INVALID_KEY", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INVALID_DIGEST", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INVALID_ROOT_KEY", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INACTIVE_LC_EN", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"name": "INVALID_SECONDARY_ROOT_KEY", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"bits": 22}], "config": {"lanes": 1, "fontsize": 10, "vspace": 280}}
 ```
 
-|  Bits  |  Type  |  Reset  | Name                 | Description                                          |
-|:------:|:------:|:-------:|:---------------------|:-----------------------------------------------------|
-|  31:9  |        |         |                      | Reserved                                             |
-|   8    |  rw0c  |   0x0   | INACTIVE_LC_EN       | Enable signal from LC ctrl is deactivated            |
-|   7    |  rw0c  |   0x0   | INVALID_ROOT_KEY     | OTP root key was invalid during the first advance    |
-|   6    |  rw0c  |   0x0   | INVALID_DIGEST       | ROM digest failed input checks during operation      |
-|   5    |  rw0c  |   0x0   | INVALID_KEY          | Key fed to kmac failed input checks during operation |
-|   4    |  rw0c  |   0x0   | INVALID_KEY_VERSION  | Key version failed input checks during operation     |
-|   3    |  rw0c  |   0x0   | INVALID_HEALTH_STATE | Health state failed input checks during operation    |
-|   2    |  rw0c  |   0x0   | INVALID_DEV_ID       | Device ID failed input checks during operation       |
-|   1    |  rw0c  |   0x0   | INVALID_OWNER_SEED   | Owner seed failed input checks during operation      |
-|   0    |  rw0c  |   0x0   | INVALID_CREATOR_SEED | Creator seed failed input checks during operation    |
+|  Bits  |  Type  |  Reset  | Name                       | Description                                                                             |
+|:------:|:------:|:-------:|:---------------------------|:----------------------------------------------------------------------------------------|
+| 31:10  |        |         |                            | Reserved                                                                                |
+|   9    |  rw0c  |   0x0   | INVALID_SECONDARY_ROOT_KEY | Secondary root key was invalid during a `load secondary root key` operation             |
+|   8    |  rw0c  |   0x0   | INACTIVE_LC_EN             | Enable signal from LC ctrl is deactivated                                               |
+|   7    |  rw0c  |   0x0   | INVALID_ROOT_KEY           | OTP root key was invalid during the first advance or during a `load root key` operation |
+|   6    |  rw0c  |   0x0   | INVALID_DIGEST             | ROM digest failed input checks during operation                                         |
+|   5    |  rw0c  |   0x0   | INVALID_KEY                | Key fed to kmac failed input checks during operation                                    |
+|   4    |  rw0c  |   0x0   | INVALID_KEY_VERSION        | Key version failed input checks during operation                                        |
+|   3    |  rw0c  |   0x0   | INVALID_HEALTH_STATE       | Health state failed input checks during operation                                       |
+|   2    |  rw0c  |   0x0   | INVALID_DEV_ID             | Device ID failed input checks during operation                                          |
+|   1    |  rw0c  |   0x0   | INVALID_OWNER_SEED         | Owner seed was not marked valid or failed input checks during operation                 |
+|   0    |  rw0c  |   0x0   | INVALID_CREATOR_SEED       | Creator seed was not marked valid or failed input checks during operation               |
 
-## LOAD_KEY_LOCK
-Register write lock for the LOAD_KEY command
-- Offset: `0xd4`
+## LOAD_ROOT_KEY_LOCK
+Register lock for the `load root key` operation, see [`CONTROL_SHADOWED.OPERATION.`](#control_shadowed)
+- Offset: `0x114`
 - Reset default: `0x0`
 - Reset mask: `0x1`
 
@@ -703,10 +834,56 @@ Register write lock for the LOAD_KEY command
 {"reg": [{"name": "LOCK", "bits": 1, "attr": ["rw1s"], "rotate": -90}, {"bits": 31}], "config": {"lanes": 1, "fontsize": 10, "vspace": 80}}
 ```
 
-|  Bits  |  Type  |  Reset  | Name   | Description                                                                                                                                                                  |
-|:------:|:------:|:-------:|:-------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-|  31:1  |        |         |        | Reserved                                                                                                                                                                     |
-|   0    |  rw1s  |   0x0   | LOCK   | Load key register write lock. Load key lock to 0, and its value cannot be altered by software until the next reset or locked. Once locked, the LOAD_KEY command is disabled. |
+|  Bits  |  Type  |  Reset  | Name   | Description                                                            |
+|:------:|:------:|:-------:|:-------|:-----------------------------------------------------------------------|
+|  31:1  |        |         |        | Reserved                                                               |
+|   0    |  rw1s  |   0x0   | LOCK   | Write 1 to disable the `load root key` operation until the next reset. |
+
+## LOAD_SECONDARY_ROOT_KEY_LOCK
+Register lock for the `load secondary root key` operation, see [`CONTROL_SHADOWED.OPERATION.`](#control_shadowed)
+- Offset: `0x118`
+- Reset default: `0x0`
+- Reset mask: `0x1`
+
+### Fields
+
+```wavejson
+{"reg": [{"name": "LOCK", "bits": 1, "attr": ["rw1s"], "rotate": -90}, {"bits": 31}], "config": {"lanes": 1, "fontsize": 10, "vspace": 80}}
+```
+
+|  Bits  |  Type  |  Reset  | Name   | Description                                                                      |
+|:------:|:------:|:-------:|:-------|:---------------------------------------------------------------------------------|
+|  31:1  |        |         |        | Reserved                                                                         |
+|   0    |  rw1s  |   0x0   | LOCK   | Write 1 to disable the `load secondary root key` operation until the next reset. |
+
+## ENFORCE_SW_BINDING
+Enforce the software binding value as the only advance input message until the next reset
+- Offset: `0x11c`
+- Reset default: `0x9`
+- Reset mask: `0xf`
+
+### Fields
+
+```wavejson
+{"reg": [{"name": "ENFORCE", "bits": 4, "attr": ["rw1s"], "rotate": -90}, {"bits": 28}], "config": {"lanes": 1, "fontsize": 10, "vspace": 90}}
+```
+
+|  Bits  |  Type  |  Reset  | Name                                    |
+|:------:|:------:|:-------:|:----------------------------------------|
+|  31:4  |        |         | Reserved                                |
+|  3:0   |  rw1s  |   0x9   | [ENFORCE](#enforce_sw_binding--enforce) |
+
+### ENFORCE_SW_BINDING . ENFORCE
+Enforce using only sw binding value for context derivation.
+
+Once set no hw binding value can be consumed until the next reset.
+An advance operation from a parent whose boot stage consumes hw binding values
+(`boot_stage` 0 to 2, i.e. Creator, OwnerInt or Owner) without
+`CONTROL_SHADOWED.SW_BINDING_ONLY` set will fail with an `invalid_op` error without
+updating the destination slot.
+Advance operations from later boot stages are not affected.
+
+Every encoding except `kMultiBitBool4False` will be treated as locked.
 
 
 <!-- END CMDGEN -->

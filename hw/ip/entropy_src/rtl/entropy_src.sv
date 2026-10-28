@@ -29,12 +29,6 @@ module entropy_src
   input  tlul_pkg::tl_h2d_t tl_i,
   output tlul_pkg::tl_d2h_t tl_o,
 
-  // OTP Interface
-  // SEC_CM: INTERSIG.MUBI
-  input  mubi8_t otp_en_entropy_src_fw_read_i,
-  // SEC_CM: INTERSIG.MUBI
-  input  mubi8_t otp_en_entropy_src_fw_over_i,
-
   // RNG Interface
   output logic rng_fips_o,
 
@@ -176,8 +170,6 @@ module entropy_src
     .reg2hw,
     .hw2reg(core_hw2reg),
 
-    .otp_en_entropy_src_fw_read_i(otp_en_entropy_src_fw_read_i),
-    .otp_en_entropy_src_fw_over_i(otp_en_entropy_src_fw_over_i),
     .rng_fips_o,
 
     .entropy_src_hw_if_o(core_entropy_hw_if),
@@ -292,10 +284,13 @@ module entropy_src
 
   // RNG Interface
   `ASSERT_KNOWN(EsRngEnableKnownO_A, entropy_src_rng_enable_o)
+  `ASSERT_KNOWN(EsRngFipsKnownO_A, rng_fips_o)
 
   // External Health Test Interface
   `ASSERT_KNOWN_IF(EsXhtEntropyBitKnownO_A, entropy_src_xht_bits_o, entropy_src_xht_valid_o)
   `ASSERT_KNOWN(EsXhtEntropyBitValidKnownO_A, entropy_src_xht_valid_o)
+  `ASSERT_KNOWN(EsXhtBitSelKnownO_A, entropy_src_xht_bit_sel_o)
+  `ASSERT_KNOWN(EsXhtHealthTestWindowKnownO_A, entropy_src_xht_health_test_window_o)
   `ASSERT_KNOWN(EsXhtClearKnownO_A, entropy_src_xht_meta_o.clear)
   `ASSERT_KNOWN(EsXhtActiveKnownO_A, entropy_src_xht_meta_o.active)
   `ASSERT_KNOWN(EsXhtThreshHiKnownO_A, entropy_src_xht_meta_o.thresh_hi)
@@ -308,6 +303,7 @@ module entropy_src
   // Interrupts
   `ASSERT_KNOWN(IntrEsEntropyValidKnownO_A, intr_es_entropy_valid_o)
   `ASSERT_KNOWN(IntrEsHealthTestFailedKnownO_A, intr_es_health_test_failed_o)
+  `ASSERT_KNOWN(IntrEsObserveFifoReadyKnownO_A, intr_es_observe_fifo_ready_o)
   `ASSERT_KNOWN(IntrEsFifoErrKnownO_A, intr_es_fatal_err_o)
 
   // prim_count alerts
@@ -445,6 +441,18 @@ module entropy_src
 
   `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(CntAlertCheck26_A,
     u_entropy_src_core.u_entropy_src_cntr_reg_extht_lo_alert_fails.u_prim_count_cntr_reg,
+    alert_tx_o[1])
+
+  `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(CntAlertCheck27_A,
+    u_entropy_src_core.u_entropy_src_adaptps_ht.u_prim_count_test_cnt,
+    alert_tx_o[1])
+
+  `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(CntAlertCheck28_A,
+    u_entropy_src_core.u_entropy_src_cntr_reg_adaptps.u_prim_count_cntr_reg,
+    alert_tx_o[1])
+
+  `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(CntAlertCheck29_A,
+    u_entropy_src_core.u_entropy_src_cntr_reg_adaptps_alert_fails.u_prim_count_cntr_reg,
     alert_tx_o[1])
 
   `ASSERT_PRIM_COUNT_ERROR_TRIGGER_ALERT(EsrngFifoWptrCheck_A,

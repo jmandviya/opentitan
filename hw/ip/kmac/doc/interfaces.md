@@ -10,15 +10,15 @@ Referring to the [Comportable guideline for peripheral device functionality](htt
 
 ## [Inter-Module Signals](https://opentitan.org/book/doc/contributing/hw/comportability/index.html#inter-signal-handling)
 
-| Port Name      | Package::Struct        | Type    | Act   | Width      | Description   |
-|:---------------|:-----------------------|:--------|:------|:-----------|:--------------|
-| keymgr_key     | keymgr_pkg::hw_key_req | uni     | rcv   | 1          |               |
-| app            | kmac_pkg::app          | req_rsp | rsp   | NumAppIntf |               |
-| entropy        | edn_pkg::edn           | req_rsp | req   | 1          |               |
-| idle           | prim_mubi_pkg::mubi4   | uni     | req   | 1          |               |
-| en_masking     | logic                  | uni     | req   | 1          |               |
-| lc_escalate_en | lc_ctrl_pkg::lc_tx     | uni     | rcv   | 1          |               |
-| tl             | tlul_pkg::tl           | req_rsp | rsp   | 1          |               |
+| Port Name      | Package::Struct            | Type    | Act   | Width      | Description   |
+|:---------------|:---------------------------|:--------|:------|:-----------|:--------------|
+| keymgr_key     | keymgr_dpe_pkg::hw_key_req | uni     | rcv   | 1          |               |
+| app            | kmac_pkg::app              | req_rsp | rsp   | NumAppIntf |               |
+| entropy        | edn_pkg::edn               | req_rsp | req   | 1          |               |
+| idle           | prim_mubi_pkg::mubi4       | uni     | req   | 1          |               |
+| en_masking     | logic                      | uni     | req   | 1          |               |
+| lc_escalate_en | lc_ctrl_pkg::lc_tx         | uni     | rcv   | 1          |               |
+| tl             | tlul_pkg::tl               | req_rsp | rsp   | 1          |               |
 
 ## Interrupts
 
@@ -30,10 +30,10 @@ Referring to the [Comportable guideline for peripheral device functionality](htt
 
 ## Security Alerts
 
-| Alert Name          | Description                                                                                                                                                                                                                                                                                                                                                                                                 |
-|:--------------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| recov_operation_err | Alert for KMAC operation error. It occurs when the shadow registers have update errors.                                                                                                                                                                                                                                                                                                                     |
-| fatal_fault_err     | This fatal alert is triggered when a fatal error is detected inside the KMAC unit. Examples for such faults include: i) TL-UL bus integrity fault. ii) Storage errors in the shadow registers. iii) Errors in the message, round, or key counter. iv) Any internal FSM entering an invalid state. v) An error in the redundant lfsr. The KMAC unit cannot recover from such an error and needs to be reset. |
+| Alert Name          | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+|:--------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| recov_operation_err | Alert for KMAC operation error. It occurs when the shadow registers have update errors.                                                                                                                                                                                                                                                                                                                                                                                   |
+| fatal_fault_err     | This fatal alert is triggered when a fatal error is detected inside the KMAC unit. Examples for such faults include: i) TL-UL bus integrity fault. ii) Storage errors in the shadow registers. iii) Errors in the message, round, or key counter. iv) Any internal FSM entering an invalid state. v) An error in the redundant lfsr. vi) A SHA3 core error occurs when an app interface is active. The KMAC unit cannot recover from such an error and needs to be reset. |
 
 ## Security Countermeasures
 

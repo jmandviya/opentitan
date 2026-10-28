@@ -5,8 +5,10 @@
 r"""Takes a compiled VMEM image and processes it for loading into the RRAM.
 
     Specifically, this takes a raw RRAM image, adds address infection and scrambles
-    the data using the same XEX scrambling scheme used in the RRAM controller. This
-    enables backdoor loading the RRAM on simulation platforms (e.g., DV and Verilator).
+    the data using the same XEX scrambling scheme used in the RRAM controller, then
+    appends the open-source rram_macro's own physical ECC to every row (see _rram_ecc()).
+    This enables backdoor loading the RRAM on simulation platforms (e.g., DV and Verilator)
+    and on FPGA.
 
     --in-otp-vmem supplies OTP scrambling-key seeds for the firmware image above. If
     --out-otp-vmem is also given, a *separate* VMEM image of OTP's own content (data rows plus
@@ -50,8 +52,8 @@ RRAM_PRINCE_NUM_HALF_ROUNDS = 5
 RRAM_WORDS_PER_PAGE = 32
 # rram_ctrl_pkg::TotalDataPages = TotalBytes / (DataWidth / 8) / WordsPerPage = 4096.
 RRAM_TOTAL_DATA_PAGES = 4096
-# rram_ctrl_pkg::OtpPages = TotalOtpBytes / (DataWidth / 8) / WordsPerPage = 5.
-RRAM_OTP_PAGES = 5
+# rram_ctrl_pkg::OtpPages = TotalOtpBytes / (DataWidth / 8) / WordsPerPage = 6.
+RRAM_OTP_PAGES = 6
 
 # There are always exactly two slots splitting the full data partition evenly in half (see
 # NVM_BYTES_PER_SLOT in sw/device/silicon_creator/lib/nvm_ctrl.h).
@@ -85,10 +87,34 @@ RRAM_GF_2_128 = ffield.FField(128,
                               gen=((0x1 << 128) | (0x1 << 7) | (0x1 << 2) |
                                    (0x1 << 1) | 0x1))
 
-# Format string for generating new VMEM file.
-RRAM_VMEM_WORD_SIZE = (RRAM_WORD_SIZE)
-VMEM_FORMAT_STR = " {:0" + f"{RRAM_VMEM_WORD_SIZE // 4}" + "X}"
+# rram_macro.sv's own physical ECC: 8 check bits per 64-bit half (Hamming(72,64) x2), appended
+# above the 128 data bits. See _rram_ecc().
+RRAM_PHYS_ECC_SIZE = 16  # bits
 # ------------------------------------------------------------------------------
+
+
+def _vmem_format_str(word_size_bits: int) -> str:
+    return " {:0" + f"{word_size_bits // 4}" + "X}"
+
+
+def _rram_ecc(ecc_configs, data: int) -> int:
+    """Computes rram_macro's own 16-bit physical ECC for a 128-bit RRAM word: two independent
+    Hamming(72,64) codes, one per 64-bit half, matching rram_macro.sv's own encode path (two
+    prim_secded_hamming_72_64_enc instances, one per half). See
+    hw/ip/rram_ctrl/dv/bkdr/rram_bkdr_helpers.sv's emul_encode_word(), the DV backdoor equivalent
+    of this function, for the same layout.
+
+    Returns {ecc_hi[7:0], ecc_lo[7:0]}, to be placed above the 128 data bits.
+    """
+    data_lo = data & ((1 << 64) - 1)
+    data_hi = (data >> 64) & ((1 << 64) - 1)
+    # ecc_encode returns {ECC bits, data bits}.
+    # The syndrome is the top 8 bits.
+    codeword_lo, _ = secded_gen.ecc_encode(ecc_configs, "hamming", 64, data_lo)
+    codeword_hi, _ = secded_gen.ecc_encode(ecc_configs, "hamming", 64, data_hi)
+    ecc_lo = (codeword_lo >> 64) & 0xFF
+    ecc_hi = (codeword_hi >> 64) & 0xFF
+    return (ecc_hi << 8) | ecc_lo
 
 
 def _interleave_split(data: int):
@@ -175,6 +201,12 @@ def _gen_otp_rram_vmem_lines(otp_vmem_file: str,
     otp_macro-specific Hamming(22,16) ECC) and returns VMEM lines placing its content the way
     rram_ctrl_otp.sv expects: 128b data rows plus a separate Hamming(72,64) integrity byte per
     64b chunk in its own page.
+
+    Every emitted row (data and integrity alike) additionally carries rram_macro.sv's own 16-bit
+    physical ECC (see _rram_ecc()), making each row a full 144-bit physical codeword instead of a
+    bare 128-bit logical word.
+    This matches the open-source rram_macro's own physical storage format, so this output can be
+    backdoor-loaded directly wherever that format is expected.
     """
     # Open (native-format) OTP VMEM file and read into memory, skipping comment lines.
     try:
@@ -182,7 +214,9 @@ def _gen_otp_rram_vmem_lines(otp_vmem_file: str,
     except IOError:
         raise Exception(f"Unable to open {otp_vmem_file}")
 
-    # Load project SECDED configuration, for the Hamming(72,64) syndrome below.
+    # Load project SECDED configuration, for the Hamming(72,64) integrity syndrome below and
+    # rram_macro's own physical ECC (see _rram_ecc()).
+    # It is the same config either way, since both use the same "hamming" scheme.
     ecc_configs = secded_gen.load_secded_config()
 
     # Read every native 16b OTP word into a dict keyed by its native word address, dropping the
@@ -205,6 +239,21 @@ def _gen_otp_rram_vmem_lines(otp_vmem_file: str,
 
     # One RRAM row holds OTP_WORDS_PER_RRAM_WORD native OTP words.
     num_rows = (max(data_words, default=-1) + OTP_WORDS_PER_RRAM_WORD) // OTP_WORDS_PER_RRAM_WORD
+
+    # Round up to a full group of data rows sharing one integrity row (8 data rows per row here),
+    # so the last group's data rows are all written.
+    rows_per_intg = INTG_BYTES_PER_RRAM_WORD // (RRAM_WORD_SIZE // INTG_CHUNK_SIZE)
+    num_rows = ((num_rows + rows_per_intg - 1) // rows_per_intg) * rows_per_intg
+
+    # OTP data must fit into RRAM_OTP_PAGES-1 pages, its integrity bytes into the first page.
+    max_data_rows = (RRAM_OTP_PAGES - 1) * RRAM_WORDS_PER_PAGE
+    if num_rows > max_data_rows:
+        raise ValueError(f"OTP image needs {num_rows} RRAM data rows, but the RRAM OTP region "
+                         f"only holds {max_data_rows}; increase rram_ctrl_pkg::TotalOtpBytes.")
+    num_intg_rows = (num_rows + rows_per_intg - 1) // rows_per_intg
+    if num_intg_rows > RRAM_WORDS_PER_PAGE:
+        raise ValueError(f"OTP image needs {num_intg_rows} RRAM integrity rows, but the RRAM "
+                         f"integrity page only holds {RRAM_WORDS_PER_PAGE}.")
 
     rows = {}
     comments = {}
@@ -257,9 +306,11 @@ def _gen_otp_rram_vmem_lines(otp_vmem_file: str,
 
     # Emit one VMEM line per RRAM word address touched above (data rows and integrity rows,
     # interleaved in address order since integrity rows sit before the data they cover).
+    fmt = _vmem_format_str(RRAM_WORD_SIZE + RRAM_PHYS_ECC_SIZE)
     lines = []
     for addr, val in sorted(rows.items()):
-        line = f"@{addr:06x}" + str.format(VMEM_FORMAT_STR, val)
+        val |= _rram_ecc(ecc_configs, val) << RRAM_WORD_SIZE
+        line = f"@{addr:06x}" + str.format(fmt, val)
         if comments.get(addr):
             line += f"  // {comments[addr]}"
         lines.append(line)
@@ -270,6 +321,12 @@ def _reformat_rram_vmem(
         rram_vmem_file: str,
         scrambling_configs: ScramblingConfigs,
         addr_offset: int = 0) -> List[str]:
+    """See _gen_otp_rram_vmem_lines()'s physical-ECC paragraph.
+    Same applies here, applied to the firmware data partition's rows instead of OTP's.
+    """
+    ecc_configs = secded_gen.load_secded_config()
+    fmt = _vmem_format_str(RRAM_WORD_SIZE + RRAM_PHYS_ECC_SIZE)
+
     # Open (raw) RRAM VMEM file and read into memory, skipping comment lines.
     try:
         rram_vmem = Path(rram_vmem_file).read_text()
@@ -322,8 +379,8 @@ def _reformat_rram_vmem(
                     data = _xex_scramble(data, address + address_offset,
                                          scrambling_configs.addr_key,
                                          scrambling_configs.data_key)
-                reformatted_line += str.format(VMEM_FORMAT_STR,
-                                               data)
+                data |= _rram_ecc(ecc_configs, data) << RRAM_WORD_SIZE
+                reformatted_line += str.format(fmt, data)
                 address_offset += 1
 
         # Append reformatted line to what will be the new output VMEM file.
@@ -433,7 +490,7 @@ def main(argv: List[str]):
         # Write re-formatted output file. Use binary mode and a large buffer size
         # to improve performance.
         with open(args.out_rram_vmem, "wb", buffering=2097152) as of:
-            of.write("\n".join(reformatted_vmem_lines).encode('utf-8'))
+            of.write(("\n".join(reformatted_vmem_lines) + "\n").encode('utf-8'))
 
     # Separately, generate OTP's own image (data + integrity page) if requested.
     if args.out_otp_vmem:
@@ -441,7 +498,7 @@ def main(argv: List[str]):
             raise ValueError("--out-otp-vmem requires --in-otp-vmem.")
         otp_vmem_lines = _gen_otp_rram_vmem_lines(args.in_otp_vmem, args.otp_data_perm)
         with open(args.out_otp_vmem, "wb", buffering=2097152) as of:
-            of.write("\n".join(otp_vmem_lines).encode('utf-8'))
+            of.write(("\n".join(otp_vmem_lines) + "\n").encode('utf-8'))
 
 
 if __name__ == "__main__":

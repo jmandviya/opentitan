@@ -332,20 +332,12 @@ TEST_F(SetEnabledTest, BadToggle) {
       dif_entropy_src_set_enabled(nullptr, static_cast<dif_toggle_t>(1)));
 }
 
-TEST_F(SetEnabledTest, Locked) {
-  EXPECT_READ32(ENTROPY_SRC_ME_REGWEN_REG_OFFSET, 0);
-  EXPECT_EQ(dif_entropy_src_set_enabled(&entropy_src_, kDifToggleEnabled),
-            kDifLocked);
-}
-
 TEST_F(SetEnabledTest, Success) {
   // Enable.
-  EXPECT_READ32(ENTROPY_SRC_ME_REGWEN_REG_OFFSET, 1);
   EXPECT_WRITE32(ENTROPY_SRC_MODULE_ENABLE_REG_OFFSET, kMultiBitBool4True);
   EXPECT_DIF_OK(dif_entropy_src_set_enabled(&entropy_src_, kDifToggleEnabled));
 
   // Disable.
-  EXPECT_READ32(ENTROPY_SRC_ME_REGWEN_REG_OFFSET, 1);
   EXPECT_WRITE32(ENTROPY_SRC_MODULE_ENABLE_REG_OFFSET, kMultiBitBool4False);
   EXPECT_DIF_OK(dif_entropy_src_set_enabled(&entropy_src_, kDifToggleDisabled));
 }
@@ -357,7 +349,6 @@ TEST_F(LockTest, NullHandle) {
 }
 
 TEST_F(LockTest, Success) {
-  EXPECT_WRITE32(ENTROPY_SRC_ME_REGWEN_REG_OFFSET, 0);
   EXPECT_WRITE32(ENTROPY_SRC_SW_REGUPD_REG_OFFSET, 0);
   EXPECT_DIF_OK(dif_entropy_src_lock(&entropy_src_));
 }
@@ -371,25 +362,12 @@ TEST_F(IsLockedTest, NullArgs) {
   EXPECT_DIF_BADARG(dif_entropy_src_is_locked(nullptr, nullptr));
 }
 
-TEST_F(IsLockedTest, BadState) {
-  bool is_locked;
-  EXPECT_READ32(ENTROPY_SRC_ME_REGWEN_REG_OFFSET, 1);
-  EXPECT_READ32(ENTROPY_SRC_SW_REGUPD_REG_OFFSET, 0);
-  EXPECT_EQ(dif_entropy_src_is_locked(&entropy_src_, &is_locked), kDifError);
-
-  EXPECT_READ32(ENTROPY_SRC_ME_REGWEN_REG_OFFSET, 0);
-  EXPECT_READ32(ENTROPY_SRC_SW_REGUPD_REG_OFFSET, 1);
-  EXPECT_EQ(dif_entropy_src_is_locked(&entropy_src_, &is_locked), kDifError);
-}
-
 TEST_F(IsLockedTest, Success) {
   bool is_locked;
-  EXPECT_READ32(ENTROPY_SRC_ME_REGWEN_REG_OFFSET, 0);
   EXPECT_READ32(ENTROPY_SRC_SW_REGUPD_REG_OFFSET, 0);
   EXPECT_DIF_OK(dif_entropy_src_is_locked(&entropy_src_, &is_locked));
   EXPECT_TRUE(is_locked);
 
-  EXPECT_READ32(ENTROPY_SRC_ME_REGWEN_REG_OFFSET, 1);
   EXPECT_READ32(ENTROPY_SRC_SW_REGUPD_REG_OFFSET, 1);
   EXPECT_DIF_OK(dif_entropy_src_is_locked(&entropy_src_, &is_locked));
   EXPECT_FALSE(is_locked);
@@ -418,6 +396,8 @@ TEST_F(HealthTestStatsGetTest, Success) {
   EXPECT_READ32(ENTROPY_SRC_ADAPTP_HI_TOTAL_FAILS_REG_OFFSET, 10);
   EXPECT_READ32(ENTROPY_SRC_ADAPTP_LO_TOTAL_FAILS_REG_OFFSET, 10);
 
+  EXPECT_READ32(ENTROPY_SRC_ADAPTPS_TOTAL_FAILS_REG_OFFSET, 10);
+
   EXPECT_READ32(ENTROPY_SRC_BUCKET_TOTAL_FAILS_REG_OFFSET, 10);
 
   EXPECT_READ32(ENTROPY_SRC_MARKOV_HI_TOTAL_FAILS_REG_OFFSET, 10);
@@ -429,7 +409,7 @@ TEST_F(HealthTestStatsGetTest, Success) {
   EXPECT_DIF_OK(dif_entropy_src_get_health_test_stats(&entropy_src_, &stats));
   for (uint32_t i = 0; i < kDifEntropySrcTestNumVariants; ++i) {
     EXPECT_EQ(stats.high_fails[i], 10);
-    if (i == 2 || i == 4 || i == 5) {
+    if (i == 2 || i == 5 || i == 6) {
       EXPECT_EQ(stats.low_fails[i], 10);
     } else {
       EXPECT_EQ(stats.low_fails[i], 0);
@@ -453,23 +433,24 @@ TEST_F(GetAlertFailCountsTest, Success) {
   EXPECT_READ32(ENTROPY_SRC_ALERT_SUMMARY_FAIL_COUNTS_REG_OFFSET, 128);
   EXPECT_READ32(
       ENTROPY_SRC_ALERT_FAIL_COUNTS_REG_OFFSET,
-      {{ENTROPY_SRC_ALERT_FAIL_COUNTS_REPCNT_FAIL_COUNT_OFFSET, 0xA},
-       {ENTROPY_SRC_ALERT_FAIL_COUNTS_ADAPTP_HI_FAIL_COUNT_OFFSET, 0xC},
-       {ENTROPY_SRC_ALERT_FAIL_COUNTS_ADAPTP_LO_FAIL_COUNT_OFFSET, 0xC},
-       {ENTROPY_SRC_ALERT_FAIL_COUNTS_BUCKET_FAIL_COUNT_OFFSET, 0xD},
-       {ENTROPY_SRC_ALERT_FAIL_COUNTS_MARKOV_HI_FAIL_COUNT_OFFSET, 0xE},
-       {ENTROPY_SRC_ALERT_FAIL_COUNTS_MARKOV_LO_FAIL_COUNT_OFFSET, 0xE},
-       {ENTROPY_SRC_ALERT_FAIL_COUNTS_REPCNTS_FAIL_COUNT_OFFSET, 0xB}});
+      {{ENTROPY_SRC_ALERT_FAIL_COUNTS_REPCNT_FAIL_COUNT_OFFSET, 0x1},
+       {ENTROPY_SRC_ALERT_FAIL_COUNTS_REPCNTS_FAIL_COUNT_OFFSET, 0x2},
+       {ENTROPY_SRC_ALERT_FAIL_COUNTS_ADAPTP_HI_FAIL_COUNT_OFFSET, 0x3},
+       {ENTROPY_SRC_ALERT_FAIL_COUNTS_ADAPTP_LO_FAIL_COUNT_OFFSET, 0x3},
+       {ENTROPY_SRC_ALERT_FAIL_COUNTS_ADAPTPS_FAIL_COUNT_OFFSET, 0x4},
+       {ENTROPY_SRC_ALERT_FAIL_COUNTS_BUCKET_FAIL_COUNT_OFFSET, 0x5},
+       {ENTROPY_SRC_ALERT_FAIL_COUNTS_MARKOV_HI_FAIL_COUNT_OFFSET, 0x6},
+       {ENTROPY_SRC_ALERT_FAIL_COUNTS_MARKOV_LO_FAIL_COUNT_OFFSET, 0x6}});
   EXPECT_READ32(
       ENTROPY_SRC_EXTHT_FAIL_COUNTS_REG_OFFSET,
-      {{ENTROPY_SRC_EXTHT_FAIL_COUNTS_EXTHT_HI_FAIL_COUNT_OFFSET, 0xF},
-       {ENTROPY_SRC_EXTHT_FAIL_COUNTS_EXTHT_LO_FAIL_COUNT_OFFSET, 0xF}});
+      {{ENTROPY_SRC_EXTHT_FAIL_COUNTS_EXTHT_HI_FAIL_COUNT_OFFSET, 0x7},
+       {ENTROPY_SRC_EXTHT_FAIL_COUNTS_EXTHT_LO_FAIL_COUNT_OFFSET, 0x7}});
   EXPECT_DIF_OK(dif_entropy_src_get_alert_fail_counts(&entropy_src_, &counts));
 
-  uint8_t num_fails = 0xA;
+  uint8_t num_fails = 0x1;
   for (uint32_t i = 0; i < kDifEntropySrcTestNumVariants; ++i) {
     EXPECT_EQ(counts.high_fails[i], num_fails);
-    if (i == 2 || i == 4 || i == 5) {
+    if (i == 2 || i == 5 || i == 6) {
       EXPECT_EQ(counts.low_fails[i], num_fails);
     } else {
       EXPECT_EQ(counts.low_fails[i], 0);

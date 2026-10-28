@@ -17,10 +17,11 @@ filesets:
       - lowrisc:ip:rv_dm
       - lowrisc:ip:rv_timer
       - lowrisc:ip:tlul
-      - lowrisc:ip:cheriot
+      - lowrisc:ip:cheriot_mem_sys
       - lowrisc:ip:spi_device
       - lowrisc:ip:spi_host
       - lowrisc:ip:i2c
+      - lowrisc:ip:i3c
       - lowrisc:ip:aes
       - lowrisc:ip:entropy_src
       - lowrisc:ip:csrng
@@ -59,7 +60,7 @@ filesets:
       - lowrisc:prim:usb_diff_rx
       - lowrisc:prim:mubi
       - lowrisc:systems:top_earlgrey_pkg
-      - lowrisc:systems:ast_pkg
+      - lowrisc:virtual_systems:top_earlgrey_ast
     files:
       - rtl/autogen/top_earlgrey.sv
       - rtl/autogen/earlgrey_pd_main.sv
@@ -103,6 +104,12 @@ filesets:
       - lint/top_earlgrey.vbl
     file_type: veribleLintWaiver
 
+  files_slang_waiver:
+    depend:
+      # common waivers
+      - lowrisc:lint:common
+      - lowrisc:lint:comportable
+
 mapping:
   "lowrisc:virtual_constants:top_pkg": "lowrisc:earlgrey_constants:top_pkg"
   "lowrisc:virtual_constants:top_racl_pkg": "lowrisc:earlgrey_constants:top_racl_pkg"
@@ -122,6 +129,7 @@ targets:
       - tool_verilator    ? (files_verilator_waiver)
       - tool_ascentlint   ? (files_ascentlint_waiver)
       - tool_veriblelint  ? (files_veriblelint_waiver)
+      - tool_slang        ? (files_slang_waiver)
       - fileset_tapeout   ? (files_rtl_tapeout)
       - "!fileset_tapeout ? (files_rtl_testing)"
       - files_rtl_generic

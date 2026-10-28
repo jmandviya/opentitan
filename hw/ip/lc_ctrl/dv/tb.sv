@@ -66,11 +66,11 @@ module tb;
     .clk  (clk),
     .rst_n(rst_n)
   );
-  alert_esc_if esc_scrap_state1_if (
+  esc_if esc_scrap_state1_if (
     .clk  (clk),
     .rst_n(rst_n)
   );
-  alert_esc_if esc_scrap_state0_if (
+  esc_if esc_scrap_state0_if (
     .clk  (clk),
     .rst_n(rst_n)
   );
@@ -182,6 +182,7 @@ module tb;
     .lc_dft_en_o               (lc_ctrl_if.lc_dft_en_o),
     .lc_raw_test_rma_o         (),
     .lc_nvm_debug_en_o         (lc_ctrl_if.lc_nvm_debug_en_o),
+    .lc_hw_debug_clr_o         (lc_ctrl_if.lc_hw_debug_clr_o),
     .lc_hw_debug_en_o          (lc_ctrl_if.lc_hw_debug_en_o),
     .lc_cpu_en_o               (lc_ctrl_if.lc_cpu_en_o),
     .lc_creator_seed_sw_rw_en_o(lc_ctrl_if.lc_creator_seed_sw_rw_en_o),
@@ -256,10 +257,10 @@ module tb;
     // The jtag_agent is a low_level agent that configured inside jtag_riscv_agent.
     uvm_config_db#(virtual jtag_if)::set(null, "*.env.m_jtag_riscv_agent.m_jtag_agent*", "vif",
                                          jtag_if);
-    uvm_config_db#(virtual alert_esc_if)::set(null, "*env.m_esc_scrap_state1_agent*", "vif",
-                                              esc_scrap_state1_if);
-    uvm_config_db#(virtual alert_esc_if)::set(null, "*env.m_esc_scrap_state0_agent*", "vif",
-                                              esc_scrap_state0_if);
+    uvm_config_db#(virtual esc_if)::set(null, "*env.m_esc_scrap_state1_agent*", "vif",
+                                        esc_scrap_state1_if);
+    uvm_config_db#(virtual esc_if)::set(null, "*env.m_esc_scrap_state0_agent*", "vif",
+                                        esc_scrap_state0_if);
     uvm_config_db#(virtual push_pull_if#(.HostDataWidth(OTP_PROG_HDATA_WIDTH),
                                          .DeviceDataWidth(OTP_PROG_DDATA_WIDTH)))::
                    set(null, "*env.m_otp_prog_pull_agent*", "vif", otp_prog_if);

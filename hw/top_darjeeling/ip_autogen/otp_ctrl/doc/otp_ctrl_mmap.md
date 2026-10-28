@@ -33,16 +33,17 @@ It has been generated with ./util/topgen.py -t hw/top_darjeeling/data/top_darjee
 |         |                       |            |              |      32bit       |                CREATOR_SW_CFG_RNG_REPCNTS_THRESHOLDS                |     0x138      |     4      |
 |         |                       |            |              |      32bit       |               CREATOR_SW_CFG_RNG_ADAPTP_HI_THRESHOLDS               |     0x13C      |     4      |
 |         |                       |            |              |      32bit       |               CREATOR_SW_CFG_RNG_ADAPTP_LO_THRESHOLDS               |     0x140      |     4      |
-|         |                       |            |              |      32bit       |                CREATOR_SW_CFG_RNG_BUCKET_THRESHOLDS                 |     0x144      |     4      |
-|         |                       |            |              |      32bit       |               CREATOR_SW_CFG_RNG_MARKOV_HI_THRESHOLDS               |     0x148      |     4      |
-|         |                       |            |              |      32bit       |               CREATOR_SW_CFG_RNG_MARKOV_LO_THRESHOLDS               |     0x14C      |     4      |
-|         |                       |            |              |      32bit       |               CREATOR_SW_CFG_RNG_EXTHT_HI_THRESHOLDS                |     0x150      |     4      |
-|         |                       |            |              |      32bit       |               CREATOR_SW_CFG_RNG_EXTHT_LO_THRESHOLDS                |     0x154      |     4      |
-|         |                       |            |              |      32bit       |               CREATOR_SW_CFG_RNG_BOOT_ALERT_THRESHOLD               |     0x158      |     4      |
-|         |                       |            |              |      32bit       |               CREATOR_SW_CFG_RNG_FIPS_ALERT_THRESHOLD               |     0x15C      |     4      |
-|         |                       |            |              |      32bit       |                CREATOR_SW_CFG_RNG_BOOT_CONFIG_DIGEST                |     0x160      |     4      |
-|         |                       |            |              |      32bit       |                CREATOR_SW_CFG_RNG_FIPS_CONFIG_DIGEST                |     0x164      |     4      |
-|         |                       |            |              |      32bit       |              CREATOR_SW_CFG_SRAM_KEY_RENEW_AND_INIT_EN              |     0x168      |     4      |
+|         |                       |            |              |      32bit       |                CREATOR_SW_CFG_RNG_ADAPTPS_THRESHOLDS                |     0x144      |     4      |
+|         |                       |            |              |      32bit       |                CREATOR_SW_CFG_RNG_BUCKET_THRESHOLDS                 |     0x148      |     4      |
+|         |                       |            |              |      32bit       |               CREATOR_SW_CFG_RNG_MARKOV_HI_THRESHOLDS               |     0x14C      |     4      |
+|         |                       |            |              |      32bit       |               CREATOR_SW_CFG_RNG_MARKOV_LO_THRESHOLDS               |     0x150      |     4      |
+|         |                       |            |              |      32bit       |               CREATOR_SW_CFG_RNG_EXTHT_HI_THRESHOLDS                |     0x154      |     4      |
+|         |                       |            |              |      32bit       |               CREATOR_SW_CFG_RNG_EXTHT_LO_THRESHOLDS                |     0x158      |     4      |
+|         |                       |            |              |      32bit       |               CREATOR_SW_CFG_RNG_BOOT_ALERT_THRESHOLD               |     0x15C      |     4      |
+|         |                       |            |              |      32bit       |               CREATOR_SW_CFG_RNG_FIPS_ALERT_THRESHOLD               |     0x160      |     4      |
+|         |                       |            |              |      32bit       |                CREATOR_SW_CFG_RNG_BOOT_CONFIG_DIGEST                |     0x164      |     4      |
+|         |                       |            |              |      32bit       |                CREATOR_SW_CFG_RNG_FIPS_CONFIG_DIGEST                |     0x168      |     4      |
+|         |                       |            |              |      32bit       |              CREATOR_SW_CFG_SRAM_KEY_RENEW_AND_INIT_EN              |     0x16C      |     4      |
 |         |                       |            |              |      64bit       |        [CREATOR_SW_CFG_DIGEST](#Reg_creator_sw_cfg_digest_0)        |     0x170      |     8      |
 |    2    |     OWNER_SW_CFG      |    600     |      no      |      32bit       |                  OWNER_SW_CFG_ROM_ERROR_REPORTING                   |     0x178      |     4      |
 |         |                       |            |              |      32bit       |                   OWNER_SW_CFG_ROM_BOOTSTRAP_DIS                    |     0x17C      |     4      |
@@ -103,8 +104,7 @@ It has been generated with ./util/topgen.py -t hw/top_darjeeling/data/top_darjee
 |         |                       |            |              |      32bit       |                             MANUF_STATE                             |     0x3E70     |     32     |
 |         |                       |            |              |      64bit       |               [HW_CFG0_DIGEST](#Reg_hw_cfg0_digest_0)               |     0x3E90     |     8      |
 |   16    |        HW_CFG1        |     16     |      no      |      32bit       |                            SOC_DBG_STATE                            |     0x3E98     |     4      |
-|         |                       |            |              |      32bit       |                        EN_CSRNG_SW_APP_READ                         |     0x3E9C     |     1      |
-|         |                       |            |              |      32bit       |                           EN_SRAM_IFETCH                            |     0x3E9D     |     1      |
+|         |                       |            |              |      32bit       |                           EN_SRAM_IFETCH                            |     0x3E9C     |     1      |
 |         |                       |            |              |      64bit       |               [HW_CFG1_DIGEST](#Reg_hw_cfg1_digest_0)               |     0x3EA0     |     8      |
 |   17    |        SECRET0        |     48     |     yes      |      64bit       |                          TEST_UNLOCK_TOKEN                          |     0x3EA8     |     16     |
 |         |                       |            |              |      64bit       |                           TEST_EXIT_TOKEN                           |     0x3EB8     |     16     |

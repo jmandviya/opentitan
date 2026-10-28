@@ -29,7 +29,7 @@ In addition, it instantiates the following interfaces, connects them to the DUT 
 * [TileLink host interface](../../../../dv/sv/tl_agent/README.md)
 * PWRMGR interface [`hw/${top_name}/ip_autogen/pwrmgr/dv/env/pwrmgr_if.sv`](https://github.com/lowRISC/opentitan/blob/master/hw/${top_name}/ip_autogen/pwrmgr/dv/env/pwrmgr_if.sv).
 * Interrupts ([`pins_if`](../../../../dv/sv/common_ifs/README.md))
-* Alerts ([`alert_esc_if`](../../../../dv/sv/alert_esc_agent/README.md))
+* Alerts ([`alert_if`](../../../../dv/sv/alert_agent/README.md))
 
 ${"###"} Common DV utility components
 The following utilities provide generic helper tasks and functions to perform activities that are common across the project:
@@ -42,12 +42,12 @@ All common types and methods defined at the package level can be found in
 Some of them in use are:
 ```systemverilog
   typedef enum int {
-    WakeupSysrst,
-    WakeupDbgCable,
-    WakeupPin,
-    WakeupUsb,
-    WakeupAonTimer,
-    WakeupSensorCtrl
+% for wkup in Wkups:
+<%
+  wakeup_name = "".join(w.capitalize() for w in (wkup["module"] + "_" + wkup["name"]).split("_"))
+%>\
+    Wakeup${wakeup_name}${"" if loop.last else ","}
+% endfor
   } wakeup_e;
 
   typedef struct packed {

@@ -75,10 +75,17 @@ static status_t aes_write_key(aes_key_t key) {
   // corresponding parts too close together, which could risk power
   // side-channel leakage in the ALU. Before writing the key shares, initialize
   // the registers with random data.
-  hardened_memshred((uint32_t *)share0, kAesKeyWordLenMax);
-  hardened_memcpy((uint32_t *)share0, key.key_shares[0], key.key_len);
-  hardened_memshred((uint32_t *)share1, kAesKeyWordLenMax);
-  hardened_memcpy((uint32_t *)share1, key.key_shares[1], key.key_len);
+  uint32_t share0_buf[kAesKeyWordLenMax];
+  hardened_memshred(share0_buf, kAesKeyWordLenMax);
+  HARDENED_TRY(hardened_memcpy(share0_buf, key.key_shares[0], key.key_len));
+  HARDENED_TRY(
+      hardened_memcpy((uint32_t *)share0, share0_buf, kAesKeyWordLenMax));
+
+  uint32_t share1_buf[kAesKeyWordLenMax];
+  hardened_memshred(share1_buf, kAesKeyWordLenMax);
+  HARDENED_TRY(hardened_memcpy(share1_buf, key.key_shares[1], key.key_len));
+  HARDENED_TRY(
+      hardened_memcpy((uint32_t *)share1, share1_buf, kAesKeyWordLenMax));
 
   // Check the integrity of the key written to the AES core.
   HARDENED_CHECK_EQ(aes_key_integrity_checksum_check(&key), kHardenedBoolTrue);
@@ -331,6 +338,10 @@ status_t aes_update(aes_block_t *dest, const aes_block_t *src) {
 }
 
 status_t aes_end(aes_block_t *iv) {
+  // Wait for the AES block to be idle before updating the control register or
+  // reading the final IV.
+  HARDENED_TRY(spin_until(AES_STATUS_IDLE_BIT));
+
   uint32_t ctrl_reg = AES_CTRL_SHADOWED_REG_RESVAL;
   ctrl_reg = bitfield_bit32_write(ctrl_reg,
                                   AES_CTRL_SHADOWED_MANUAL_OPERATION_BIT, true);

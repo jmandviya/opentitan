@@ -10,12 +10,14 @@
 #   ci/lint/run.sh                 # run every category (all tops)
 #   ci/lint/run.sh <category>...   # run the named categories
 #   ci/lint/run.sh hw <top>        # run hardware lint for a single top
+#   ci/lint/run.sh slang <top>     # run slang lint for a single top
 #   ci/lint/run.sh bazel <group>   # run one group of the bazel category
 #
 # Categories:
 #   hygiene   text/metadata/python hygiene checks     (Nix tools)
 #   gen       generated & vendored file freshness     (Nix tools)
 #   hw        per-top Verible + countermeasure lint   (Nix tools)
+#   slang     per-top slang lint and elaboration      (Nix tools)
 #   sv        whole-tree Verible sweep, advisory only (Nix tools)
 #   bazel     Bazel-graph hygiene + link/alert checks (requires Bazel)
 #             groups: graph (query-only checks), alerts (alert classification,
@@ -35,7 +37,10 @@ source "$SCRIPT_DIR/lib.sh"
 
 # All tops the project builds. The per-top `hw` category figures out which
 # checks actually apply to each (see cat_hw).
-ALL_TOPS=(earlgrey darjeeling englishbreakfast)
+#
+# englishbreakfast is excluded, since it is is currently unused and cfgs are
+# bit-rotted. See Issue #31513, which tracks its re-enablement.
+ALL_TOPS=(earlgrey darjeeling)
 
 # ---------------------------------------------------------------------------
 # hygiene: fast text, metadata and Python checks. No Bazel, no hardware.
@@ -140,19 +145,8 @@ cat_hw() {
 
     # Verible style lint (design/DV/FPV). Run for whichever flavours the top
     # actually provides a lint config for.
-    #
-    # englishbreakfast is skipped: although it ships lint cfgs, they have
-    # bit-rotted (never having been exercised by CI, which only ever linted
-    # earlgrey and darjeeling) and no longer resolve. top_englishbreakfast_
-    # lint_cfgs.hjson names fusesoc cores that do not exist, e.g.
-    # lowrisc:englishbreakfast_ip:otp_ctrl -- englishbreakfast has no
-    # ip_autogen/otp_ctrl -- so fusesoc errors out before any linting happens.
-    # Fixing those cfgs is a separate, hardware-side change; until then this
-    # keeps the coverage CI has today rather than adding a permanently red
-    # check. Countermeasures for this top are checked below, as before.
     local flavour cfg
     for flavour in rtl dv fpv; do
-        [ "$top" = "englishbreakfast" ] && continue
         case "$flavour" in
             rtl) cfg="hw/top_${top}/lint/top_${top}_lint_cfgs.hjson" ;;
             dv)  cfg="hw/top_${top}/lint/top_${top}_dv_lint_cfgs.hjson" ;;
@@ -169,6 +163,32 @@ cat_hw() {
             check "Countermeasures (${top})" ci/scripts/check-countermeasures.sh "$top"
             ;;
     esac
+}
+
+# ---------------------------------------------------------------------------
+# Slang lint for the top.
+#
+# The chip-level entry in each cfg exercises full-hierarchy elaboration, not
+# just per-IP checks.
+# ---------------------------------------------------------------------------
+cat_slang() {
+    local top="$1"
+    if [ -z "$top" ]; then
+        echo "::error::the 'slang' category requires a top name" >&2
+        exit 2
+    fi
+    # Without this an unknown top just matches no lint cfgs and no
+    # countermeasure case, so a typo would run nothing and report success.
+    if ! printf '%s\n' "${ALL_TOPS[@]}" | grep -qxF "$top"; then
+        echo "::error::unknown top: $top" >&2
+        echo "Valid tops: ${ALL_TOPS[*]}" >&2
+        exit 2
+    fi
+
+    local cfg="hw/top_${top}/lint/top_${top}_lint_cfgs.hjson"
+    if [ -f "$cfg" ]; then
+        check "Slang RTL (${top})" ci/scripts/slang-lint.sh "$top"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -302,7 +322,7 @@ cat_bazel() {
 # ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
-ALL_CATEGORIES=(hygiene gen hw sv bazel)
+ALL_CATEGORIES=(hygiene gen hw slang sv bazel)
 
 # _is_category <word>: true if <word> names a lint category.
 _is_category() {
@@ -322,6 +342,13 @@ run_category() {
                 cat_hw "$2"
             else
                 for top in "${ALL_TOPS[@]}"; do cat_hw "$top"; done
+            fi
+            ;;
+        slang)
+            if [ -n "${2:-}" ]; then
+                cat_slang "$2"
+            else
+                for top in "${ALL_TOPS[@]}"; do cat_slang "$top"; done
             fi
             ;;
         *)
@@ -349,9 +376,10 @@ main() {
         cat_hygiene
         cat_gen
         for top in "${ALL_TOPS[@]}"; do cat_hw "$top"; done
+        for top in "${ALL_TOPS[@]}"; do cat_slang "$top"; done
         cat_sv
         cat_bazel
-    elif [ "$#" -eq 2 ] && { [ "$1" = hw ] || [ "$1" = bazel ]; } &&
+    elif [ "$#" -eq 2 ] && { [ "$1" = hw ] || [ "$1" = bazel ] || [ "$1" = slang ]; } &&
          ! _is_category "$2"; then
         # The parameterised forms `hw <top>` and `bazel <group>`: the second
         # word is an argument to the category, not another category. Requiring

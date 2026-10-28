@@ -231,6 +231,13 @@ dif_result_t dif_entropy_src_health_test_configure(
       high_threshold_reg_offset = ENTROPY_SRC_ADAPTP_HI_THRESHOLD_REG_OFFSET;
       low_threshold_reg_offset = ENTROPY_SRC_ADAPTP_LO_THRESHOLD_REG_OFFSET;
       break;
+    case kDifEntropySrcTestAdaptiveProportionSymbol:
+      high_threshold_reg_offset = ENTROPY_SRC_ADAPTPS_THRESHOLD_REG_OFFSET;
+      // Ensure low threshold is zero. There is no low threshold for this test.
+      if (config.low_threshold) {
+        return kDifBadArg;
+      }
+      break;
     case kDifEntropySrcTestBucket:
       high_threshold_reg_offset = ENTROPY_SRC_BUCKET_THRESHOLD_REG_OFFSET;
       // Ensure low threshold is zero. There is no low threshold for this test.
@@ -306,11 +313,6 @@ dif_result_t dif_entropy_src_set_enabled(const dif_entropy_src_t *entropy_src,
     return kDifBadArg;
   }
 
-  if (!mmio_region_read32(entropy_src->base_addr,
-                          ENTROPY_SRC_ME_REGWEN_REG_OFFSET)) {
-    return kDifLocked;
-  }
-
   mmio_region_write32(entropy_src->base_addr,
                       ENTROPY_SRC_MODULE_ENABLE_REG_OFFSET,
                       dif_toggle_to_multi_bit_bool4(enabled));
@@ -323,8 +325,6 @@ dif_result_t dif_entropy_src_lock(const dif_entropy_src_t *entropy_src) {
     return kDifBadArg;
   }
 
-  mmio_region_write32(entropy_src->base_addr, ENTROPY_SRC_ME_REGWEN_REG_OFFSET,
-                      0);
   mmio_region_write32(entropy_src->base_addr, ENTROPY_SRC_SW_REGUPD_REG_OFFSET,
                       0);
 
@@ -337,18 +337,9 @@ dif_result_t dif_entropy_src_is_locked(const dif_entropy_src_t *entropy_src,
     return kDifBadArg;
   }
 
-  uint32_t module_enable_regwen = mmio_region_read32(
-      entropy_src->base_addr, ENTROPY_SRC_ME_REGWEN_REG_OFFSET);
   uint32_t sw_regupd = mmio_region_read32(entropy_src->base_addr,
                                           ENTROPY_SRC_SW_REGUPD_REG_OFFSET);
-  if (module_enable_regwen == sw_regupd) {
-    *is_locked = sw_regupd == 0;
-  } else {
-    // Since we actuate these together, either both should be 0 (locked), or
-    // both should be 1 (unlocked). If only one is locked, then we have
-    // gotten into a bad state.
-    return kDifError;
-  }
+  *is_locked = sw_regupd == 0;
 
   return kDifOk;
 }
@@ -380,6 +371,10 @@ dif_result_t dif_entropy_src_get_health_test_stats(
       case kDifEntropySrcTestAdaptiveProportion:
         high_fails_reg_offset = ENTROPY_SRC_ADAPTP_HI_TOTAL_FAILS_REG_OFFSET;
         low_fails_reg_offset = ENTROPY_SRC_ADAPTP_LO_TOTAL_FAILS_REG_OFFSET;
+        break;
+      case kDifEntropySrcTestAdaptiveProportionSymbol:
+        high_fails_reg_offset = ENTROPY_SRC_ADAPTPS_TOTAL_FAILS_REG_OFFSET;
+        low_fails_reg_offset = -1;
         break;
       case kDifEntropySrcTestBucket:
         high_fails_reg_offset = ENTROPY_SRC_BUCKET_TOTAL_FAILS_REG_OFFSET;
@@ -436,6 +431,10 @@ dif_result_t dif_entropy_src_get_alert_fail_counts(
       (uint8_t)bitfield_field32_read(
           alert_fail_counts,
           ENTROPY_SRC_ALERT_FAIL_COUNTS_ADAPTP_HI_FAIL_COUNT_FIELD);
+  counts->high_fails[kDifEntropySrcTestAdaptiveProportionSymbol] =
+      (uint8_t)bitfield_field32_read(
+          alert_fail_counts,
+          ENTROPY_SRC_ALERT_FAIL_COUNTS_ADAPTPS_FAIL_COUNT_FIELD);
   counts->high_fails[kDifEntropySrcTestBucket] = (uint8_t)bitfield_field32_read(
       alert_fail_counts, ENTROPY_SRC_ALERT_FAIL_COUNTS_BUCKET_FAIL_COUNT_FIELD);
   counts->high_fails[kDifEntropySrcTestMarkov] = (uint8_t)bitfield_field32_read(
@@ -453,6 +452,7 @@ dif_result_t dif_entropy_src_get_alert_fail_counts(
       (uint8_t)bitfield_field32_read(
           alert_fail_counts,
           ENTROPY_SRC_ALERT_FAIL_COUNTS_ADAPTP_LO_FAIL_COUNT_FIELD);
+  counts->low_fails[kDifEntropySrcTestAdaptiveProportionSymbol] = 0;
   counts->low_fails[kDifEntropySrcTestBucket] = 0;
   counts->low_fails[kDifEntropySrcTestMarkov] = (uint8_t)bitfield_field32_read(
       alert_fail_counts,

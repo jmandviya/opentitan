@@ -38,7 +38,8 @@ class keymgr_dpe_common_vseq extends keymgr_dpe_base_vseq;
 
   virtual protected task read_and_check_all_csrs_after_reset();
     // need to set keymgr_en to be On, before it can be read back with correct init values
-    cfg.keymgr_dpe_vif.init(do_rand_otp_key, do_invalid_otp_key);
+    cfg.keymgr_dpe_vif.init(do_rand_otp_key, do_invalid_otp_key, do_rand_secondary_root_key,
+                            do_invalid_secondary_root_key);
     delay_after_reset_before_access_csr();
 
     super.read_and_check_all_csrs_after_reset();
@@ -90,26 +91,26 @@ class keymgr_dpe_common_vseq extends keymgr_dpe_base_vseq;
     case (if_proxy.sec_cm_type)
       SecCmPrimCount: begin
         if (!uvm_re_match("*.u_reseed_ctrl*", if_proxy.path)) begin
-          exp[keymgr_pkg::FaultReseedCnt] = 1;
-          if (cfg.en_cov) cov.fault_status_cg.sample(keymgr_pkg::FaultReseedCnt);
+          exp[keymgr_dpe_pkg::FaultReseedCnt] = 1;
+          if (cfg.en_cov) cov.fault_status_cg.sample(keymgr_dpe_pkg::FaultReseedCnt);
         end else if (!uvm_re_match("*.u_kmac_if*", if_proxy.path)) begin
-          exp[keymgr_pkg::FaultKmacFsm] = 1;
-          if (cfg.en_cov) cov.fault_status_cg.sample(keymgr_pkg::FaultKmacFsm);
+          exp[keymgr_dpe_pkg::FaultKmacFsm] = 1;
+          if (cfg.en_cov) cov.fault_status_cg.sample(keymgr_dpe_pkg::FaultKmacFsm);
         end else begin
-          exp[keymgr_pkg::FaultCtrlCnt] = 1;
-          if (cfg.en_cov) cov.fault_status_cg.sample(keymgr_pkg::FaultCtrlCnt);
+          exp[keymgr_dpe_pkg::FaultCtrlCnt] = 1;
+          if (cfg.en_cov) cov.fault_status_cg.sample(keymgr_dpe_pkg::FaultCtrlCnt);
         end
       end
       SecCmPrimSparseFsmFlop: begin
         if (!uvm_re_match("*.u_kmac_if*", if_proxy.path)) begin
-          exp[keymgr_pkg::FaultKmacFsm] = 1;
-          if (cfg.en_cov) cov.fault_status_cg.sample(keymgr_pkg::FaultKmacFsm);
+          exp[keymgr_dpe_pkg::FaultKmacFsm] = 1;
+          if (cfg.en_cov) cov.fault_status_cg.sample(keymgr_dpe_pkg::FaultKmacFsm);
         end else if (!uvm_re_match("*.u_sideload_ctrl*", if_proxy.path)) begin
-          exp[keymgr_pkg::FaultSideFsm] = 1;
-          if (cfg.en_cov) cov.fault_status_cg.sample(keymgr_pkg::FaultSideFsm);
+          exp[keymgr_dpe_pkg::FaultSideFsm] = 1;
+          if (cfg.en_cov) cov.fault_status_cg.sample(keymgr_dpe_pkg::FaultSideFsm);
         end else begin
-          exp[keymgr_pkg::FaultCtrlFsm] = 1;
-          if (cfg.en_cov) cov.fault_status_cg.sample(keymgr_pkg::FaultCtrlFsm);
+          exp[keymgr_dpe_pkg::FaultCtrlFsm] = 1;
+          if (cfg.en_cov) cov.fault_status_cg.sample(keymgr_dpe_pkg::FaultCtrlFsm);
         end
       end
       default: `uvm_fatal(`gfn, $sformatf("unexpected sec_cm_type %s", if_proxy.sec_cm_type.name))

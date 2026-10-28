@@ -17,6 +17,12 @@ module i3c_reg_top
   input rst_ni,
   input clk_aon_i,
   input rst_aon_ni,
+
+  // Register reinit inputs
+  input  hci_sw_reinit_i,
+  input  tti_sw_reinit_i,
+  input  sc_sw_reinit_i,
+
   input  tlul_pkg::tl_h2d_t tl_i,
   output tlul_pkg::tl_d2h_t tl_o,
 
@@ -206,7 +212,9 @@ module i3c_reg_top
   logic intr_test_hci_wd;
   logic intr_test_targ_wd;
   logic alert_test_we;
-  logic alert_test_wd;
+  logic alert_test_fatal_fault_wd;
+  logic alert_test_regwen_qs;
+  logic alert_test_regwen_wd;
   logic info_re;
   logic [3:0] info_revision_qs;
   logic [3:0] info_version_qs;
@@ -235,16 +243,17 @@ module i3c_reg_top
   logic targ_control_crhdly1_set_as_wd;
   logic targ_control_hj_request_qs;
   logic targ_control_hj_request_wd;
-  logic targ_control_reset_wd;
+  logic targ_control_sw_reset_wd;
   logic targ_status_re;
   logic targ_status_we;
   logic [14:0] targ_status_ext_info_qs;
   logic [14:0] targ_status_ext_info_wd;
   logic targ_status_ext_present_qs;
   logic [7:0] targ_status_rstact_qs;
-  logic targ_status_rstact_virt_targ_det_qs;
+  logic [2:0] targ_status_num_targets_qs;
   logic targ_status_vtm_qs;
   logic targ_status_protocol_error_qs;
+  logic targ_status_connected_qs;
   logic targ_status_active_qs;
   logic targ_status_present_qs;
   logic targ_sink_control_we;
@@ -1100,8 +1109,8 @@ module i3c_reg_top
   logic targ_async_evt_control_ibi_suspend_wd;
   logic targ_async_evt_control_bus_events_qs;
   logic targ_async_evt_control_bus_events_wd;
-  logic targ_async_evt_control_reset_qs;
-  logic targ_async_evt_control_reset_wd;
+  logic targ_async_evt_control_queue_reset_qs;
+  logic targ_async_evt_control_queue_reset_wd;
   logic targ_error_we;
   logic [3:0] targ_error_te0_qs;
   logic [3:0] targ_error_te0_wd;
@@ -1193,22 +1202,46 @@ module i3c_reg_top
   logic targ_enable_enable_2_wd;
   logic targ_enable_enable_3_qs;
   logic targ_enable_enable_3_wd;
+  logic targ_group_0_we;
   logic [6:0] targ_group_0_group_addr_0_qs;
+  logic [6:0] targ_group_0_group_addr_0_wd;
   logic [3:0] targ_group_0_targets_0_qs;
+  logic [3:0] targ_group_0_targets_0_wd;
+  logic targ_group_1_we;
   logic [6:0] targ_group_1_group_addr_1_qs;
+  logic [6:0] targ_group_1_group_addr_1_wd;
   logic [3:0] targ_group_1_targets_1_qs;
+  logic [3:0] targ_group_1_targets_1_wd;
+  logic targ_group_2_we;
   logic [6:0] targ_group_2_group_addr_2_qs;
+  logic [6:0] targ_group_2_group_addr_2_wd;
   logic [3:0] targ_group_2_targets_2_qs;
+  logic [3:0] targ_group_2_targets_2_wd;
+  logic targ_group_3_we;
   logic [6:0] targ_group_3_group_addr_3_qs;
+  logic [6:0] targ_group_3_group_addr_3_wd;
   logic [3:0] targ_group_3_targets_3_qs;
+  logic [3:0] targ_group_3_targets_3_wd;
+  logic targ_group_4_we;
   logic [6:0] targ_group_4_group_addr_4_qs;
+  logic [6:0] targ_group_4_group_addr_4_wd;
   logic [3:0] targ_group_4_targets_4_qs;
+  logic [3:0] targ_group_4_targets_4_wd;
+  logic targ_group_5_we;
   logic [6:0] targ_group_5_group_addr_5_qs;
+  logic [6:0] targ_group_5_group_addr_5_wd;
   logic [3:0] targ_group_5_targets_5_qs;
+  logic [3:0] targ_group_5_targets_5_wd;
+  logic targ_group_6_we;
   logic [6:0] targ_group_6_group_addr_6_qs;
+  logic [6:0] targ_group_6_group_addr_6_wd;
   logic [3:0] targ_group_6_targets_6_qs;
+  logic [3:0] targ_group_6_targets_6_wd;
+  logic targ_group_7_we;
   logic [6:0] targ_group_7_group_addr_7_qs;
+  logic [6:0] targ_group_7_group_addr_7_wd;
   logic [3:0] targ_group_7_targets_7_qs;
+  logic [3:0] targ_group_7_targets_7_wd;
   logic targ_tx_thld_ctrl_0_we;
   logic [11:0] targ_tx_thld_ctrl_0_tx_buf_free_thld_0_qs;
   logic [11:0] targ_tx_thld_ctrl_0_tx_buf_free_thld_0_wd;
@@ -1547,6 +1580,7 @@ module i3c_reg_top
   ) u_intr_state_hci (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -1574,6 +1608,7 @@ module i3c_reg_top
   ) u_intr_state_targ (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -1603,6 +1638,7 @@ module i3c_reg_top
   ) u_intr_enable_hci (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_enable_we),
@@ -1630,6 +1666,7 @@ module i3c_reg_top
   ) u_intr_enable_targ (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_enable_we),
@@ -1688,14 +1725,18 @@ module i3c_reg_top
 
   // R[alert_test]: V(True)
   logic alert_test_qe;
-  logic [0:0] alert_test_flds_we;
+  logic [1:0] alert_test_flds_we;
   assign alert_test_qe = &alert_test_flds_we;
+  // Create REGWEN-gated WE signal
+  logic alert_test_gated_we;
+  assign alert_test_gated_we = alert_test_we && alert_test_regwen_qs;
+  //   F[fatal_fault]: 0:0
   prim_subreg_ext #(
     .DW    (1)
-  ) u_alert_test (
+  ) u_alert_test_fatal_fault (
     .re     (1'b0),
-    .we     (alert_test_we),
-    .wd     (alert_test_wd),
+    .we     (alert_test_gated_we),
+    .wd     (alert_test_fatal_fault_wd),
     .d      ('0),
     .qre    (),
     .qe     (alert_test_flds_we[0]),
@@ -1704,6 +1745,34 @@ module i3c_reg_top
     .qs     ()
   );
   assign reg2hw.alert_test.qe = alert_test_qe;
+
+  //   F[regwen]: 31:31
+  prim_subreg #(
+    .DW      (1),
+    .SwAccess(prim_subreg_pkg::SwAccessW0C),
+    .RESVAL  (1'h1),
+    .Mubi    (1'b0)
+  ) u_alert_test_regwen (
+    .clk_i   (clk_i),
+    .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
+
+    // from register interface
+    .we     (alert_test_we),
+    .wd     (alert_test_regwen_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0),
+
+    // to internal hardware
+    .qe     (alert_test_flds_we[1]),
+    .q      (),
+    .ds     (),
+
+    // to register interface (read)
+    .qs     (alert_test_regwen_qs)
+  );
 
 
   // R[info]: V(True)
@@ -1801,6 +1870,9 @@ module i3c_reg_top
 
   // R[ctrl_error]: V(False)
   //   F[ce0]: 3:0
+  // Reinit
+  assign reg2hw.ctrl_error.reinit = hci_sw_reinit_i;
+
   prim_subreg #(
     .DW      (4),
     .SwAccess(prim_subreg_pkg::SwAccessW1C),
@@ -1809,6 +1881,7 @@ module i3c_reg_top
   ) u_ctrl_error_ce0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (ctrl_error_we),
@@ -1836,6 +1909,7 @@ module i3c_reg_top
   ) u_ctrl_error_ce1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (ctrl_error_we),
@@ -1863,6 +1937,7 @@ module i3c_reg_top
   ) u_ctrl_error_ce2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (ctrl_error_we),
@@ -1890,6 +1965,7 @@ module i3c_reg_top
   ) u_ctrl_error_ce3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (ctrl_error_we),
@@ -1922,6 +1998,9 @@ module i3c_reg_top
     .q_o(targ_control_qe)
   );
   //   F[en]: 0:0
+  // Reinit
+  assign reg2hw.targ_control.reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -1930,6 +2009,7 @@ module i3c_reg_top
   ) u_targ_control_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_control_we),
@@ -1957,6 +2037,7 @@ module i3c_reg_top
   ) u_targ_control_stby_cr_support (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_control_we),
@@ -1984,6 +2065,7 @@ module i3c_reg_top
   ) u_targ_control_crhdly1_as (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_control_we),
@@ -2011,6 +2093,7 @@ module i3c_reg_top
   ) u_targ_control_crhdly1_set_as (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_control_we),
@@ -2038,6 +2121,7 @@ module i3c_reg_top
   ) u_targ_control_hj_request (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_control_we),
@@ -2057,19 +2141,20 @@ module i3c_reg_top
   );
   assign reg2hw.targ_control.hj_request.qe = targ_control_qe;
 
-  //   F[reset]: 31:31
+  //   F[sw_reset]: 31:31
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessWO),
     .RESVAL  (1'h0),
     .Mubi    (1'b0)
-  ) u_targ_control_reset (
+  ) u_targ_control_sw_reset (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_control_we),
-    .wd     (targ_control_reset_wd),
+    .wd     (targ_control_sw_reset_wd),
 
     // from internal hardware
     .de     (1'b0),
@@ -2077,22 +2162,22 @@ module i3c_reg_top
 
     // to internal hardware
     .qe     (targ_control_flds_we[5]),
-    .q      (reg2hw.targ_control.reset.q),
+    .q      (reg2hw.targ_control.sw_reset.q),
     .ds     (),
 
     // to register interface (read)
     .qs     ()
   );
-  assign reg2hw.targ_control.reset.qe = targ_control_qe;
+  assign reg2hw.targ_control.sw_reset.qe = targ_control_qe;
 
 
   // R[targ_status]: V(True)
   logic targ_status_qe;
-  logic [7:0] targ_status_flds_we;
+  logic [8:0] targ_status_flds_we;
   // This ignores QEs that are set to constant 0 due to read-only fields.
   logic unused_targ_status_flds_we;
-  assign unused_targ_status_flds_we = ^(targ_status_flds_we & 8'hfe);
-  assign targ_status_qe = &(targ_status_flds_we | 8'hfe);
+  assign unused_targ_status_flds_we = ^(targ_status_flds_we & 9'h1fe);
+  assign targ_status_qe = &(targ_status_flds_we | 9'h1fe);
   //   F[ext_info]: 14:0
   prim_subreg_ext #(
     .DW    (15)
@@ -2139,22 +2224,22 @@ module i3c_reg_top
     .qs     (targ_status_rstact_qs)
   );
 
-  //   F[rstact_virt_targ_det]: 24:24
+  //   F[num_targets]: 26:24
   prim_subreg_ext #(
-    .DW    (1)
-  ) u_targ_status_rstact_virt_targ_det (
+    .DW    (3)
+  ) u_targ_status_num_targets (
     .re     (targ_status_re),
     .we     (1'b0),
     .wd     ('0),
-    .d      (hw2reg.targ_status.rstact_virt_targ_det.d),
+    .d      (hw2reg.targ_status.num_targets.d),
     .qre    (),
     .qe     (targ_status_flds_we[3]),
     .q      (),
     .ds     (),
-    .qs     (targ_status_rstact_virt_targ_det_qs)
+    .qs     (targ_status_num_targets_qs)
   );
 
-  //   F[vtm]: 25:25
+  //   F[vtm]: 27:27
   prim_subreg_ext #(
     .DW    (1)
   ) u_targ_status_vtm (
@@ -2169,7 +2254,7 @@ module i3c_reg_top
     .qs     (targ_status_vtm_qs)
   );
 
-  //   F[protocol_error]: 26:26
+  //   F[protocol_error]: 28:28
   prim_subreg_ext #(
     .DW    (1)
   ) u_targ_status_protocol_error (
@@ -2185,6 +2270,21 @@ module i3c_reg_top
   );
   assign reg2hw.targ_status.protocol_error.qe = targ_status_qe;
 
+  //   F[connected]: 29:29
+  prim_subreg_ext #(
+    .DW    (1)
+  ) u_targ_status_connected (
+    .re     (targ_status_re),
+    .we     (1'b0),
+    .wd     ('0),
+    .d      (hw2reg.targ_status.connected.d),
+    .qre    (),
+    .qe     (targ_status_flds_we[6]),
+    .q      (),
+    .ds     (),
+    .qs     (targ_status_connected_qs)
+  );
+
   //   F[active]: 30:30
   prim_subreg_ext #(
     .DW    (1)
@@ -2194,7 +2294,7 @@ module i3c_reg_top
     .wd     ('0),
     .d      (hw2reg.targ_status.active.d),
     .qre    (),
-    .qe     (targ_status_flds_we[6]),
+    .qe     (targ_status_flds_we[7]),
     .q      (),
     .ds     (),
     .qs     (targ_status_active_qs)
@@ -2209,7 +2309,7 @@ module i3c_reg_top
     .wd     ('0),
     .d      (hw2reg.targ_status.present.d),
     .qre    (),
-    .qe     (targ_status_flds_we[7]),
+    .qe     (targ_status_flds_we[8]),
     .q      (),
     .ds     (),
     .qs     (targ_status_present_qs)
@@ -2229,6 +2329,9 @@ module i3c_reg_top
     .q_o(targ_sink_control_qe)
   );
   //   F[buffer]: 14:12
+  // Reinit
+  assign reg2hw.targ_sink_control.reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (3),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -2237,6 +2340,7 @@ module i3c_reg_top
   ) u_targ_sink_control_buffer (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_sink_control_we),
@@ -2264,6 +2368,7 @@ module i3c_reg_top
   ) u_targ_sink_control_length (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_sink_control_we),
@@ -2291,6 +2396,7 @@ module i3c_reg_top
   ) u_targ_sink_control_start (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_sink_control_we),
@@ -2439,6 +2545,7 @@ module i3c_reg_top
   ) u_reset_det_status_active (
     .clk_i   (clk_aon_i),
     .rst_ni  (rst_aon_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -2466,6 +2573,7 @@ module i3c_reg_top
   ) u_reset_det_status_wake_up (
     .clk_i   (clk_aon_i),
     .rst_ni  (rst_aon_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -2493,6 +2601,7 @@ module i3c_reg_top
   ) u_reset_det_status_rst_periph (
     .clk_i   (clk_aon_i),
     .rst_ni  (rst_aon_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -2520,6 +2629,7 @@ module i3c_reg_top
   ) u_reset_det_status_rst_target (
     .clk_i   (clk_aon_i),
     .rst_ni  (rst_aon_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -2549,6 +2659,7 @@ module i3c_reg_top
   ) u_ctrl_time_sp_tcbp_div2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_sp_we),
@@ -2576,6 +2687,7 @@ module i3c_reg_top
   ) u_ctrl_time_sp_tcas_div2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_sp_we),
@@ -2605,6 +2717,7 @@ module i3c_reg_top
   ) u_ctrl_time_od_scllo_div2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_od_we),
@@ -2632,6 +2745,7 @@ module i3c_reg_top
   ) u_ctrl_time_od_sclhi_div2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_od_we),
@@ -2661,6 +2775,7 @@ module i3c_reg_top
   ) u_ctrl_time_pp_tchh (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_pp_we),
@@ -2688,6 +2803,7 @@ module i3c_reg_top
   ) u_ctrl_time_pp_hcext (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_pp_we),
@@ -2715,6 +2831,7 @@ module i3c_reg_top
   ) u_ctrl_time_pp_tchs (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_pp_we),
@@ -2744,6 +2861,7 @@ module i3c_reg_top
   ) u_ctrl_time_sdr0_tclh (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_sdr0_we),
@@ -2771,6 +2889,7 @@ module i3c_reg_top
   ) u_ctrl_time_sdr0_tcls (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_sdr0_we),
@@ -2800,6 +2919,7 @@ module i3c_reg_top
   ) u_ctrl_time_sdr1_tclh (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_sdr1_we),
@@ -2827,6 +2947,7 @@ module i3c_reg_top
   ) u_ctrl_time_sdr1_tcls (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_sdr1_we),
@@ -2856,6 +2977,7 @@ module i3c_reg_top
   ) u_ctrl_time_sdr2_tclh (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_sdr2_we),
@@ -2883,6 +3005,7 @@ module i3c_reg_top
   ) u_ctrl_time_sdr2_tcls (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_sdr2_we),
@@ -2912,6 +3035,7 @@ module i3c_reg_top
   ) u_ctrl_time_sdr3_tclh (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_sdr3_we),
@@ -2939,6 +3063,7 @@ module i3c_reg_top
   ) u_ctrl_time_sdr3_tcls (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_sdr3_we),
@@ -2968,6 +3093,7 @@ module i3c_reg_top
   ) u_ctrl_time_sdr4_tclh (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_sdr4_we),
@@ -2995,6 +3121,7 @@ module i3c_reg_top
   ) u_ctrl_time_sdr4_tcls (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_sdr4_we),
@@ -3024,6 +3151,7 @@ module i3c_reg_top
   ) u_ctrl_time_fmp_scllo_div2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_fmp_we),
@@ -3051,6 +3179,7 @@ module i3c_reg_top
   ) u_ctrl_time_fmp_sclhi_div2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_fmp_we),
@@ -3080,6 +3209,7 @@ module i3c_reg_top
   ) u_ctrl_time_fm_scllo_div2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_fm_we),
@@ -3107,6 +3237,7 @@ module i3c_reg_top
   ) u_ctrl_time_fm_sclhi_div2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_time_fm_we),
@@ -3136,6 +3267,7 @@ module i3c_reg_top
   ) u_interval_time0_targ_bus_avail (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (interval_time0_we),
@@ -3163,6 +3295,7 @@ module i3c_reg_top
   ) u_interval_time0_read_stalled (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (interval_time0_we),
@@ -3190,6 +3323,7 @@ module i3c_reg_top
   ) u_interval_time0_ctrl_bus_avail (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (interval_time0_we),
@@ -3217,6 +3351,7 @@ module i3c_reg_top
   ) u_interval_time0_dead_bus (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (interval_time0_we),
@@ -3246,6 +3381,7 @@ module i3c_reg_top
   ) u_interval_time1_command_retry (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (interval_time1_we),
@@ -3273,6 +3409,7 @@ module i3c_reg_top
   ) u_interval_time1_targ_bus_idle (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (interval_time1_we),
@@ -3300,6 +3437,7 @@ module i3c_reg_top
   ) u_interval_time1_te0_recov (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (interval_time1_we),
@@ -3327,6 +3465,7 @@ module i3c_reg_top
   ) u_interval_time1_targ_trx_rst (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (interval_time1_we),
@@ -3348,6 +3487,9 @@ module i3c_reg_top
 
   // R[phy_config]: V(False)
   //   F[scl_hk_en]: 0:0
+  // Reinit
+  assign reg2hw.phy_config.reinit = hci_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -3356,6 +3498,7 @@ module i3c_reg_top
   ) u_phy_config_scl_hk_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (phy_config_we),
@@ -3383,6 +3526,7 @@ module i3c_reg_top
   ) u_phy_config_sda_hk_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (phy_config_we),
@@ -3410,6 +3554,7 @@ module i3c_reg_top
   ) u_phy_config_ctrl_sda (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (phy_config_we),
@@ -3437,6 +3582,7 @@ module i3c_reg_top
   ) u_phy_config_ctrl_sda_pu_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (phy_config_we),
@@ -3464,6 +3610,7 @@ module i3c_reg_top
   ) u_phy_config_ctrl_sda_od_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (phy_config_we),
@@ -3491,6 +3638,7 @@ module i3c_reg_top
   ) u_phy_config_ctrl_sda_pp_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (phy_config_we),
@@ -3518,6 +3666,7 @@ module i3c_reg_top
   ) u_phy_config_ctrl_scl (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (phy_config_we),
@@ -3545,6 +3694,7 @@ module i3c_reg_top
   ) u_phy_config_ctrl_scl_pu_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (phy_config_we),
@@ -3572,6 +3722,7 @@ module i3c_reg_top
   ) u_phy_config_ctrl_scl_pp_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (phy_config_we),
@@ -3599,6 +3750,7 @@ module i3c_reg_top
   ) u_phy_config_ctrl_direct_drive_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (phy_config_we),
@@ -3628,6 +3780,7 @@ module i3c_reg_top
   ) u_blocked_addr_addr0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (blocked_addr_we),
@@ -3655,6 +3808,7 @@ module i3c_reg_top
   ) u_blocked_addr_mask0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (blocked_addr_we),
@@ -3682,6 +3836,7 @@ module i3c_reg_top
   ) u_blocked_addr_addr1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (blocked_addr_we),
@@ -3709,6 +3864,7 @@ module i3c_reg_top
   ) u_blocked_addr_mask1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (blocked_addr_we),
@@ -3775,6 +3931,7 @@ module i3c_reg_top
   ) u_buffer_status_ttiq_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (buffer_status_we),
@@ -3802,6 +3959,7 @@ module i3c_reg_top
   ) u_buffer_status_hciq_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (buffer_status_we),
@@ -3831,6 +3989,7 @@ module i3c_reg_top
   ) u_ctrl_txbuf_config_min_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_txbuf_config_we),
@@ -3858,6 +4017,7 @@ module i3c_reg_top
   ) u_ctrl_txbuf_config_max_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_txbuf_config_we),
@@ -3885,6 +4045,7 @@ module i3c_reg_top
   ) u_ctrl_txbuf_config_size_val (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_txbuf_config_we),
@@ -3976,6 +4137,7 @@ module i3c_reg_top
   ) u_ctrl_rxbuf_config_min_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_rxbuf_config_we),
@@ -4003,6 +4165,7 @@ module i3c_reg_top
   ) u_ctrl_rxbuf_config_max_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_rxbuf_config_we),
@@ -4030,6 +4193,7 @@ module i3c_reg_top
   ) u_ctrl_rxbuf_config_size_val (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_rxbuf_config_we),
@@ -4121,6 +4285,7 @@ module i3c_reg_top
   ) u_command_queue_config_min_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (command_queue_config_we),
@@ -4148,6 +4313,7 @@ module i3c_reg_top
   ) u_command_queue_config_max_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (command_queue_config_we),
@@ -4175,6 +4341,7 @@ module i3c_reg_top
   ) u_command_queue_config_size_val (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (command_queue_config_we),
@@ -4266,6 +4433,7 @@ module i3c_reg_top
   ) u_response_queue_config_min_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (response_queue_config_we),
@@ -4293,6 +4461,7 @@ module i3c_reg_top
   ) u_response_queue_config_max_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (response_queue_config_we),
@@ -4320,6 +4489,7 @@ module i3c_reg_top
   ) u_response_queue_config_size_val (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (response_queue_config_we),
@@ -4411,6 +4581,7 @@ module i3c_reg_top
   ) u_ibi_config_min_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ibi_config_we),
@@ -4438,6 +4609,7 @@ module i3c_reg_top
   ) u_ibi_config_max_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ibi_config_we),
@@ -4465,6 +4637,7 @@ module i3c_reg_top
   ) u_ibi_config_size_val (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ibi_config_we),
@@ -4556,6 +4729,7 @@ module i3c_reg_top
   ) u_ibi_stat_config_min_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ibi_stat_config_we),
@@ -4583,6 +4757,7 @@ module i3c_reg_top
   ) u_ibi_stat_config_max_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ibi_stat_config_we),
@@ -4675,6 +4850,7 @@ module i3c_reg_top
   ) u_targ_txbuf_config_0_min_addr_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_txbuf_config_0_we),
@@ -4702,6 +4878,7 @@ module i3c_reg_top
   ) u_targ_txbuf_config_0_max_addr_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_txbuf_config_0_we),
@@ -4732,6 +4909,7 @@ module i3c_reg_top
   ) u_targ_txbuf_config_1_min_addr_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_txbuf_config_1_we),
@@ -4759,6 +4937,7 @@ module i3c_reg_top
   ) u_targ_txbuf_config_1_max_addr_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_txbuf_config_1_we),
@@ -4789,6 +4968,7 @@ module i3c_reg_top
   ) u_targ_txbuf_config_2_min_addr_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_txbuf_config_2_we),
@@ -4816,6 +4996,7 @@ module i3c_reg_top
   ) u_targ_txbuf_config_2_max_addr_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_txbuf_config_2_we),
@@ -4846,6 +5027,7 @@ module i3c_reg_top
   ) u_targ_txbuf_config_3_min_addr_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_txbuf_config_3_we),
@@ -4873,6 +5055,7 @@ module i3c_reg_top
   ) u_targ_txbuf_config_3_max_addr_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_txbuf_config_3_we),
@@ -5154,6 +5337,7 @@ module i3c_reg_top
   ) u_targ_rxbuf_config_min_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_rxbuf_config_we),
@@ -5181,6 +5365,7 @@ module i3c_reg_top
   ) u_targ_rxbuf_config_max_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_rxbuf_config_we),
@@ -5272,6 +5457,7 @@ module i3c_reg_top
   ) u_targ_ibi_config_min_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_ibi_config_we),
@@ -5299,6 +5485,7 @@ module i3c_reg_top
   ) u_targ_ibi_config_max_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_ibi_config_we),
@@ -5391,6 +5578,7 @@ module i3c_reg_top
   ) u_targ_txdesc_config_0_min_addr_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_txdesc_config_0_we),
@@ -5418,6 +5606,7 @@ module i3c_reg_top
   ) u_targ_txdesc_config_0_max_addr_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_txdesc_config_0_we),
@@ -5448,6 +5637,7 @@ module i3c_reg_top
   ) u_targ_txdesc_config_1_min_addr_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_txdesc_config_1_we),
@@ -5475,6 +5665,7 @@ module i3c_reg_top
   ) u_targ_txdesc_config_1_max_addr_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_txdesc_config_1_we),
@@ -5505,6 +5696,7 @@ module i3c_reg_top
   ) u_targ_txdesc_config_2_min_addr_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_txdesc_config_2_we),
@@ -5532,6 +5724,7 @@ module i3c_reg_top
   ) u_targ_txdesc_config_2_max_addr_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_txdesc_config_2_we),
@@ -5562,6 +5755,7 @@ module i3c_reg_top
   ) u_targ_txdesc_config_3_min_addr_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_txdesc_config_3_we),
@@ -5589,6 +5783,7 @@ module i3c_reg_top
   ) u_targ_txdesc_config_3_max_addr_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_txdesc_config_3_we),
@@ -5870,6 +6065,7 @@ module i3c_reg_top
   ) u_targ_rxdesc_config_min_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_rxdesc_config_we),
@@ -5897,6 +6093,7 @@ module i3c_reg_top
   ) u_targ_rxdesc_config_max_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_rxdesc_config_we),
@@ -5988,6 +6185,7 @@ module i3c_reg_top
   ) u_targ_ibidesc_config_min_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_ibidesc_config_we),
@@ -6015,6 +6213,7 @@ module i3c_reg_top
   ) u_targ_ibidesc_config_max_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_ibidesc_config_we),
@@ -6106,6 +6305,7 @@ module i3c_reg_top
   ) u_targ_async_config_min_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_async_config_we),
@@ -6133,6 +6333,7 @@ module i3c_reg_top
   ) u_targ_async_config_max_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (targ_async_config_we),
@@ -6238,6 +6439,9 @@ module i3c_reg_top
   assign unused_hc_control_flds_we = ^(hc_control_flds_we & 10'hc);
   assign hc_control_qe = &(hc_control_flds_we | 10'hc);
   //   F[iba_include]: 0:0
+  // Reinit
+  assign reg2hw.hc_control.reinit = hci_sw_reinit_i;
+
   prim_subreg_ext #(
     .DW    (1)
   ) u_hc_control_iba_include (
@@ -6749,6 +6953,9 @@ module i3c_reg_top
 
   // R[intr_status]: V(False)
   //   F[hc_internal_err_stat]: 10:10
+  // Reinit
+  assign reg2hw.intr_status.reinit = hci_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessW1C),
@@ -6757,6 +6964,7 @@ module i3c_reg_top
   ) u_intr_status_hc_internal_err_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (intr_status_we),
@@ -6784,6 +6992,7 @@ module i3c_reg_top
   ) u_intr_status_hc_seq_cancel_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (intr_status_we),
@@ -6811,6 +7020,7 @@ module i3c_reg_top
   ) u_intr_status_hc_warn_cmd_seq_stall_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (intr_status_we),
@@ -6838,6 +7048,7 @@ module i3c_reg_top
   ) u_intr_status_hc_err_cmd_seq_timeout_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (intr_status_we),
@@ -6865,6 +7076,7 @@ module i3c_reg_top
   ) u_intr_status_sched_cmd_missed_tick_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (intr_status_we),
@@ -6886,6 +7098,9 @@ module i3c_reg_top
 
   // R[intr_status_enable]: V(False)
   //   F[hc_internal_err_stat_en]: 10:10
+  // Reinit
+  assign reg2hw.intr_status_enable.reinit = hci_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -6894,6 +7109,7 @@ module i3c_reg_top
   ) u_intr_status_enable_hc_internal_err_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (intr_status_enable_we),
@@ -6921,6 +7137,7 @@ module i3c_reg_top
   ) u_intr_status_enable_hc_seq_cancel_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (intr_status_enable_we),
@@ -6948,6 +7165,7 @@ module i3c_reg_top
   ) u_intr_status_enable_hc_warn_cmd_seq_stall_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (intr_status_enable_we),
@@ -6975,6 +7193,7 @@ module i3c_reg_top
   ) u_intr_status_enable_hc_err_cmd_seq_timeout_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (intr_status_enable_we),
@@ -7002,6 +7221,7 @@ module i3c_reg_top
   ) u_intr_status_enable_sched_cmd_missed_tick_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (intr_status_enable_we),
@@ -7023,6 +7243,9 @@ module i3c_reg_top
 
   // R[intr_signal_enable]: V(False)
   //   F[hc_internal_err_signal_en]: 10:10
+  // Reinit
+  assign reg2hw.intr_signal_enable.reinit = hci_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -7031,6 +7254,7 @@ module i3c_reg_top
   ) u_intr_signal_enable_hc_internal_err_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (intr_signal_enable_we),
@@ -7058,6 +7282,7 @@ module i3c_reg_top
   ) u_intr_signal_enable_hc_seq_cancel_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (intr_signal_enable_we),
@@ -7085,6 +7310,7 @@ module i3c_reg_top
   ) u_intr_signal_enable_hc_warn_cmd_seq_stall_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (intr_signal_enable_we),
@@ -7112,6 +7338,7 @@ module i3c_reg_top
   ) u_intr_signal_enable_hc_err_cmd_seq_timeout_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (intr_signal_enable_we),
@@ -7139,6 +7366,7 @@ module i3c_reg_top
   ) u_intr_signal_enable_sched_cmd_missed_tick_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (intr_signal_enable_we),
@@ -7163,6 +7391,9 @@ module i3c_reg_top
   logic [4:0] intr_force_flds_we;
   assign intr_force_qe = &intr_force_flds_we;
   //   F[hc_internal_err_force]: 10:10
+  // Reinit
+  assign reg2hw.intr_force.reinit = hci_sw_reinit_i;
+
   prim_subreg_ext #(
     .DW    (1)
   ) u_intr_force_hc_internal_err_force (
@@ -7441,6 +7672,9 @@ module i3c_reg_top
 
   // R[ibi_notify_ctrl]: V(False)
   //   F[notify_hj_rejected]: 0:0
+  // Reinit
+  assign reg2hw.ibi_notify_ctrl.reinit = hci_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -7449,6 +7683,7 @@ module i3c_reg_top
   ) u_ibi_notify_ctrl_notify_hj_rejected (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (ibi_notify_ctrl_we),
@@ -7476,6 +7711,7 @@ module i3c_reg_top
   ) u_ibi_notify_ctrl_notify_crr_rejected (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (ibi_notify_ctrl_we),
@@ -7503,6 +7739,7 @@ module i3c_reg_top
   ) u_ibi_notify_ctrl_notify_ibi_rejected (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (ibi_notify_ctrl_we),
@@ -7524,6 +7761,9 @@ module i3c_reg_top
 
   // R[ibi_data_abort_ctrl]: V(False)
   //   F[match_ibi_id]: 15:8
+  // Reinit
+  assign reg2hw.ibi_data_abort_ctrl.reinit = hci_sw_reinit_i;
+
   prim_subreg #(
     .DW      (8),
     .SwAccess(prim_subreg_pkg::SwAccessWO),
@@ -7532,6 +7772,7 @@ module i3c_reg_top
   ) u_ibi_data_abort_ctrl_match_ibi_id (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (ibi_data_abort_ctrl_we),
@@ -7559,6 +7800,7 @@ module i3c_reg_top
   ) u_ibi_data_abort_ctrl_after_n_chunks (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (ibi_data_abort_ctrl_we),
@@ -7586,6 +7828,7 @@ module i3c_reg_top
   ) u_ibi_data_abort_ctrl_match_status_type (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (ibi_data_abort_ctrl_we),
@@ -7613,6 +7856,7 @@ module i3c_reg_top
   ) u_ibi_data_abort_ctrl_ibi_data_abort_mon (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (ibi_data_abort_ctrl_we),
@@ -7698,6 +7942,9 @@ module i3c_reg_top
 
   // R[queue_thld_ctrl]: V(False)
   //   F[cmd_empty_buf_thld]: 7:0
+  // Reinit
+  assign reg2hw.queue_thld_ctrl.reinit = hci_sw_reinit_i;
+
   prim_subreg #(
     .DW      (8),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -7706,6 +7953,7 @@ module i3c_reg_top
   ) u_queue_thld_ctrl_cmd_empty_buf_thld (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (queue_thld_ctrl_we),
@@ -7733,6 +7981,7 @@ module i3c_reg_top
   ) u_queue_thld_ctrl_resp_buf_thld (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (queue_thld_ctrl_we),
@@ -7760,6 +8009,7 @@ module i3c_reg_top
   ) u_queue_thld_ctrl_ibi_data_segment_size (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (queue_thld_ctrl_we),
@@ -7787,6 +8037,7 @@ module i3c_reg_top
   ) u_queue_thld_ctrl_ibi_status_thld (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (queue_thld_ctrl_we),
@@ -7808,6 +8059,9 @@ module i3c_reg_top
 
   // R[data_buffer_thld_ctrl]: V(False)
   //   F[tx_buf_thld]: 2:0
+  // Reinit
+  assign reg2hw.data_buffer_thld_ctrl.reinit = hci_sw_reinit_i;
+
   prim_subreg #(
     .DW      (3),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -7816,6 +8070,7 @@ module i3c_reg_top
   ) u_data_buffer_thld_ctrl_tx_buf_thld (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (data_buffer_thld_ctrl_we),
@@ -7843,6 +8098,7 @@ module i3c_reg_top
   ) u_data_buffer_thld_ctrl_rx_buf_thld (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (data_buffer_thld_ctrl_we),
@@ -7870,6 +8126,7 @@ module i3c_reg_top
   ) u_data_buffer_thld_ctrl_tx_start_thld (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (data_buffer_thld_ctrl_we),
@@ -7897,6 +8154,7 @@ module i3c_reg_top
   ) u_data_buffer_thld_ctrl_rx_start_thld (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (data_buffer_thld_ctrl_we),
@@ -8027,6 +8285,9 @@ module i3c_reg_top
 
   // R[pio_intr_status]: V(False)
   //   F[tx_thld_stat]: 0:0
+  // Reinit
+  assign reg2hw.pio_intr_status.reinit = hci_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -8035,6 +8296,7 @@ module i3c_reg_top
   ) u_pio_intr_status_tx_thld_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -8062,6 +8324,7 @@ module i3c_reg_top
   ) u_pio_intr_status_rx_thld_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -8089,6 +8352,7 @@ module i3c_reg_top
   ) u_pio_intr_status_ibi_status_thld_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -8116,6 +8380,7 @@ module i3c_reg_top
   ) u_pio_intr_status_cmd_queue_ready_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -8143,6 +8408,7 @@ module i3c_reg_top
   ) u_pio_intr_status_resp_ready_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -8170,6 +8436,7 @@ module i3c_reg_top
   ) u_pio_intr_status_transfer_abort_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_status_we),
@@ -8197,6 +8464,7 @@ module i3c_reg_top
   ) u_pio_intr_status_transfer_err_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_status_we),
@@ -8218,6 +8486,9 @@ module i3c_reg_top
 
   // R[pio_intr_status_enable]: V(False)
   //   F[tx_thld_stat_en]: 0:0
+  // Reinit
+  assign reg2hw.pio_intr_status_enable.reinit = hci_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -8226,6 +8497,7 @@ module i3c_reg_top
   ) u_pio_intr_status_enable_tx_thld_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_status_enable_we),
@@ -8253,6 +8525,7 @@ module i3c_reg_top
   ) u_pio_intr_status_enable_rx_thld_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_status_enable_we),
@@ -8280,6 +8553,7 @@ module i3c_reg_top
   ) u_pio_intr_status_enable_ibi_status_thld_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_status_enable_we),
@@ -8307,6 +8581,7 @@ module i3c_reg_top
   ) u_pio_intr_status_enable_cmd_queue_ready_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_status_enable_we),
@@ -8334,6 +8609,7 @@ module i3c_reg_top
   ) u_pio_intr_status_enable_resp_ready_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_status_enable_we),
@@ -8361,6 +8637,7 @@ module i3c_reg_top
   ) u_pio_intr_status_enable_transfer_abort_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_status_enable_we),
@@ -8388,6 +8665,7 @@ module i3c_reg_top
   ) u_pio_intr_status_enable_transfer_err_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_status_enable_we),
@@ -8409,6 +8687,9 @@ module i3c_reg_top
 
   // R[pio_intr_signal_enable]: V(False)
   //   F[tx_thld_signal_en]: 0:0
+  // Reinit
+  assign reg2hw.pio_intr_signal_enable.reinit = hci_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -8417,6 +8698,7 @@ module i3c_reg_top
   ) u_pio_intr_signal_enable_tx_thld_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_signal_enable_we),
@@ -8444,6 +8726,7 @@ module i3c_reg_top
   ) u_pio_intr_signal_enable_rx_thld_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_signal_enable_we),
@@ -8471,6 +8754,7 @@ module i3c_reg_top
   ) u_pio_intr_signal_enable_ibi_status_thld_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_signal_enable_we),
@@ -8498,6 +8782,7 @@ module i3c_reg_top
   ) u_pio_intr_signal_enable_cmd_queue_ready_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_signal_enable_we),
@@ -8525,6 +8810,7 @@ module i3c_reg_top
   ) u_pio_intr_signal_enable_resp_ready_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_signal_enable_we),
@@ -8552,6 +8838,7 @@ module i3c_reg_top
   ) u_pio_intr_signal_enable_transfer_abort_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_signal_enable_we),
@@ -8579,6 +8866,7 @@ module i3c_reg_top
   ) u_pio_intr_signal_enable_transfer_err_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_signal_enable_we),
@@ -8611,6 +8899,9 @@ module i3c_reg_top
     .q_o(pio_intr_force_qe)
   );
   //   F[tx_thld_force]: 0:0
+  // Reinit
+  assign reg2hw.pio_intr_force.reinit = hci_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessWO),
@@ -8619,6 +8910,7 @@ module i3c_reg_top
   ) u_pio_intr_force_tx_thld_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_force_we),
@@ -8647,6 +8939,7 @@ module i3c_reg_top
   ) u_pio_intr_force_rx_thld_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_force_we),
@@ -8675,6 +8968,7 @@ module i3c_reg_top
   ) u_pio_intr_force_ibi_thld_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_force_we),
@@ -8703,6 +8997,7 @@ module i3c_reg_top
   ) u_pio_intr_force_cmd_queue_ready_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_force_we),
@@ -8731,6 +9026,7 @@ module i3c_reg_top
   ) u_pio_intr_force_resp_ready_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_force_we),
@@ -8759,6 +9055,7 @@ module i3c_reg_top
   ) u_pio_intr_force_transfer_abort_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_force_we),
@@ -8787,6 +9084,7 @@ module i3c_reg_top
   ) u_pio_intr_force_transfer_err_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_intr_force_we),
@@ -8809,6 +9107,9 @@ module i3c_reg_top
 
   // R[pio_control]: V(False)
   //   F[enable]: 0:0
+  // Reinit
+  assign reg2hw.pio_control.reinit = hci_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -8817,6 +9118,7 @@ module i3c_reg_top
   ) u_pio_control_enable (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_control_we),
@@ -8844,6 +9146,7 @@ module i3c_reg_top
   ) u_pio_control_rs (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_control_we),
@@ -8871,6 +9174,7 @@ module i3c_reg_top
   ) u_pio_control_abort (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(hci_sw_reinit_i),
 
     // from register interface
     .we     (pio_control_we),
@@ -9323,6 +9627,9 @@ module i3c_reg_top
 
 
   // R[mx_error_counters]: V(True)
+  // Reinit
+  assign reg2hw.mx_error_counters.reinit = hci_sw_reinit_i;
+
   prim_subreg_ext #(
     .DW    (8)
   ) u_mx_error_counters (
@@ -9934,11 +10241,10 @@ module i3c_reg_top
     .d      (hw2reg.stby_cr_device_char.bcr_fixed.d),
     .qre    (),
     .qe     (stby_cr_device_char_flds_we[3]),
-    .q      (reg2hw.stby_cr_device_char.bcr_fixed.q),
+    .q      (),
     .ds     (),
     .qs     (stby_cr_device_char_bcr_fixed_qs)
   );
-  assign reg2hw.stby_cr_device_char.bcr_fixed.qe = stby_cr_device_char_qe;
 
 
   // R[stby_cr_device_pid_lo]: V(True)
@@ -9963,6 +10269,9 @@ module i3c_reg_top
 
   // R[stby_cr_intr_status]: V(False)
   //   F[acr_handoff_ok_remain_stat]: 0:0
+  // Reinit
+  assign reg2hw.stby_cr_intr_status.reinit = sc_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessW1C),
@@ -9971,6 +10280,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_status_acr_handoff_ok_remain_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_status_we),
@@ -9998,6 +10308,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_status_acr_handoff_ok_primed_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_status_we),
@@ -10025,6 +10336,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_status_acr_handoff_err_fail_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_status_we),
@@ -10052,6 +10364,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_status_acr_handoff_err_m3_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_status_we),
@@ -10079,6 +10392,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_status_crr_response_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_status_we),
@@ -10106,6 +10420,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_status_stby_cr_dyn_addr_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_status_we),
@@ -10133,6 +10448,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_status_stby_cr_accept_nacked_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_status_we),
@@ -10160,6 +10476,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_status_stby_cr_accept_ok_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_status_we),
@@ -10187,6 +10504,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_status_stby_cr_accept_err_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_status_we),
@@ -10214,6 +10532,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_status_stby_cr_op_rstact_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_status_we),
@@ -10241,6 +10560,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_status_ccc_param_modified_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_status_we),
@@ -10268,6 +10588,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_status_ccc_unhandled_nack_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_status_we),
@@ -10295,6 +10616,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_status_ccc_fatal_rstdaa_err_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_status_we),
@@ -10316,6 +10638,9 @@ module i3c_reg_top
 
   // R[stby_cr_intr_signal_enable]: V(False)
   //   F[acr_handoff_ok_remain_signal_en]: 0:0
+  // Reinit
+  assign reg2hw.stby_cr_intr_signal_enable.reinit = sc_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -10324,6 +10649,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_signal_enable_acr_handoff_ok_remain_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_signal_enable_we),
@@ -10351,6 +10677,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_signal_enable_acr_handoff_ok_primed_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_signal_enable_we),
@@ -10378,6 +10705,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_signal_enable_acr_handoff_err_fail_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_signal_enable_we),
@@ -10405,6 +10733,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_signal_enable_acr_handoff_err_m3_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_signal_enable_we),
@@ -10432,6 +10761,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_signal_enable_crr_response_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_signal_enable_we),
@@ -10459,6 +10789,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_signal_enable_stby_cr_dyn_addr_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_signal_enable_we),
@@ -10486,6 +10817,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_signal_enable_stby_cr_accept_nacked_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_signal_enable_we),
@@ -10513,6 +10845,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_signal_enable_stby_cr_accept_ok_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_signal_enable_we),
@@ -10540,6 +10873,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_signal_enable_stby_cr_accept_err_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_signal_enable_we),
@@ -10567,6 +10901,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_signal_enable_stby_cr_op_rstact_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_signal_enable_we),
@@ -10594,6 +10929,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_signal_enable_ccc_param_modified_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_signal_enable_we),
@@ -10621,6 +10957,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_signal_enable_ccc_unhandled_nack_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_signal_enable_we),
@@ -10648,6 +10985,7 @@ module i3c_reg_top
   ) u_stby_cr_intr_signal_enable_ccc_fatal_rstdaa_err_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(sc_sw_reinit_i),
 
     // from register interface
     .we     (stby_cr_intr_signal_enable_we),
@@ -10672,6 +11010,9 @@ module i3c_reg_top
   logic [8:0] stby_cr_intr_force_flds_we;
   assign stby_cr_intr_force_qe = &stby_cr_intr_force_flds_we;
   //   F[crr_response_force]: 10:10
+  // Reinit
+  assign reg2hw.stby_cr_intr_force.reinit = sc_sw_reinit_i;
+
   prim_subreg_ext #(
     .DW    (1)
   ) u_stby_cr_intr_force_crr_response_force (
@@ -10959,6 +11300,9 @@ module i3c_reg_top
 
   // R[targ_intr_status]: V(False)
   //   F[rx_desc_ready_stat]: 0:0
+  // Reinit
+  assign reg2hw.targ_intr_status.reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -10967,6 +11311,7 @@ module i3c_reg_top
   ) u_targ_intr_status_rx_desc_ready_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -10994,6 +11339,7 @@ module i3c_reg_top
   ) u_targ_intr_status_ibi_status_thld_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -11021,6 +11367,7 @@ module i3c_reg_top
   ) u_targ_intr_status_async_evt_ready_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -11048,6 +11395,7 @@ module i3c_reg_top
   ) u_targ_intr_status_transfer_abort_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -11075,6 +11423,7 @@ module i3c_reg_top
   ) u_targ_intr_status_transfer_err_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -11102,6 +11451,7 @@ module i3c_reg_top
   ) u_targ_intr_status_rx_buffer_ovf_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -11129,6 +11479,7 @@ module i3c_reg_top
   ) u_targ_intr_status_async_evt_ovf_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -11156,6 +11507,7 @@ module i3c_reg_top
   ) u_targ_intr_status_tx0_thld_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -11183,6 +11535,7 @@ module i3c_reg_top
   ) u_targ_intr_status_tx1_thld_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -11210,6 +11563,7 @@ module i3c_reg_top
   ) u_targ_intr_status_tx2_thld_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -11237,6 +11591,7 @@ module i3c_reg_top
   ) u_targ_intr_status_tx3_thld_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -11264,6 +11619,7 @@ module i3c_reg_top
   ) u_targ_intr_status_tx0_desc_ready_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -11291,6 +11647,7 @@ module i3c_reg_top
   ) u_targ_intr_status_tx1_desc_ready_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -11318,6 +11675,7 @@ module i3c_reg_top
   ) u_targ_intr_status_tx2_desc_ready_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -11345,6 +11703,7 @@ module i3c_reg_top
   ) u_targ_intr_status_tx3_desc_ready_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -11372,6 +11731,7 @@ module i3c_reg_top
   ) u_targ_intr_status_te_stat (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -11393,6 +11753,9 @@ module i3c_reg_top
 
   // R[targ_intr_status_enable]: V(False)
   //   F[rx_desc_ready_stat_en]: 0:0
+  // Reinit
+  assign reg2hw.targ_intr_status_enable.reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -11401,6 +11764,7 @@ module i3c_reg_top
   ) u_targ_intr_status_enable_rx_desc_ready_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_status_enable_we),
@@ -11428,6 +11792,7 @@ module i3c_reg_top
   ) u_targ_intr_status_enable_ibi_status_thld_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_status_enable_we),
@@ -11455,6 +11820,7 @@ module i3c_reg_top
   ) u_targ_intr_status_enable_async_evt_ready_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_status_enable_we),
@@ -11482,6 +11848,7 @@ module i3c_reg_top
   ) u_targ_intr_status_enable_transfer_abort_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_status_enable_we),
@@ -11509,6 +11876,7 @@ module i3c_reg_top
   ) u_targ_intr_status_enable_transfer_err_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_status_enable_we),
@@ -11536,6 +11904,7 @@ module i3c_reg_top
   ) u_targ_intr_status_enable_rx_buffer_ovf_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_status_enable_we),
@@ -11563,6 +11932,7 @@ module i3c_reg_top
   ) u_targ_intr_status_enable_async_evt_ovf_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_status_enable_we),
@@ -11590,6 +11960,7 @@ module i3c_reg_top
   ) u_targ_intr_status_enable_tx0_thld_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_status_enable_we),
@@ -11617,6 +11988,7 @@ module i3c_reg_top
   ) u_targ_intr_status_enable_tx1_thld_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_status_enable_we),
@@ -11644,6 +12016,7 @@ module i3c_reg_top
   ) u_targ_intr_status_enable_tx2_thld_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_status_enable_we),
@@ -11671,6 +12044,7 @@ module i3c_reg_top
   ) u_targ_intr_status_enable_tx3_thld_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_status_enable_we),
@@ -11698,6 +12072,7 @@ module i3c_reg_top
   ) u_targ_intr_status_enable_tx0_desc_ready_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_status_enable_we),
@@ -11725,6 +12100,7 @@ module i3c_reg_top
   ) u_targ_intr_status_enable_tx1_desc_ready_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_status_enable_we),
@@ -11752,6 +12128,7 @@ module i3c_reg_top
   ) u_targ_intr_status_enable_tx2_desc_ready_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_status_enable_we),
@@ -11779,6 +12156,7 @@ module i3c_reg_top
   ) u_targ_intr_status_enable_tx3_desc_ready_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_status_enable_we),
@@ -11806,6 +12184,7 @@ module i3c_reg_top
   ) u_targ_intr_status_enable_te_stat_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_status_enable_we),
@@ -11827,6 +12206,9 @@ module i3c_reg_top
 
   // R[targ_intr_signal_enable]: V(False)
   //   F[rx_desc_ready_signal_en]: 0:0
+  // Reinit
+  assign reg2hw.targ_intr_signal_enable.reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -11835,6 +12217,7 @@ module i3c_reg_top
   ) u_targ_intr_signal_enable_rx_desc_ready_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_signal_enable_we),
@@ -11862,6 +12245,7 @@ module i3c_reg_top
   ) u_targ_intr_signal_enable_ibi_status_thld_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_signal_enable_we),
@@ -11889,6 +12273,7 @@ module i3c_reg_top
   ) u_targ_intr_signal_enable_async_evt_ready_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_signal_enable_we),
@@ -11916,6 +12301,7 @@ module i3c_reg_top
   ) u_targ_intr_signal_enable_transfer_abort_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_signal_enable_we),
@@ -11943,6 +12329,7 @@ module i3c_reg_top
   ) u_targ_intr_signal_enable_transfer_err_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_signal_enable_we),
@@ -11970,6 +12357,7 @@ module i3c_reg_top
   ) u_targ_intr_signal_enable_rx_buffer_ovf_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_signal_enable_we),
@@ -11997,6 +12385,7 @@ module i3c_reg_top
   ) u_targ_intr_signal_enable_async_evt_ovf_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_signal_enable_we),
@@ -12024,6 +12413,7 @@ module i3c_reg_top
   ) u_targ_intr_signal_enable_tx0_thld_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_signal_enable_we),
@@ -12051,6 +12441,7 @@ module i3c_reg_top
   ) u_targ_intr_signal_enable_tx1_thld_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_signal_enable_we),
@@ -12078,6 +12469,7 @@ module i3c_reg_top
   ) u_targ_intr_signal_enable_tx2_thld_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_signal_enable_we),
@@ -12105,6 +12497,7 @@ module i3c_reg_top
   ) u_targ_intr_signal_enable_tx3_thld_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_signal_enable_we),
@@ -12132,6 +12525,7 @@ module i3c_reg_top
   ) u_targ_intr_signal_enable_tx0_desc_ready_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_signal_enable_we),
@@ -12159,6 +12553,7 @@ module i3c_reg_top
   ) u_targ_intr_signal_enable_tx1_desc_ready_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_signal_enable_we),
@@ -12186,6 +12581,7 @@ module i3c_reg_top
   ) u_targ_intr_signal_enable_tx2_desc_ready_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_signal_enable_we),
@@ -12213,6 +12609,7 @@ module i3c_reg_top
   ) u_targ_intr_signal_enable_tx3_desc_ready_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_signal_enable_we),
@@ -12240,6 +12637,7 @@ module i3c_reg_top
   ) u_targ_intr_signal_enable_te_signal_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_signal_enable_we),
@@ -12272,6 +12670,9 @@ module i3c_reg_top
     .q_o(targ_intr_force_qe)
   );
   //   F[rx_desc_ready_force]: 0:0
+  // Reinit
+  assign reg2hw.targ_intr_force.reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessWO),
@@ -12280,6 +12681,7 @@ module i3c_reg_top
   ) u_targ_intr_force_rx_desc_ready_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_force_we),
@@ -12308,6 +12710,7 @@ module i3c_reg_top
   ) u_targ_intr_force_ibi_thld_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_force_we),
@@ -12336,6 +12739,7 @@ module i3c_reg_top
   ) u_targ_intr_force_async_evt_ready_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_force_we),
@@ -12364,6 +12768,7 @@ module i3c_reg_top
   ) u_targ_intr_force_transfer_abort_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_force_we),
@@ -12392,6 +12797,7 @@ module i3c_reg_top
   ) u_targ_intr_force_transfer_err_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_force_we),
@@ -12420,6 +12826,7 @@ module i3c_reg_top
   ) u_targ_intr_force_rx_buffer_ovf_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_force_we),
@@ -12448,6 +12855,7 @@ module i3c_reg_top
   ) u_targ_intr_force_async_evt_ovf_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_force_we),
@@ -12476,6 +12884,7 @@ module i3c_reg_top
   ) u_targ_intr_force_tx0_thld_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_force_we),
@@ -12504,6 +12913,7 @@ module i3c_reg_top
   ) u_targ_intr_force_tx1_thld_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_force_we),
@@ -12532,6 +12942,7 @@ module i3c_reg_top
   ) u_targ_intr_force_tx2_thld_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_force_we),
@@ -12560,6 +12971,7 @@ module i3c_reg_top
   ) u_targ_intr_force_tx3_thld_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_force_we),
@@ -12588,6 +13000,7 @@ module i3c_reg_top
   ) u_targ_intr_force_tx0_desc_ready_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_force_we),
@@ -12616,6 +13029,7 @@ module i3c_reg_top
   ) u_targ_intr_force_tx1_desc_ready_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_force_we),
@@ -12644,6 +13058,7 @@ module i3c_reg_top
   ) u_targ_intr_force_tx2_desc_ready_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_force_we),
@@ -12672,6 +13087,7 @@ module i3c_reg_top
   ) u_targ_intr_force_tx3_desc_ready_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_force_we),
@@ -12700,6 +13116,7 @@ module i3c_reg_top
   ) u_targ_intr_force_te_force (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_intr_force_we),
@@ -12733,6 +13150,9 @@ module i3c_reg_top
     .q_o(targ_pio_control_qe)
   );
   //   F[ibi_suspended]: 0:0
+  // Reinit
+  assign reg2hw.targ_pio_control.reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessW1C),
@@ -12741,6 +13161,7 @@ module i3c_reg_top
   ) u_targ_pio_control_ibi_suspended (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_pio_control_we),
@@ -12769,6 +13190,7 @@ module i3c_reg_top
   ) u_targ_pio_control_ibi_abort (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_pio_control_we),
@@ -12797,6 +13219,7 @@ module i3c_reg_top
   ) u_targ_pio_control_suspended (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_pio_control_we),
@@ -12825,6 +13248,7 @@ module i3c_reg_top
   ) u_targ_pio_control_abort (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_pio_control_we),
@@ -12858,6 +13282,9 @@ module i3c_reg_top
     .q_o(targ_async_evt_control_qe)
   );
   //   F[bcst_ccc]: 0:0
+  // Reinit
+  assign reg2hw.targ_async_evt_control.reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -12866,6 +13293,7 @@ module i3c_reg_top
   ) u_targ_async_evt_control_bcst_ccc (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_async_evt_control_we),
@@ -12894,6 +13322,7 @@ module i3c_reg_top
   ) u_targ_async_evt_control_dir_set_ccc (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_async_evt_control_we),
@@ -12922,6 +13351,7 @@ module i3c_reg_top
   ) u_targ_async_evt_control_dir_get_ccc (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_async_evt_control_we),
@@ -12950,6 +13380,7 @@ module i3c_reg_top
   ) u_targ_async_evt_control_tx_notify (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_async_evt_control_we),
@@ -12978,6 +13409,7 @@ module i3c_reg_top
   ) u_targ_async_evt_control_ibi_notify (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_async_evt_control_we),
@@ -13006,6 +13438,7 @@ module i3c_reg_top
   ) u_targ_async_evt_control_tx_suspend (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_async_evt_control_we),
@@ -13034,6 +13467,7 @@ module i3c_reg_top
   ) u_targ_async_evt_control_ibi_suspend (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_async_evt_control_we),
@@ -13062,6 +13496,7 @@ module i3c_reg_top
   ) u_targ_async_evt_control_bus_events (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_async_evt_control_we),
@@ -13081,19 +13516,20 @@ module i3c_reg_top
   );
   assign reg2hw.targ_async_evt_control.bus_events.qe = targ_async_evt_control_qe;
 
-  //   F[reset]: 31:31
+  //   F[queue_reset]: 31:31
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessW1C),
     .RESVAL  (1'h0),
     .Mubi    (1'b0)
-  ) u_targ_async_evt_control_reset (
+  ) u_targ_async_evt_control_queue_reset (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_async_evt_control_we),
-    .wd     (targ_async_evt_control_reset_wd),
+    .wd     (targ_async_evt_control_queue_reset_wd),
 
     // from internal hardware
     .de     (1'b0),
@@ -13101,17 +13537,20 @@ module i3c_reg_top
 
     // to internal hardware
     .qe     (targ_async_evt_control_flds_we[8]),
-    .q      (reg2hw.targ_async_evt_control.reset.q),
+    .q      (reg2hw.targ_async_evt_control.queue_reset.q),
     .ds     (),
 
     // to register interface (read)
-    .qs     (targ_async_evt_control_reset_qs)
+    .qs     (targ_async_evt_control_queue_reset_qs)
   );
-  assign reg2hw.targ_async_evt_control.reset.qe = targ_async_evt_control_qe;
+  assign reg2hw.targ_async_evt_control.queue_reset.qe = targ_async_evt_control_qe;
 
 
   // R[targ_error]: V(False)
   //   F[te0]: 3:0
+  // Reinit
+  assign reg2hw.targ_error.reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (4),
     .SwAccess(prim_subreg_pkg::SwAccessW1C),
@@ -13120,6 +13559,7 @@ module i3c_reg_top
   ) u_targ_error_te0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_error_we),
@@ -13147,6 +13587,7 @@ module i3c_reg_top
   ) u_targ_error_te1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_error_we),
@@ -13174,6 +13615,7 @@ module i3c_reg_top
   ) u_targ_error_te2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_error_we),
@@ -13201,6 +13643,7 @@ module i3c_reg_top
   ) u_targ_error_te3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_error_we),
@@ -13228,6 +13671,7 @@ module i3c_reg_top
   ) u_targ_error_te4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_error_we),
@@ -13255,6 +13699,7 @@ module i3c_reg_top
   ) u_targ_error_te5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_error_we),
@@ -13282,6 +13727,7 @@ module i3c_reg_top
   ) u_targ_error_te6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_error_we),
@@ -13309,6 +13755,7 @@ module i3c_reg_top
   ) u_targ_error_dbr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_error_we),
@@ -13330,6 +13777,9 @@ module i3c_reg_top
 
   // R[targ_queue_thld_ctrl]: V(False)
   //   F[rx_desc_thld]: 15:8
+  // Reinit
+  assign reg2hw.targ_queue_thld_ctrl.reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (8),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -13338,6 +13788,7 @@ module i3c_reg_top
   ) u_targ_queue_thld_ctrl_rx_desc_thld (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_queue_thld_ctrl_we),
@@ -13365,6 +13816,7 @@ module i3c_reg_top
   ) u_targ_queue_thld_ctrl_ibi_status_thld (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_queue_thld_ctrl_we),
@@ -13418,6 +13870,9 @@ module i3c_reg_top
 
   // R[targ_buf_thld_ctrl]: V(False)
   //   F[rx_segment_size]: 11:0
+  // Reinit
+  assign reg2hw.targ_buf_thld_ctrl.reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (12),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -13426,6 +13881,7 @@ module i3c_reg_top
   ) u_targ_buf_thld_ctrl_rx_segment_size (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_buf_thld_ctrl_we),
@@ -13453,6 +13909,7 @@ module i3c_reg_top
   ) u_targ_buf_thld_ctrl_rx_start_thld (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_buf_thld_ctrl_we),
@@ -13507,6 +13964,9 @@ module i3c_reg_top
   // Subregister 0 of Multireg targ_rw_len
   // R[targ_rw_len_0]: V(False)
   //   F[mrl_0]: 15:0
+  // Reinit
+  assign reg2hw.targ_rw_len[0].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (16),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -13515,6 +13975,7 @@ module i3c_reg_top
   ) u_targ_rw_len_0_mrl_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_rw_len_0_we),
@@ -13542,6 +14003,7 @@ module i3c_reg_top
   ) u_targ_rw_len_0_mwl_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_rw_len_0_we),
@@ -13564,6 +14026,9 @@ module i3c_reg_top
   // Subregister 1 of Multireg targ_rw_len
   // R[targ_rw_len_1]: V(False)
   //   F[mrl_1]: 15:0
+  // Reinit
+  assign reg2hw.targ_rw_len[1].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (16),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -13572,6 +14037,7 @@ module i3c_reg_top
   ) u_targ_rw_len_1_mrl_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_rw_len_1_we),
@@ -13599,6 +14065,7 @@ module i3c_reg_top
   ) u_targ_rw_len_1_mwl_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_rw_len_1_we),
@@ -13621,6 +14088,9 @@ module i3c_reg_top
   // Subregister 2 of Multireg targ_rw_len
   // R[targ_rw_len_2]: V(False)
   //   F[mrl_2]: 15:0
+  // Reinit
+  assign reg2hw.targ_rw_len[2].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (16),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -13629,6 +14099,7 @@ module i3c_reg_top
   ) u_targ_rw_len_2_mrl_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_rw_len_2_we),
@@ -13656,6 +14127,7 @@ module i3c_reg_top
   ) u_targ_rw_len_2_mwl_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_rw_len_2_we),
@@ -13678,6 +14150,9 @@ module i3c_reg_top
   // Subregister 3 of Multireg targ_rw_len
   // R[targ_rw_len_3]: V(False)
   //   F[mrl_3]: 15:0
+  // Reinit
+  assign reg2hw.targ_rw_len[3].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (16),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -13686,6 +14161,7 @@ module i3c_reg_top
   ) u_targ_rw_len_3_mrl_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_rw_len_3_we),
@@ -13713,6 +14189,7 @@ module i3c_reg_top
   ) u_targ_rw_len_3_mwl_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_rw_len_3_we),
@@ -13735,6 +14212,9 @@ module i3c_reg_top
   // Subregister 0 of Multireg targ_ibi_len
   // R[targ_ibi_len]: V(False)
   //   F[ibi_len_0]: 7:0
+  // Reinit
+  assign reg2hw.targ_ibi_len[0].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (8),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -13743,6 +14223,7 @@ module i3c_reg_top
   ) u_targ_ibi_len_ibi_len_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_ibi_len_we),
@@ -13762,6 +14243,9 @@ module i3c_reg_top
   );
 
   //   F[ibi_len_1]: 15:8
+  // Reinit
+  assign reg2hw.targ_ibi_len[1].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (8),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -13770,6 +14254,7 @@ module i3c_reg_top
   ) u_targ_ibi_len_ibi_len_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_ibi_len_we),
@@ -13789,6 +14274,9 @@ module i3c_reg_top
   );
 
   //   F[ibi_len_2]: 23:16
+  // Reinit
+  assign reg2hw.targ_ibi_len[2].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (8),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -13797,6 +14285,7 @@ module i3c_reg_top
   ) u_targ_ibi_len_ibi_len_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_ibi_len_we),
@@ -13816,6 +14305,9 @@ module i3c_reg_top
   );
 
   //   F[ibi_len_3]: 31:24
+  // Reinit
+  assign reg2hw.targ_ibi_len[3].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (8),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -13824,6 +14316,7 @@ module i3c_reg_top
   ) u_targ_ibi_len_ibi_len_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_ibi_len_we),
@@ -13846,6 +14339,9 @@ module i3c_reg_top
   // Subregister 0 of Multireg targ_event_enable
   // R[targ_event_enable_0]: V(False)
   //   F[enint_0]: 0:0
+  // Reinit
+  assign reg2hw.targ_event_enable[0].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -13854,6 +14350,7 @@ module i3c_reg_top
   ) u_targ_event_enable_0_enint_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -13881,6 +14378,7 @@ module i3c_reg_top
   ) u_targ_event_enable_0_encr_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -13908,6 +14406,7 @@ module i3c_reg_top
   ) u_targ_event_enable_0_enhj_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -13930,6 +14429,9 @@ module i3c_reg_top
   // Subregister 1 of Multireg targ_event_enable
   // R[targ_event_enable_1]: V(False)
   //   F[enint_1]: 0:0
+  // Reinit
+  assign reg2hw.targ_event_enable[1].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -13938,6 +14440,7 @@ module i3c_reg_top
   ) u_targ_event_enable_1_enint_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -13965,6 +14468,7 @@ module i3c_reg_top
   ) u_targ_event_enable_1_encr_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -13992,6 +14496,7 @@ module i3c_reg_top
   ) u_targ_event_enable_1_enhj_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -14014,6 +14519,9 @@ module i3c_reg_top
   // Subregister 2 of Multireg targ_event_enable
   // R[targ_event_enable_2]: V(False)
   //   F[enint_2]: 0:0
+  // Reinit
+  assign reg2hw.targ_event_enable[2].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -14022,6 +14530,7 @@ module i3c_reg_top
   ) u_targ_event_enable_2_enint_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -14049,6 +14558,7 @@ module i3c_reg_top
   ) u_targ_event_enable_2_encr_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -14076,6 +14586,7 @@ module i3c_reg_top
   ) u_targ_event_enable_2_enhj_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -14098,6 +14609,9 @@ module i3c_reg_top
   // Subregister 3 of Multireg targ_event_enable
   // R[targ_event_enable_3]: V(False)
   //   F[enint_3]: 0:0
+  // Reinit
+  assign reg2hw.targ_event_enable[3].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -14106,6 +14620,7 @@ module i3c_reg_top
   ) u_targ_event_enable_3_enint_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -14133,6 +14648,7 @@ module i3c_reg_top
   ) u_targ_event_enable_3_encr_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -14160,6 +14676,7 @@ module i3c_reg_top
   ) u_targ_event_enable_3_enhj_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -14289,6 +14806,9 @@ module i3c_reg_top
   // Subregister 0 of Multireg targ_enable
   // R[targ_enable]: V(False)
   //   F[enable_0]: 0:0
+  // Reinit
+  assign reg2hw.targ_enable[0].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -14297,6 +14817,7 @@ module i3c_reg_top
   ) u_targ_enable_enable_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_enable_we),
@@ -14316,6 +14837,9 @@ module i3c_reg_top
   );
 
   //   F[enable_1]: 1:1
+  // Reinit
+  assign reg2hw.targ_enable[1].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -14324,6 +14848,7 @@ module i3c_reg_top
   ) u_targ_enable_enable_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_enable_we),
@@ -14343,6 +14868,9 @@ module i3c_reg_top
   );
 
   //   F[enable_2]: 2:2
+  // Reinit
+  assign reg2hw.targ_enable[2].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -14351,6 +14879,7 @@ module i3c_reg_top
   ) u_targ_enable_enable_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_enable_we),
@@ -14370,6 +14899,9 @@ module i3c_reg_top
   );
 
   //   F[enable_3]: 3:3
+  // Reinit
+  assign reg2hw.targ_enable[3].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (1),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -14378,6 +14910,7 @@ module i3c_reg_top
   ) u_targ_enable_enable_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_enable_we),
@@ -14400,18 +14933,22 @@ module i3c_reg_top
   // Subregister 0 of Multireg targ_group
   // R[targ_group_0]: V(False)
   //   F[group_addr_0]: 6:0
+  // Reinit
+  assign reg2hw.targ_group[0].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (7),
-    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
     .RESVAL  (7'h0),
     .Mubi    (1'b0)
   ) u_targ_group_0_group_addr_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
-    .we     (1'b0),
-    .wd     ('0),
+    .we     (targ_group_0_we),
+    .wd     (targ_group_0_group_addr_0_wd),
 
     // from internal hardware
     .de     (hw2reg.targ_group[0].group_addr.de),
@@ -14429,16 +14966,17 @@ module i3c_reg_top
   //   F[targets_0]: 11:8
   prim_subreg #(
     .DW      (4),
-    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
     .RESVAL  (4'h0),
     .Mubi    (1'b0)
   ) u_targ_group_0_targets_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
-    .we     (1'b0),
-    .wd     ('0),
+    .we     (targ_group_0_we),
+    .wd     (targ_group_0_targets_0_wd),
 
     // from internal hardware
     .de     (hw2reg.targ_group[0].targets.de),
@@ -14457,18 +14995,22 @@ module i3c_reg_top
   // Subregister 1 of Multireg targ_group
   // R[targ_group_1]: V(False)
   //   F[group_addr_1]: 6:0
+  // Reinit
+  assign reg2hw.targ_group[1].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (7),
-    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
     .RESVAL  (7'h0),
     .Mubi    (1'b0)
   ) u_targ_group_1_group_addr_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
-    .we     (1'b0),
-    .wd     ('0),
+    .we     (targ_group_1_we),
+    .wd     (targ_group_1_group_addr_1_wd),
 
     // from internal hardware
     .de     (hw2reg.targ_group[1].group_addr.de),
@@ -14486,16 +15028,17 @@ module i3c_reg_top
   //   F[targets_1]: 11:8
   prim_subreg #(
     .DW      (4),
-    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
     .RESVAL  (4'h0),
     .Mubi    (1'b0)
   ) u_targ_group_1_targets_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
-    .we     (1'b0),
-    .wd     ('0),
+    .we     (targ_group_1_we),
+    .wd     (targ_group_1_targets_1_wd),
 
     // from internal hardware
     .de     (hw2reg.targ_group[1].targets.de),
@@ -14514,18 +15057,22 @@ module i3c_reg_top
   // Subregister 2 of Multireg targ_group
   // R[targ_group_2]: V(False)
   //   F[group_addr_2]: 6:0
+  // Reinit
+  assign reg2hw.targ_group[2].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (7),
-    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
     .RESVAL  (7'h0),
     .Mubi    (1'b0)
   ) u_targ_group_2_group_addr_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
-    .we     (1'b0),
-    .wd     ('0),
+    .we     (targ_group_2_we),
+    .wd     (targ_group_2_group_addr_2_wd),
 
     // from internal hardware
     .de     (hw2reg.targ_group[2].group_addr.de),
@@ -14543,16 +15090,17 @@ module i3c_reg_top
   //   F[targets_2]: 11:8
   prim_subreg #(
     .DW      (4),
-    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
     .RESVAL  (4'h0),
     .Mubi    (1'b0)
   ) u_targ_group_2_targets_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
-    .we     (1'b0),
-    .wd     ('0),
+    .we     (targ_group_2_we),
+    .wd     (targ_group_2_targets_2_wd),
 
     // from internal hardware
     .de     (hw2reg.targ_group[2].targets.de),
@@ -14571,18 +15119,22 @@ module i3c_reg_top
   // Subregister 3 of Multireg targ_group
   // R[targ_group_3]: V(False)
   //   F[group_addr_3]: 6:0
+  // Reinit
+  assign reg2hw.targ_group[3].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (7),
-    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
     .RESVAL  (7'h0),
     .Mubi    (1'b0)
   ) u_targ_group_3_group_addr_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
-    .we     (1'b0),
-    .wd     ('0),
+    .we     (targ_group_3_we),
+    .wd     (targ_group_3_group_addr_3_wd),
 
     // from internal hardware
     .de     (hw2reg.targ_group[3].group_addr.de),
@@ -14600,16 +15152,17 @@ module i3c_reg_top
   //   F[targets_3]: 11:8
   prim_subreg #(
     .DW      (4),
-    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
     .RESVAL  (4'h0),
     .Mubi    (1'b0)
   ) u_targ_group_3_targets_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
-    .we     (1'b0),
-    .wd     ('0),
+    .we     (targ_group_3_we),
+    .wd     (targ_group_3_targets_3_wd),
 
     // from internal hardware
     .de     (hw2reg.targ_group[3].targets.de),
@@ -14628,18 +15181,22 @@ module i3c_reg_top
   // Subregister 4 of Multireg targ_group
   // R[targ_group_4]: V(False)
   //   F[group_addr_4]: 6:0
+  // Reinit
+  assign reg2hw.targ_group[4].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (7),
-    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
     .RESVAL  (7'h0),
     .Mubi    (1'b0)
   ) u_targ_group_4_group_addr_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
-    .we     (1'b0),
-    .wd     ('0),
+    .we     (targ_group_4_we),
+    .wd     (targ_group_4_group_addr_4_wd),
 
     // from internal hardware
     .de     (hw2reg.targ_group[4].group_addr.de),
@@ -14657,16 +15214,17 @@ module i3c_reg_top
   //   F[targets_4]: 11:8
   prim_subreg #(
     .DW      (4),
-    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
     .RESVAL  (4'h0),
     .Mubi    (1'b0)
   ) u_targ_group_4_targets_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
-    .we     (1'b0),
-    .wd     ('0),
+    .we     (targ_group_4_we),
+    .wd     (targ_group_4_targets_4_wd),
 
     // from internal hardware
     .de     (hw2reg.targ_group[4].targets.de),
@@ -14685,18 +15243,22 @@ module i3c_reg_top
   // Subregister 5 of Multireg targ_group
   // R[targ_group_5]: V(False)
   //   F[group_addr_5]: 6:0
+  // Reinit
+  assign reg2hw.targ_group[5].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (7),
-    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
     .RESVAL  (7'h0),
     .Mubi    (1'b0)
   ) u_targ_group_5_group_addr_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
-    .we     (1'b0),
-    .wd     ('0),
+    .we     (targ_group_5_we),
+    .wd     (targ_group_5_group_addr_5_wd),
 
     // from internal hardware
     .de     (hw2reg.targ_group[5].group_addr.de),
@@ -14714,16 +15276,17 @@ module i3c_reg_top
   //   F[targets_5]: 11:8
   prim_subreg #(
     .DW      (4),
-    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
     .RESVAL  (4'h0),
     .Mubi    (1'b0)
   ) u_targ_group_5_targets_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
-    .we     (1'b0),
-    .wd     ('0),
+    .we     (targ_group_5_we),
+    .wd     (targ_group_5_targets_5_wd),
 
     // from internal hardware
     .de     (hw2reg.targ_group[5].targets.de),
@@ -14742,18 +15305,22 @@ module i3c_reg_top
   // Subregister 6 of Multireg targ_group
   // R[targ_group_6]: V(False)
   //   F[group_addr_6]: 6:0
+  // Reinit
+  assign reg2hw.targ_group[6].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (7),
-    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
     .RESVAL  (7'h0),
     .Mubi    (1'b0)
   ) u_targ_group_6_group_addr_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
-    .we     (1'b0),
-    .wd     ('0),
+    .we     (targ_group_6_we),
+    .wd     (targ_group_6_group_addr_6_wd),
 
     // from internal hardware
     .de     (hw2reg.targ_group[6].group_addr.de),
@@ -14771,16 +15338,17 @@ module i3c_reg_top
   //   F[targets_6]: 11:8
   prim_subreg #(
     .DW      (4),
-    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
     .RESVAL  (4'h0),
     .Mubi    (1'b0)
   ) u_targ_group_6_targets_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
-    .we     (1'b0),
-    .wd     ('0),
+    .we     (targ_group_6_we),
+    .wd     (targ_group_6_targets_6_wd),
 
     // from internal hardware
     .de     (hw2reg.targ_group[6].targets.de),
@@ -14799,18 +15367,22 @@ module i3c_reg_top
   // Subregister 7 of Multireg targ_group
   // R[targ_group_7]: V(False)
   //   F[group_addr_7]: 6:0
+  // Reinit
+  assign reg2hw.targ_group[7].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (7),
-    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
     .RESVAL  (7'h0),
     .Mubi    (1'b0)
   ) u_targ_group_7_group_addr_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
-    .we     (1'b0),
-    .wd     ('0),
+    .we     (targ_group_7_we),
+    .wd     (targ_group_7_group_addr_7_wd),
 
     // from internal hardware
     .de     (hw2reg.targ_group[7].group_addr.de),
@@ -14828,16 +15400,17 @@ module i3c_reg_top
   //   F[targets_7]: 11:8
   prim_subreg #(
     .DW      (4),
-    .SwAccess(prim_subreg_pkg::SwAccessRO),
+    .SwAccess(prim_subreg_pkg::SwAccessRW),
     .RESVAL  (4'h0),
     .Mubi    (1'b0)
   ) u_targ_group_7_targets_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
-    .we     (1'b0),
-    .wd     ('0),
+    .we     (targ_group_7_we),
+    .wd     (targ_group_7_targets_7_wd),
 
     // from internal hardware
     .de     (hw2reg.targ_group[7].targets.de),
@@ -14856,6 +15429,9 @@ module i3c_reg_top
   // Subregister 0 of Multireg targ_tx_thld_ctrl
   // R[targ_tx_thld_ctrl_0]: V(False)
   //   F[tx_buf_free_thld_0]: 11:0
+  // Reinit
+  assign reg2hw.targ_tx_thld_ctrl[0].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (12),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -14864,6 +15440,7 @@ module i3c_reg_top
   ) u_targ_tx_thld_ctrl_0_tx_buf_free_thld_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_tx_thld_ctrl_0_we),
@@ -14891,6 +15468,7 @@ module i3c_reg_top
   ) u_targ_tx_thld_ctrl_0_tx_desc_empty_thld_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_tx_thld_ctrl_0_we),
@@ -14918,6 +15496,7 @@ module i3c_reg_top
   ) u_targ_tx_thld_ctrl_0_tx_start_thld_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_tx_thld_ctrl_0_we),
@@ -14940,6 +15519,9 @@ module i3c_reg_top
   // Subregister 1 of Multireg targ_tx_thld_ctrl
   // R[targ_tx_thld_ctrl_1]: V(False)
   //   F[tx_buf_free_thld_1]: 11:0
+  // Reinit
+  assign reg2hw.targ_tx_thld_ctrl[1].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (12),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -14948,6 +15530,7 @@ module i3c_reg_top
   ) u_targ_tx_thld_ctrl_1_tx_buf_free_thld_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_tx_thld_ctrl_1_we),
@@ -14975,6 +15558,7 @@ module i3c_reg_top
   ) u_targ_tx_thld_ctrl_1_tx_desc_empty_thld_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_tx_thld_ctrl_1_we),
@@ -15002,6 +15586,7 @@ module i3c_reg_top
   ) u_targ_tx_thld_ctrl_1_tx_start_thld_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_tx_thld_ctrl_1_we),
@@ -15024,6 +15609,9 @@ module i3c_reg_top
   // Subregister 2 of Multireg targ_tx_thld_ctrl
   // R[targ_tx_thld_ctrl_2]: V(False)
   //   F[tx_buf_free_thld_2]: 11:0
+  // Reinit
+  assign reg2hw.targ_tx_thld_ctrl[2].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (12),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -15032,6 +15620,7 @@ module i3c_reg_top
   ) u_targ_tx_thld_ctrl_2_tx_buf_free_thld_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_tx_thld_ctrl_2_we),
@@ -15059,6 +15648,7 @@ module i3c_reg_top
   ) u_targ_tx_thld_ctrl_2_tx_desc_empty_thld_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_tx_thld_ctrl_2_we),
@@ -15086,6 +15676,7 @@ module i3c_reg_top
   ) u_targ_tx_thld_ctrl_2_tx_start_thld_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_tx_thld_ctrl_2_we),
@@ -15108,6 +15699,9 @@ module i3c_reg_top
   // Subregister 3 of Multireg targ_tx_thld_ctrl
   // R[targ_tx_thld_ctrl_3]: V(False)
   //   F[tx_buf_free_thld_3]: 11:0
+  // Reinit
+  assign reg2hw.targ_tx_thld_ctrl[3].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (12),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -15116,6 +15710,7 @@ module i3c_reg_top
   ) u_targ_tx_thld_ctrl_3_tx_buf_free_thld_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_tx_thld_ctrl_3_we),
@@ -15143,6 +15738,7 @@ module i3c_reg_top
   ) u_targ_tx_thld_ctrl_3_tx_desc_empty_thld_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_tx_thld_ctrl_3_we),
@@ -15170,6 +15766,7 @@ module i3c_reg_top
   ) u_targ_tx_thld_ctrl_3_tx_start_thld_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_tx_thld_ctrl_3_we),
@@ -15324,6 +15921,9 @@ module i3c_reg_top
   // Subregister 0 of Multireg targ_addr
   // R[targ_addr_0]: V(False)
   //   F[static_addr_0]: 6:0
+  // Reinit
+  assign reg2hw.targ_addr[0].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (7),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -15332,6 +15932,7 @@ module i3c_reg_top
   ) u_targ_addr_0_static_addr_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_addr_0_we),
@@ -15359,6 +15960,7 @@ module i3c_reg_top
   ) u_targ_addr_0_static_addr_valid_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_addr_0_we),
@@ -15386,6 +15988,7 @@ module i3c_reg_top
   ) u_targ_addr_0_dynamic_addr_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_addr_0_we),
@@ -15413,6 +16016,7 @@ module i3c_reg_top
   ) u_targ_addr_0_dynamic_addr_valid_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_addr_0_we),
@@ -15435,6 +16039,9 @@ module i3c_reg_top
   // Subregister 1 of Multireg targ_addr
   // R[targ_addr_1]: V(False)
   //   F[static_addr_1]: 6:0
+  // Reinit
+  assign reg2hw.targ_addr[1].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (7),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -15443,6 +16050,7 @@ module i3c_reg_top
   ) u_targ_addr_1_static_addr_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_addr_1_we),
@@ -15470,6 +16078,7 @@ module i3c_reg_top
   ) u_targ_addr_1_static_addr_valid_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_addr_1_we),
@@ -15497,6 +16106,7 @@ module i3c_reg_top
   ) u_targ_addr_1_dynamic_addr_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_addr_1_we),
@@ -15524,6 +16134,7 @@ module i3c_reg_top
   ) u_targ_addr_1_dynamic_addr_valid_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_addr_1_we),
@@ -15546,6 +16157,9 @@ module i3c_reg_top
   // Subregister 2 of Multireg targ_addr
   // R[targ_addr_2]: V(False)
   //   F[static_addr_2]: 6:0
+  // Reinit
+  assign reg2hw.targ_addr[2].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (7),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -15554,6 +16168,7 @@ module i3c_reg_top
   ) u_targ_addr_2_static_addr_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_addr_2_we),
@@ -15581,6 +16196,7 @@ module i3c_reg_top
   ) u_targ_addr_2_static_addr_valid_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_addr_2_we),
@@ -15608,6 +16224,7 @@ module i3c_reg_top
   ) u_targ_addr_2_dynamic_addr_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_addr_2_we),
@@ -15635,6 +16252,7 @@ module i3c_reg_top
   ) u_targ_addr_2_dynamic_addr_valid_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_addr_2_we),
@@ -15657,6 +16275,9 @@ module i3c_reg_top
   // Subregister 3 of Multireg targ_addr
   // R[targ_addr_3]: V(False)
   //   F[static_addr_3]: 6:0
+  // Reinit
+  assign reg2hw.targ_addr[3].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (7),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -15665,6 +16286,7 @@ module i3c_reg_top
   ) u_targ_addr_3_static_addr_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_addr_3_we),
@@ -15692,6 +16314,7 @@ module i3c_reg_top
   ) u_targ_addr_3_static_addr_valid_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_addr_3_we),
@@ -15719,6 +16342,7 @@ module i3c_reg_top
   ) u_targ_addr_3_dynamic_addr_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_addr_3_we),
@@ -15746,6 +16370,7 @@ module i3c_reg_top
   ) u_targ_addr_3_dynamic_addr_valid_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_addr_3_we),
@@ -15768,6 +16393,9 @@ module i3c_reg_top
   // Subregister 0 of Multireg targ_char
   // R[targ_char_0]: V(False)
   //   F[pid_hi_0]: 15:0
+  // Reinit
+  assign reg2hw.targ_char[0].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (16),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -15776,6 +16404,7 @@ module i3c_reg_top
   ) u_targ_char_0_pid_hi_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_char_0_we),
@@ -15803,6 +16432,7 @@ module i3c_reg_top
   ) u_targ_char_0_dcr_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_char_0_we),
@@ -15830,6 +16460,7 @@ module i3c_reg_top
   ) u_targ_char_0_bcr_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_char_0_we),
@@ -15852,6 +16483,9 @@ module i3c_reg_top
   // Subregister 1 of Multireg targ_char
   // R[targ_char_1]: V(False)
   //   F[pid_hi_1]: 15:0
+  // Reinit
+  assign reg2hw.targ_char[1].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (16),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -15860,6 +16494,7 @@ module i3c_reg_top
   ) u_targ_char_1_pid_hi_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_char_1_we),
@@ -15887,6 +16522,7 @@ module i3c_reg_top
   ) u_targ_char_1_dcr_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_char_1_we),
@@ -15914,6 +16550,7 @@ module i3c_reg_top
   ) u_targ_char_1_bcr_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_char_1_we),
@@ -15936,6 +16573,9 @@ module i3c_reg_top
   // Subregister 2 of Multireg targ_char
   // R[targ_char_2]: V(False)
   //   F[pid_hi_2]: 15:0
+  // Reinit
+  assign reg2hw.targ_char[2].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (16),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -15944,6 +16584,7 @@ module i3c_reg_top
   ) u_targ_char_2_pid_hi_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_char_2_we),
@@ -15971,6 +16612,7 @@ module i3c_reg_top
   ) u_targ_char_2_dcr_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_char_2_we),
@@ -15998,6 +16640,7 @@ module i3c_reg_top
   ) u_targ_char_2_bcr_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_char_2_we),
@@ -16020,6 +16663,9 @@ module i3c_reg_top
   // Subregister 3 of Multireg targ_char
   // R[targ_char_3]: V(False)
   //   F[pid_hi_3]: 15:0
+  // Reinit
+  assign reg2hw.targ_char[3].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (16),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -16028,6 +16674,7 @@ module i3c_reg_top
   ) u_targ_char_3_pid_hi_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_char_3_we),
@@ -16055,6 +16702,7 @@ module i3c_reg_top
   ) u_targ_char_3_dcr_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_char_3_we),
@@ -16082,6 +16730,7 @@ module i3c_reg_top
   ) u_targ_char_3_bcr_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_char_3_we),
@@ -16103,6 +16752,9 @@ module i3c_reg_top
 
   // Subregister 0 of Multireg targ_pid_lo
   // R[targ_pid_lo_0]: V(False)
+  // Reinit
+  assign reg2hw.targ_pid_lo[0].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (32),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -16111,6 +16763,7 @@ module i3c_reg_top
   ) u_targ_pid_lo_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_pid_lo_0_we),
@@ -16132,6 +16785,9 @@ module i3c_reg_top
 
   // Subregister 1 of Multireg targ_pid_lo
   // R[targ_pid_lo_1]: V(False)
+  // Reinit
+  assign reg2hw.targ_pid_lo[1].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (32),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -16140,6 +16796,7 @@ module i3c_reg_top
   ) u_targ_pid_lo_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_pid_lo_1_we),
@@ -16161,6 +16818,9 @@ module i3c_reg_top
 
   // Subregister 2 of Multireg targ_pid_lo
   // R[targ_pid_lo_2]: V(False)
+  // Reinit
+  assign reg2hw.targ_pid_lo[2].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (32),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -16169,6 +16829,7 @@ module i3c_reg_top
   ) u_targ_pid_lo_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_pid_lo_2_we),
@@ -16190,6 +16851,9 @@ module i3c_reg_top
 
   // Subregister 3 of Multireg targ_pid_lo
   // R[targ_pid_lo_3]: V(False)
+  // Reinit
+  assign reg2hw.targ_pid_lo[3].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (32),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -16198,6 +16862,7 @@ module i3c_reg_top
   ) u_targ_pid_lo_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_pid_lo_3_we),
@@ -16220,6 +16885,9 @@ module i3c_reg_top
   // Subregister 0 of Multireg targ_caps
   // R[targ_caps_0]: V(False)
   //   F[vtcap1_type_0]: 2:0
+  // Reinit
+  assign reg2hw.targ_caps[0].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (3),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -16228,6 +16896,7 @@ module i3c_reg_top
   ) u_targ_caps_0_vtcap1_type_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_0_we),
@@ -16255,6 +16924,7 @@ module i3c_reg_top
   ) u_targ_caps_0_vtcap1_side_fx_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_0_we),
@@ -16282,6 +16952,7 @@ module i3c_reg_top
   ) u_targ_caps_0_vtcap1_shared_det_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_0_we),
@@ -16309,6 +16980,7 @@ module i3c_reg_top
   ) u_targ_caps_0_vtcap2_irq_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_0_we),
@@ -16336,6 +17008,7 @@ module i3c_reg_top
   ) u_targ_caps_0_vtcap2_addr_remap_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_0_we),
@@ -16363,6 +17036,7 @@ module i3c_reg_top
   ) u_targ_caps_0_vtcap2_bus_ctx_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_0_we),
@@ -16385,6 +17059,9 @@ module i3c_reg_top
   // Subregister 1 of Multireg targ_caps
   // R[targ_caps_1]: V(False)
   //   F[vtcap1_type_1]: 2:0
+  // Reinit
+  assign reg2hw.targ_caps[1].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (3),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -16393,6 +17070,7 @@ module i3c_reg_top
   ) u_targ_caps_1_vtcap1_type_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_1_we),
@@ -16420,6 +17098,7 @@ module i3c_reg_top
   ) u_targ_caps_1_vtcap1_side_fx_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_1_we),
@@ -16447,6 +17126,7 @@ module i3c_reg_top
   ) u_targ_caps_1_vtcap1_shared_det_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_1_we),
@@ -16474,6 +17154,7 @@ module i3c_reg_top
   ) u_targ_caps_1_vtcap2_irq_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_1_we),
@@ -16501,6 +17182,7 @@ module i3c_reg_top
   ) u_targ_caps_1_vtcap2_addr_remap_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_1_we),
@@ -16528,6 +17210,7 @@ module i3c_reg_top
   ) u_targ_caps_1_vtcap2_bus_ctx_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_1_we),
@@ -16550,6 +17233,9 @@ module i3c_reg_top
   // Subregister 2 of Multireg targ_caps
   // R[targ_caps_2]: V(False)
   //   F[vtcap1_type_2]: 2:0
+  // Reinit
+  assign reg2hw.targ_caps[2].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (3),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -16558,6 +17244,7 @@ module i3c_reg_top
   ) u_targ_caps_2_vtcap1_type_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_2_we),
@@ -16585,6 +17272,7 @@ module i3c_reg_top
   ) u_targ_caps_2_vtcap1_side_fx_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_2_we),
@@ -16612,6 +17300,7 @@ module i3c_reg_top
   ) u_targ_caps_2_vtcap1_shared_det_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_2_we),
@@ -16639,6 +17328,7 @@ module i3c_reg_top
   ) u_targ_caps_2_vtcap2_irq_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_2_we),
@@ -16666,6 +17356,7 @@ module i3c_reg_top
   ) u_targ_caps_2_vtcap2_addr_remap_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_2_we),
@@ -16693,6 +17384,7 @@ module i3c_reg_top
   ) u_targ_caps_2_vtcap2_bus_ctx_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_2_we),
@@ -16715,6 +17407,9 @@ module i3c_reg_top
   // Subregister 3 of Multireg targ_caps
   // R[targ_caps_3]: V(False)
   //   F[vtcap1_type_3]: 2:0
+  // Reinit
+  assign reg2hw.targ_caps[3].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (3),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -16723,6 +17418,7 @@ module i3c_reg_top
   ) u_targ_caps_3_vtcap1_type_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_3_we),
@@ -16750,6 +17446,7 @@ module i3c_reg_top
   ) u_targ_caps_3_vtcap1_side_fx_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_3_we),
@@ -16777,6 +17474,7 @@ module i3c_reg_top
   ) u_targ_caps_3_vtcap1_shared_det_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_3_we),
@@ -16804,6 +17502,7 @@ module i3c_reg_top
   ) u_targ_caps_3_vtcap2_irq_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_3_we),
@@ -16831,6 +17530,7 @@ module i3c_reg_top
   ) u_targ_caps_3_vtcap2_addr_remap_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_3_we),
@@ -16858,6 +17558,7 @@ module i3c_reg_top
   ) u_targ_caps_3_vtcap2_bus_ctx_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_caps_3_we),
@@ -16880,6 +17581,9 @@ module i3c_reg_top
   // Subregister 0 of Multireg targ_info
   // R[targ_info_0]: V(False)
   //   F[as_0]: 1:0
+  // Reinit
+  assign reg2hw.targ_info[0].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (2),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -16888,6 +17592,7 @@ module i3c_reg_top
   ) u_targ_info_0_as_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -16915,6 +17620,7 @@ module i3c_reg_top
   ) u_targ_info_0_endxfer_wr_nack_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -16942,6 +17648,7 @@ module i3c_reg_top
   ) u_targ_info_0_endxfer_wr_early_term_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -16969,6 +17676,7 @@ module i3c_reg_top
   ) u_targ_info_0_endxfer_crc_early_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -16996,6 +17704,7 @@ module i3c_reg_top
   ) u_targ_info_0_endxfer_cand_wr_nack_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17023,6 +17732,7 @@ module i3c_reg_top
   ) u_targ_info_0_endxfer_cand_wr_early_term_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17050,6 +17760,7 @@ module i3c_reg_top
   ) u_targ_info_0_endxfer_cand_crc_early_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17072,6 +17783,9 @@ module i3c_reg_top
   // Subregister 1 of Multireg targ_info
   // R[targ_info_1]: V(False)
   //   F[as_1]: 1:0
+  // Reinit
+  assign reg2hw.targ_info[1].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (2),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -17080,6 +17794,7 @@ module i3c_reg_top
   ) u_targ_info_1_as_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17107,6 +17822,7 @@ module i3c_reg_top
   ) u_targ_info_1_endxfer_wr_nack_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17134,6 +17850,7 @@ module i3c_reg_top
   ) u_targ_info_1_endxfer_wr_early_term_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17161,6 +17878,7 @@ module i3c_reg_top
   ) u_targ_info_1_endxfer_crc_early_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17188,6 +17906,7 @@ module i3c_reg_top
   ) u_targ_info_1_endxfer_cand_wr_nack_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17215,6 +17934,7 @@ module i3c_reg_top
   ) u_targ_info_1_endxfer_cand_wr_early_term_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17242,6 +17962,7 @@ module i3c_reg_top
   ) u_targ_info_1_endxfer_cand_crc_early_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17264,6 +17985,9 @@ module i3c_reg_top
   // Subregister 2 of Multireg targ_info
   // R[targ_info_2]: V(False)
   //   F[as_2]: 1:0
+  // Reinit
+  assign reg2hw.targ_info[2].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (2),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -17272,6 +17996,7 @@ module i3c_reg_top
   ) u_targ_info_2_as_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17299,6 +18024,7 @@ module i3c_reg_top
   ) u_targ_info_2_endxfer_wr_nack_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17326,6 +18052,7 @@ module i3c_reg_top
   ) u_targ_info_2_endxfer_wr_early_term_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17353,6 +18080,7 @@ module i3c_reg_top
   ) u_targ_info_2_endxfer_crc_early_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17380,6 +18108,7 @@ module i3c_reg_top
   ) u_targ_info_2_endxfer_cand_wr_nack_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17407,6 +18136,7 @@ module i3c_reg_top
   ) u_targ_info_2_endxfer_cand_wr_early_term_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17434,6 +18164,7 @@ module i3c_reg_top
   ) u_targ_info_2_endxfer_cand_crc_early_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17456,6 +18187,9 @@ module i3c_reg_top
   // Subregister 3 of Multireg targ_info
   // R[targ_info_3]: V(False)
   //   F[as_3]: 1:0
+  // Reinit
+  assign reg2hw.targ_info[3].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (2),
     .SwAccess(prim_subreg_pkg::SwAccessRO),
@@ -17464,6 +18198,7 @@ module i3c_reg_top
   ) u_targ_info_3_as_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17491,6 +18226,7 @@ module i3c_reg_top
   ) u_targ_info_3_endxfer_wr_nack_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17518,6 +18254,7 @@ module i3c_reg_top
   ) u_targ_info_3_endxfer_wr_early_term_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17545,6 +18282,7 @@ module i3c_reg_top
   ) u_targ_info_3_endxfer_crc_early_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17572,6 +18310,7 @@ module i3c_reg_top
   ) u_targ_info_3_endxfer_cand_wr_nack_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17599,6 +18338,7 @@ module i3c_reg_top
   ) u_targ_info_3_endxfer_cand_wr_early_term_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17626,6 +18366,7 @@ module i3c_reg_top
   ) u_targ_info_3_endxfer_cand_crc_early_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (1'b0),
@@ -17648,6 +18389,9 @@ module i3c_reg_top
   // Subregister 0 of Multireg targ_max_rdwr
   // R[targ_max_rdwr_0]: V(False)
   //   F[maxrd_0]: 6:0
+  // Reinit
+  assign reg2hw.targ_max_rdwr[0].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (7),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -17656,6 +18400,7 @@ module i3c_reg_top
   ) u_targ_max_rdwr_0_maxrd_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_max_rdwr_0_we),
@@ -17683,6 +18428,7 @@ module i3c_reg_top
   ) u_targ_max_rdwr_0_maxwr_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_max_rdwr_0_we),
@@ -17710,6 +18456,7 @@ module i3c_reg_top
   ) u_targ_max_rdwr_0_rdturn_val_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_max_rdwr_0_we),
@@ -17737,6 +18484,7 @@ module i3c_reg_top
   ) u_targ_max_rdwr_0_rdturn_scale_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_max_rdwr_0_we),
@@ -17759,6 +18507,9 @@ module i3c_reg_top
   // Subregister 1 of Multireg targ_max_rdwr
   // R[targ_max_rdwr_1]: V(False)
   //   F[maxrd_1]: 6:0
+  // Reinit
+  assign reg2hw.targ_max_rdwr[1].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (7),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -17767,6 +18518,7 @@ module i3c_reg_top
   ) u_targ_max_rdwr_1_maxrd_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_max_rdwr_1_we),
@@ -17794,6 +18546,7 @@ module i3c_reg_top
   ) u_targ_max_rdwr_1_maxwr_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_max_rdwr_1_we),
@@ -17821,6 +18574,7 @@ module i3c_reg_top
   ) u_targ_max_rdwr_1_rdturn_val_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_max_rdwr_1_we),
@@ -17848,6 +18602,7 @@ module i3c_reg_top
   ) u_targ_max_rdwr_1_rdturn_scale_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_max_rdwr_1_we),
@@ -17870,6 +18625,9 @@ module i3c_reg_top
   // Subregister 2 of Multireg targ_max_rdwr
   // R[targ_max_rdwr_2]: V(False)
   //   F[maxrd_2]: 6:0
+  // Reinit
+  assign reg2hw.targ_max_rdwr[2].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (7),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -17878,6 +18636,7 @@ module i3c_reg_top
   ) u_targ_max_rdwr_2_maxrd_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_max_rdwr_2_we),
@@ -17905,6 +18664,7 @@ module i3c_reg_top
   ) u_targ_max_rdwr_2_maxwr_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_max_rdwr_2_we),
@@ -17932,6 +18692,7 @@ module i3c_reg_top
   ) u_targ_max_rdwr_2_rdturn_val_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_max_rdwr_2_we),
@@ -17959,6 +18720,7 @@ module i3c_reg_top
   ) u_targ_max_rdwr_2_rdturn_scale_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_max_rdwr_2_we),
@@ -17981,6 +18743,9 @@ module i3c_reg_top
   // Subregister 3 of Multireg targ_max_rdwr
   // R[targ_max_rdwr_3]: V(False)
   //   F[maxrd_3]: 6:0
+  // Reinit
+  assign reg2hw.targ_max_rdwr[3].reinit = tti_sw_reinit_i;
+
   prim_subreg #(
     .DW      (7),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
@@ -17989,6 +18754,7 @@ module i3c_reg_top
   ) u_targ_max_rdwr_3_maxrd_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_max_rdwr_3_we),
@@ -18016,6 +18782,7 @@ module i3c_reg_top
   ) u_targ_max_rdwr_3_maxwr_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_max_rdwr_3_we),
@@ -18043,6 +18810,7 @@ module i3c_reg_top
   ) u_targ_max_rdwr_3_rdturn_val_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_max_rdwr_3_we),
@@ -18070,6 +18838,7 @@ module i3c_reg_top
   ) u_targ_max_rdwr_3_rdturn_scale_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(tti_sw_reinit_i),
 
     // from register interface
     .we     (targ_max_rdwr_3_we),
@@ -18606,7 +19375,9 @@ module i3c_reg_top
   assign intr_test_targ_wd = reg_wdata[1];
   assign alert_test_we = racl_addr_hit_write[3] & reg_we & !reg_error;
 
-  assign alert_test_wd = reg_wdata[0];
+  assign alert_test_fatal_fault_wd = reg_wdata[0];
+
+  assign alert_test_regwen_wd = reg_wdata[31];
   assign info_re = racl_addr_hit_read[4] & reg_re & !reg_error;
   assign ctrl_status_re = racl_addr_hit_read[5] & reg_re & !reg_error;
   assign ctrl_error_we = racl_addr_hit_write[6] & reg_we & !reg_error;
@@ -18630,7 +19401,7 @@ module i3c_reg_top
 
   assign targ_control_hj_request_wd = reg_wdata[30];
 
-  assign targ_control_reset_wd = reg_wdata[31];
+  assign targ_control_sw_reset_wd = reg_wdata[31];
   assign targ_status_re = racl_addr_hit_read[8] & reg_re & !reg_error;
   assign targ_status_we = racl_addr_hit_write[8] & reg_we & !reg_error;
 
@@ -19357,7 +20128,7 @@ module i3c_reg_top
 
   assign targ_async_evt_control_bus_events_wd = reg_wdata[7];
 
-  assign targ_async_evt_control_reset_wd = reg_wdata[31];
+  assign targ_async_evt_control_queue_reset_wd = reg_wdata[31];
   assign targ_error_we = racl_addr_hit_write[130] & reg_we & !reg_error;
 
   assign targ_error_te0_wd = reg_wdata[3:0];
@@ -19426,6 +20197,46 @@ module i3c_reg_top
   assign targ_enable_enable_2_wd = reg_wdata[2];
 
   assign targ_enable_enable_3_wd = reg_wdata[3];
+  assign targ_group_0_we = racl_addr_hit_write[146] & reg_we & !reg_error;
+
+  assign targ_group_0_group_addr_0_wd = reg_wdata[6:0];
+
+  assign targ_group_0_targets_0_wd = reg_wdata[11:8];
+  assign targ_group_1_we = racl_addr_hit_write[147] & reg_we & !reg_error;
+
+  assign targ_group_1_group_addr_1_wd = reg_wdata[6:0];
+
+  assign targ_group_1_targets_1_wd = reg_wdata[11:8];
+  assign targ_group_2_we = racl_addr_hit_write[148] & reg_we & !reg_error;
+
+  assign targ_group_2_group_addr_2_wd = reg_wdata[6:0];
+
+  assign targ_group_2_targets_2_wd = reg_wdata[11:8];
+  assign targ_group_3_we = racl_addr_hit_write[149] & reg_we & !reg_error;
+
+  assign targ_group_3_group_addr_3_wd = reg_wdata[6:0];
+
+  assign targ_group_3_targets_3_wd = reg_wdata[11:8];
+  assign targ_group_4_we = racl_addr_hit_write[150] & reg_we & !reg_error;
+
+  assign targ_group_4_group_addr_4_wd = reg_wdata[6:0];
+
+  assign targ_group_4_targets_4_wd = reg_wdata[11:8];
+  assign targ_group_5_we = racl_addr_hit_write[151] & reg_we & !reg_error;
+
+  assign targ_group_5_group_addr_5_wd = reg_wdata[6:0];
+
+  assign targ_group_5_targets_5_wd = reg_wdata[11:8];
+  assign targ_group_6_we = racl_addr_hit_write[152] & reg_we & !reg_error;
+
+  assign targ_group_6_group_addr_6_wd = reg_wdata[6:0];
+
+  assign targ_group_6_targets_6_wd = reg_wdata[11:8];
+  assign targ_group_7_we = racl_addr_hit_write[153] & reg_we & !reg_error;
+
+  assign targ_group_7_group_addr_7_wd = reg_wdata[6:0];
+
+  assign targ_group_7_targets_7_wd = reg_wdata[11:8];
   assign targ_tx_thld_ctrl_0_we = racl_addr_hit_write[154] & reg_we & !reg_error;
 
   assign targ_tx_thld_ctrl_0_tx_buf_free_thld_0_wd = reg_wdata[11:0];
@@ -19773,14 +20584,14 @@ module i3c_reg_top
     reg_we_check[143] = 1'b0;
     reg_we_check[144] = 1'b0;
     reg_we_check[145] = targ_enable_we;
-    reg_we_check[146] = 1'b0;
-    reg_we_check[147] = 1'b0;
-    reg_we_check[148] = 1'b0;
-    reg_we_check[149] = 1'b0;
-    reg_we_check[150] = 1'b0;
-    reg_we_check[151] = 1'b0;
-    reg_we_check[152] = 1'b0;
-    reg_we_check[153] = 1'b0;
+    reg_we_check[146] = targ_group_0_we;
+    reg_we_check[147] = targ_group_1_we;
+    reg_we_check[148] = targ_group_2_we;
+    reg_we_check[149] = targ_group_3_we;
+    reg_we_check[150] = targ_group_4_we;
+    reg_we_check[151] = targ_group_5_we;
+    reg_we_check[152] = targ_group_6_we;
+    reg_we_check[153] = targ_group_7_we;
     reg_we_check[154] = targ_tx_thld_ctrl_0_we;
     reg_we_check[155] = targ_tx_thld_ctrl_1_we;
     reg_we_check[156] = targ_tx_thld_ctrl_2_we;
@@ -19838,6 +20649,7 @@ module i3c_reg_top
 
       racl_addr_hit_read[3]: begin
         reg_rdata_next[0] = '0;
+        reg_rdata_next[31] = alert_test_regwen_qs;
       end
 
       racl_addr_hit_read[4]: begin
@@ -19872,9 +20684,10 @@ module i3c_reg_top
         reg_rdata_next[14:0] = targ_status_ext_info_qs;
         reg_rdata_next[15] = targ_status_ext_present_qs;
         reg_rdata_next[23:16] = targ_status_rstact_qs;
-        reg_rdata_next[24] = targ_status_rstact_virt_targ_det_qs;
-        reg_rdata_next[25] = targ_status_vtm_qs;
-        reg_rdata_next[26] = targ_status_protocol_error_qs;
+        reg_rdata_next[26:24] = targ_status_num_targets_qs;
+        reg_rdata_next[27] = targ_status_vtm_qs;
+        reg_rdata_next[28] = targ_status_protocol_error_qs;
+        reg_rdata_next[29] = targ_status_connected_qs;
         reg_rdata_next[30] = targ_status_active_qs;
         reg_rdata_next[31] = targ_status_present_qs;
       end
@@ -20719,7 +21532,7 @@ module i3c_reg_top
         reg_rdata_next[5] = targ_async_evt_control_tx_suspend_qs;
         reg_rdata_next[6] = targ_async_evt_control_ibi_suspend_qs;
         reg_rdata_next[7] = targ_async_evt_control_bus_events_qs;
-        reg_rdata_next[31] = targ_async_evt_control_reset_qs;
+        reg_rdata_next[31] = targ_async_evt_control_queue_reset_qs;
       end
 
       racl_addr_hit_read[130]: begin

@@ -10,7 +10,9 @@
 #include "sw/device/lib/base/memory.h"
 #include "sw/device/lib/crypto/drivers/aes.h"
 #include "sw/device/lib/crypto/drivers/keymgr_dpe.h"
+#include "sw/device/lib/crypto/impl/cmvp.h"
 #include "sw/device/lib/crypto/impl/keyblob.h"
+#include "sw/device/lib/crypto/impl/state.h"
 #include "sw/device/lib/crypto/impl/status.h"
 #include "sw/device/lib/crypto/include/config.h"
 #include "sw/device/lib/crypto/include/datatypes.h"
@@ -69,6 +71,7 @@ static status_t aes_key_construct(otcrypto_blinded_key_t *blinded_key,
     aes_key->key_shares[0] = share0;
     aes_key->key_shares[1] = share1;
   } else {
+    // COVERAGE (MISSING) Invalid hw_backed boolean value is not covered.
     return OTCRYPTO_BAD_ARGS;
   }
   aes_key->sideload = blinded_key->config.hw_backed;
@@ -103,6 +106,7 @@ static status_t aes_key_construct(otcrypto_blinded_key_t *blinded_key,
           launder32(blinded_key_mode_used) | kOtcryptoKeyModeAesCtr;
       break;
     default:
+      // COVERAGE (MISSING) Non-AES key mode input is not covered.
       return OTCRYPTO_BAD_ARGS;
   }
   // Check if we landed in the correct case statement. Use ORs for this to
@@ -279,6 +283,7 @@ static status_t get_block(const otcrypto_const_byte_buf_t *input,
 otcrypto_status_t otcrypto_aes_padded_plaintext_length(
     size_t plaintext_len, otcrypto_aes_padding_t aes_padding,
     size_t *padded_len) {
+  OTCRYPTO_LOCKED_STATE_CHECK();
   size_t padded_nblocks;
   HARDENED_TRY(
       num_padded_blocks_get(plaintext_len, aes_padding, &padded_nblocks));
@@ -289,7 +294,8 @@ otcrypto_status_t otcrypto_aes_padded_plaintext_length(
 /**
  * Hardware cleanup guard.
  */
-static void hw_wipe_guard(uint32_t *dummy) {
+OT_USED static void hw_wipe_guard(uint32_t *dummy) {
+  (void)dummy;
   (void)aes_clear();
   (void)keymgr_dpe_sideload_clear_aes();
 }
@@ -364,6 +370,9 @@ static otcrypto_status_t otcrypto_aes_impl(
     HARDENED_CHECK_EQ(cipher_output->len, input_nblocks * kAesBlockNumBytes);
   } else {
     if (cipher_input->len == 0) {
+      // COVERAGE (FI CM) Redundant check when cipher_output is NULL during
+      // redundant execution; cipher_input->len was already checked in the
+      // primary execution.
       return OTCRYPTO_BAD_ARGS;
     }
   }
@@ -466,6 +475,8 @@ static otcrypto_status_t otcrypto_aes_impl(
           &cipher_output->data[(i - block_offset) * kAesBlockNumBytes],
           block_out.data, kAesBlockNumBytes));
     } else {
+      // COVERAGE (MISSING) Multi-block redundant execution (>2 blocks with
+      // medium/high security level) is not covered.
       HARDENED_CHECK_EQ(cipher_output, NULL);
     }
   }
@@ -509,12 +520,12 @@ static otcrypto_status_t otcrypto_aes_impl(
   } else {
     HARDENED_TRY(aes_end(&aes_iv));
     HARDENED_TRY(hardened_memcpy(iv->data, aes_iv.data, kAesBlockNumWords));
+    HARDENED_CHECK_EQ(kHardenedBoolTrue, OTCRYPTO_CHECK_BUF(iv));
   }
 
   if (cipher_output != NULL) {
     HARDENED_CHECK_EQ(kHardenedBoolTrue, OTCRYPTO_CHECK_BUF(cipher_output));
   }
-  HARDENED_CHECK_EQ(kHardenedBoolTrue, OTCRYPTO_CHECK_BUF(iv));
 
   return otcrypto_eval_exit(OTCRYPTO_OK);
 }
@@ -522,6 +533,7 @@ static otcrypto_status_t otcrypto_aes_impl(
 otcrypto_status_t otcrypto_aes_padding_strip(
     otcrypto_byte_buf_t *padded_plaintext, otcrypto_aes_padding_t aes_padding,
     size_t *plaintext_len) {
+  OTCRYPTO_LOCKED_STATE_CHECK();
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
   if (padded_plaintext == NULL || padded_plaintext->data == NULL ||
       plaintext_len == NULL) {
@@ -610,6 +622,10 @@ otcrypto_status_t otcrypto_aes(otcrypto_blinded_key_t *key,
                                const otcrypto_const_byte_buf_t *cipher_input,
                                otcrypto_aes_padding_t aes_padding,
                                otcrypto_byte_buf_t *cipher_output) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_AES);
+  OTCRYPTO_HEALTH_CHECK(kTestAesEcb256DecryptBit);
+  OTCRYPTO_HEALTH_CHECK(kTestAesGcm256EncryptBit);
+  OTCRYPTO_HEALTH_CHECK(kTestAesGcm256DecryptBit);
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
   // Check for NULL pointers in input pointers and data buffers.
   if (key == NULL || key->keyblob == NULL ||
@@ -636,9 +652,16 @@ otcrypto_status_t otcrypto_aes(otcrypto_blinded_key_t *key,
     // No FI protection with HARDENED_TRY() is needed as this is the redundant
     // IV.
     uint32_t iv_data[kAesBlockNumWords];
-    hardened_memcpy(iv_data, iv->data, kAesBlockNumWords);
-    otcrypto_word32_buf_t iv_redundant =
-        OTCRYPTO_MAKE_BUF(otcrypto_word32_buf_t, iv_data, iv->len);
+    otcrypto_word32_buf_t iv_redundant = {0};
+    otcrypto_word32_buf_t *iv_redundant_ptr = NULL;
+    if (aes_mode != kOtcryptoAesModeEcb) {
+      if (iv->len != kAesBlockNumWords) {
+        return OTCRYPTO_BAD_ARGS;
+      }
+      hardened_memcpy(iv_data, iv->data, kAesBlockNumWords);
+      iv_redundant = OTCRYPTO_MAKE_BUF(otcrypto_word32_buf_t, iv_data, iv->len);
+      iv_redundant_ptr = &iv_redundant;
+    }
 
     // First AES operation using the intended AES mode (encryption or
     // decryption).
@@ -662,9 +685,11 @@ otcrypto_status_t otcrypto_aes(otcrypto_blinded_key_t *key,
         otcrypto_const_byte_buf_t, cipher_output->data, cipher_output->len);
 
     aes_block_t checksum2 = {{0}};
+    // The first output is already whole blocks (it includes any padding), so
+    // the inverse operation must not pad it again.
     HARDENED_TRY(otcrypto_aes_impl(
-        key, &iv_redundant, aes_mode, aes_operation_inverse,
-        &cipher_input_redundant, aes_padding, NULL, &checksum2));
+        key, iv_redundant_ptr, aes_mode, aes_operation_inverse,
+        &cipher_input_redundant, kOtcryptoAesPaddingNull, NULL, &checksum2));
 
     // Comparison.
     HARDENED_CHECK_EQ(

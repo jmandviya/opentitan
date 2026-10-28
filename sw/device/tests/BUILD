@@ -19,6 +19,7 @@ load(
 )
 load(
     "//rules/opentitan:defs.bzl",
+    "CHERIOT_PLATFORM",
     "DARJEELING_TEST_ENVS",
     "EARLGREY_CW340_TEST_ENVS",
     "EARLGREY_SILICON_OWNER_ROM_EXT_ENVS",
@@ -36,6 +37,7 @@ load(
 load("//rules/opentitan:keyutils.bzl", "ECDSA_ONLY_KEY_STRUCTS")
 load("//hw/top:defs.bzl", "opentitan_if_ip", "opentitan_select_top")
 load("//rules/opentitan:util.bzl", "flatten")
+load("//rules:linker.bzl", "ld_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -755,6 +757,66 @@ opentitan_test(
         "//sw/device/lib/testing:rstmgr_testutils",
         "//sw/device/lib/testing/test_framework:ottf_main",
     ],
+)
+
+CHERIOT_SMOKETEST_DEPS = [
+    "//hw/top:rv_core_ibex_c_regs",
+    "//hw/top:top_lib",
+    "//hw/top:uart_c_regs",
+    "//sw/device/lib/base:multibits",
+    "//sw/device/silicon_creator/lib:manifest_def",
+]
+
+CHERIOT_SMOKETEST_ENVS = {
+    "//hw/top_earlgrey:sim_dv": None,
+    "//hw/top_earlgrey:sim_verilator": None,
+    "//hw/top_earlgrey:fpga_cw340_rom_ext": None,
+    "//hw/top_earlgrey:fpga_cw340_rom_with_fake_keys": None,
+    "//hw/top_earlgrey:fpga_cw340_test_rom": None,
+}
+
+# `FAIL <letter>` is emitted by the failure reporter in `cheriot_smoketest.S`,
+# `[RC]TRAP` by its trap handler.
+CHERIOT_SMOKETEST_FAILURE = "FAIL |[RC]TRAP "
+
+opentitan_test(
+    name = "cheriot_smoketest",
+    srcs = ["cheriot_smoketest.S"],
+    dv = dv_params(
+        defines = ["DV_TEST_STATUS"],
+    ),
+    exec_env = CHERIOT_SMOKETEST_ENVS,
+    fpga = fpga_params(
+        exit_failure = CHERIOT_SMOKETEST_FAILURE,
+        exit_success = "CHERIoT PASS!\r\n",
+    ),
+    local_defines = ["CHERIOT_MODE=1"],
+    platform = CHERIOT_PLATFORM,
+    verilator = verilator_params(
+        exit_failure = CHERIOT_SMOKETEST_FAILURE,
+        exit_success = "CHERIoT PASS!\r\n",
+    ),
+    deps = CHERIOT_SMOKETEST_DEPS,
+)
+
+opentitan_test(
+    name = "cheriot_smoketest_epmp",
+    srcs = ["cheriot_smoketest.S"],
+    dv = dv_params(
+        defines = ["DV_TEST_STATUS"],
+    ),
+    exec_env = CHERIOT_SMOKETEST_ENVS,
+    fpga = fpga_params(
+        exit_failure = CHERIOT_SMOKETEST_FAILURE,
+        exit_success = "ePMP PASS!\r\n",
+    ),
+    local_defines = ["CHERIOT_MODE=0"],
+    platform = CHERIOT_PLATFORM,
+    verilator = verilator_params(
+        exit_failure = CHERIOT_SMOKETEST_FAILURE,
+        exit_success = "ePMP PASS!\r\n",
+    ),
+    deps = CHERIOT_SMOKETEST_DEPS,
 )
 
 opentitan_test(
@@ -1601,6 +1663,7 @@ opentitan_test(
     deps = [
         ":otbn_randomness_impl",
         "//hw/top/dt",
+        "//sw/device/lib/arch:device",
         "//sw/device/lib/base:memory",
         "//sw/device/lib/base:mmio",
         "//sw/device/lib/dif:aes",
@@ -2563,6 +2626,46 @@ opentitan_test(
 )
 
 opentitan_test(
+    name = "keymgr_dpe_sideload_hmac_test",
+    srcs = ["keymgr_dpe_sideload_hmac_test.c"],
+    exec_env = dicts.add(
+        EARLGREY_TEST_ENVS,
+        EARLGREY_SILICON_OWNER_ROM_EXT_ENVS,
+        {
+            "//hw/top_earlgrey:silicon_creator": None,
+        },
+    ),
+    qemu = qemu_params(
+        globals = {
+            # Test uses rstmgr, keep running on fatal resets:
+            "ot-rstmgr.fatal_reset": 0,
+        },
+    ),
+    # Run in both Owner and non-Owner envs to test the keymgr initialization
+    run_in_ci = [
+        "//hw/top_earlgrey:fpga_cw340_sival_rom_ext",
+        "//hw/top_earlgrey:fpga_cw340_rom_with_fake_keys",
+    ],
+    verilator = verilator_params(timeout = "long"),
+    deps = [
+        "//hw/top:hmac_c_regs",
+        "//hw/top/dt",
+        "//sw/device/lib/arch:device",
+        "//sw/device/lib/base:bitfield",
+        "//sw/device/lib/base:macros",
+        "//sw/device/lib/base:mmio",
+        "//sw/device/lib/dif:hmac",
+        "//sw/device/lib/dif:keymgr_dpe",
+        "//sw/device/lib/dif:kmac",
+        "//sw/device/lib/runtime:ibex",
+        "//sw/device/lib/runtime:log",
+        "//sw/device/lib/testing:hmac_testutils",
+        "//sw/device/lib/testing:keymgr_dpe_testutils",
+        "//sw/device/lib/testing/test_framework:ottf_main",
+    ],
+)
+
+opentitan_test(
     name = "keymgr_dpe_sideload_otbn_test",
     srcs = ["keymgr_dpe_sideload_otbn_test.c"],
     exec_env = dicts.add(
@@ -2911,6 +3014,28 @@ opentitan_test(
         "//sw/device/lib/arch:device",
         "//sw/device/lib/base:macros",
         "//sw/device/lib/base:mmio",
+        "//sw/device/lib/dif:kmac",
+        "//sw/device/lib/runtime:log",
+        "//sw/device/lib/testing/test_framework:ottf_main",
+    ],
+)
+
+opentitan_test(
+    name = "kmac_save_restore_smoketest",
+    srcs = ["kmac_save_restore_smoketest.c"],
+    exec_env = dicts.add(
+        EARLGREY_TEST_ENVS,
+        EARLGREY_SILICON_OWNER_ROM_EXT_ENVS,
+        DARJEELING_TEST_ENVS,
+        {
+            "//hw/top_earlgrey:fpga_cw340_sival": None,
+            "//hw/top_earlgrey:silicon_creator": None,
+        },
+    ),
+    deps = [
+        "//hw/top/dt",
+        "//sw/device/lib/arch:device",
+        "//sw/device/lib/base:macros",
         "//sw/device/lib/dif:kmac",
         "//sw/device/lib/runtime:log",
         "//sw/device/lib/testing/test_framework:ottf_main",
@@ -3624,6 +3749,13 @@ cc_library(
                 [],
             )
             for ip in PWRMGR_SUPPORTED_IPS
+        ] + [
+            # The I3C wake-up source is skipped, so it needs no DIF.
+            opentitan_if_ip(
+                "i3c",
+                ["HAS_I3C"],
+                [],
+            ),
         ],
     ),
     target_compatible_with = [OPENTITAN_CPU],
@@ -7894,6 +8026,7 @@ opentitan_test(
     srcs = ["soc_proxy_external_wakeup.c"],
     exec_env = DARJEELING_TEST_ENVS,
     deps = [
+        "//hw/top/dt",
         "//hw/top_darjeeling/sw/autogen:top_darjeeling",
         "//sw/device/lib/dif:pwrmgr",
         "//sw/device/lib/dif:rv_plic",

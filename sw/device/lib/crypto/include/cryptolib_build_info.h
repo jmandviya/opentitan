@@ -13,12 +13,34 @@
  * @file
  * @brief Cryptolib build information.
  *
- * Returns the version of the cryptolib as well as the git hash.
+ * Returns the module name and version of the cryptolib as well as the git hash.
  */
 
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
+
+enum {
+  /**
+   * Length of the cryptolib module name in bytes (excluding NUL terminator).
+   */
+  kOtcryptoModuleNameBytes = 27,
+};
+
+/**
+ * Return the module name of the cryptolib.
+ *
+ * Writes the module name (`"otcrypto_earlgrey_cryptolib"`) into the
+ * caller-provided `name` buffer. The buffer length (`name->len`) must be
+ * equal to `kOtcryptoModuleNameBytes`.
+ *
+ * @param[out] name Output buffer for the module name.
+ * @return Status of the operation. Returns `kOtcryptoStatusValueOk` on
+ * success, `kOtcryptoStatusValueBadArgs` if `name` or `name->data` is NULL or
+ * `name->len` does not equal `kOtcryptoModuleNameBytes`, or
+ * `kOtcryptoStatusValueFatalError` if the buffer integrity check fails.
+ */
+otcrypto_status_t otcrypto_module_name(otcrypto_byte_buf_t *name);
 
 /**
  * Read the cryptolib build information.
@@ -37,7 +59,8 @@ extern "C" {
  * `sw/device/lib/crypto`.
  * @param[out] build_hash_high The high portion of the git commit hash of
  * `sw/device/lib/crypto`.
- * @return Status of the operation.
+ * @return Status of the operation. Returns `kOtcryptoStatusValueOk` on
+ * success.
  */
 otcrypto_status_t otcrypto_build_info(uint32_t *version, bool *released,
                                       uint32_t *build_hash_low,
@@ -46,7 +69,8 @@ otcrypto_status_t otcrypto_build_info(uint32_t *version, bool *released,
 /**
  * Return the current version of the cryptolib.
  *
- * @return The current crypto library version.
+ * @return The current crypto library version (`otcrypto_lib_version_t`); does
+ * not return an `otcrypto_status_t` error code.
  */
 otcrypto_lib_version_t otcrypto_lib_version(void);
 
@@ -60,9 +84,21 @@ otcrypto_lib_version_t otcrypto_lib_version(void);
  * @param[out] major Decoded major version.
  * @param[out] minor Decoded minor version.
  * @param[out] patch Decoded patch version.
+ * @return None (`void`); does not return an `otcrypto_status_t` error code.
  */
 void otcrypto_version_decode(uint32_t version, uint32_t *major, uint32_t *minor,
                              uint32_t *patch);
+
+/**
+ * Read the ROM version.
+ *
+ * Returns the ROM version stored in the `ROM_CTRL.EXP_DIGEST_1` register.
+ *
+ * @param[out] rom_version The ROM version.
+ * @return Status of the operation. Returns `kOtcryptoStatusValueOk` on
+ * success.
+ */
+otcrypto_status_t otcrypto_rom_version(uint32_t *rom_version);
 
 #ifdef __cplusplus
 }  // extern "C"

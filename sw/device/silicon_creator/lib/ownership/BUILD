@@ -117,6 +117,7 @@ cc_library(
         "//sw/device/silicon_creator/lib/base:sec_mmio",
         "//sw/device/silicon_creator/lib/drivers:lifecycle",
         "//sw/device/silicon_creator/lib/drivers:rnd",
+        "//sw/device/silicon_creator/lib/sigverify:flash_exec",
     ],
 )
 
@@ -185,6 +186,7 @@ cc_library(
         ":datatypes",
         ":owner_block",
         ":ownership_key",
+        "//sw/device/lib/base:hardened",
         "//sw/device/lib/base:memory",
         "//sw/device/silicon_creator/lib:boot_data",
         "//sw/device/silicon_creator/lib:error",
@@ -223,6 +225,7 @@ cc_library(
         ":datatypes",
         ":owner_block",
         ":ownership_key",
+        "//sw/device/lib/base:hardened",
         "//sw/device/lib/base:memory",
         "//sw/device/silicon_creator/lib:boot_data",
         "//sw/device/silicon_creator/lib:error",

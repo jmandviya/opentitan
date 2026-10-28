@@ -13,13 +13,16 @@ package pwrmgr_env_pkg;
   import dv_base_reg_pkg::*;
   import csr_utils_pkg::*;
   import pwrmgr_ral_pkg::*;
-  import alert_esc_agent_pkg::*;
+  import alert_agent_pkg::*;
+  import esc_agent_pkg::*;
   import pwrmgr_pkg::PowerDomains;
   import prim_mubi_pkg::mubi4_t;
   import prim_mubi_pkg::MuBi4False;
   import prim_mubi_pkg::MuBi4True;
   import prim_mubi_pkg::MuBi4Width;
   import sec_cm_pkg::*;
+  import pwrmgr_reg_pkg::NumRomInputs;
+
   // macro includes
   `include "uvm_macros.svh"
   `include "dv_macros.svh"
@@ -39,12 +42,14 @@ package pwrmgr_env_pkg;
 
   // types
   typedef enum int {
-    WakeupSysrst,
-    WakeupDbgCable,
-    WakeupPin,
-    WakeupUsb,
-    WakeupAonTimer,
-    WakeupSensorCtrl
+    WakeupI3c0RstdetWkupReq,
+    WakeupI3c1RstdetWkupReq,
+    WakeupSysrstCtrlWkupReq,
+    WakeupAdcCtrlWkupReq,
+    WakeupPinmuxPinWkupReq,
+    WakeupPinmuxUsbWkupReq,
+    WakeupAonTimerWkupReq,
+    WakeupSensorCtrlWkupReq
   } wakeup_e;
 
   typedef enum int {

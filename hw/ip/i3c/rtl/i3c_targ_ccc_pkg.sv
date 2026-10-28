@@ -7,6 +7,7 @@
 package i3c_targ_ccc_pkg;
   import i3c_pkg::*;
   import i3c_consts_pkg::*;
+  import i3c_reg_pkg::*;
 
   // Width of the registers devoted to Target CCC handling.
   localparam int unsigned TargCRWidth = 'd8;
@@ -15,7 +16,7 @@ package i3c_targ_ccc_pkg;
   typedef enum {
     TargStat_HasDEFB = 0,
     TargStat_IsGroup,
-    // TODO: The following is not yet used...
+    // TODO(#31337): The following is not yet used...
     TargStat_ReadSeg   // Is this a Read Segment rather than Write?
   } i3c_targ_ccc_flags_e;
 
@@ -53,7 +54,8 @@ package i3c_targ_ccc_pkg;
 
   // Requests to the Target CCC handling.
   typedef struct packed {
-    logic               rnw;  // TODO: Possibly becomes a status flag (`i3c_targ_ccc_flags_e`).
+    // TODO(#31337): Possibly becomes a status flag (`i3c_targ_ccc_flags_e`).
+    logic               rnw;
     logic               en;
     i3c_targ_ccc_rsn_e  rsn;
     // Index number within the current CCC handling.
@@ -94,7 +96,7 @@ package i3c_targ_ccc_pkg;
     // CCC data for transmission by the Target transceiver logic.
     logic                       req_cvalid;
     logic                       req_clast;
-    logic [NumTargets-1:0][7:0] req_cdata;
+    logic [MaxTargets-1:0][7:0] req_cdata;
   } i3c_targ_ccc_rsp_t;
 
 endpackage

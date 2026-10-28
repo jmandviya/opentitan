@@ -16,7 +16,7 @@
 {
     otp: {
         width: "2", // bytes
-        depth: "1024"
+        depth: "1032"
     }
 
     // Definition of scrambling and digest constants and keys.
@@ -81,6 +81,7 @@
             integrity:      false, // Do not use integrity (ECC) on this partition.
             bkout_type:     false, // Do not generate a breakout type for this partition.
             skip_sw_header: true,
+            zeroizable:     false,
             items: [
                 {
                     name: "SCRATCH",
@@ -107,6 +108,7 @@
             key_sel:    "NoKey",
             integrity:  true,  // Use integrity (ECC) on this partition.
             bkout_type: false, // Do not generate a breakout type for this partition.
+            zeroizable: false,
             items: [
                 {
                     name: "CREATOR_SW_CFG_AST_CFG",
@@ -338,6 +340,19 @@
                     '''
                 }
                 {
+                    name: "CREATOR_SW_CFG_RNG_ADAPTPS_THRESHOLDS",
+                    size: "4",
+                    desc: '''
+                    The adaptive proportion symbol health test thresholds to
+                    enable entropy_src with during ROM execution.
+                    This must be configured if CREATOR_SW_CFG_RNG_EN is true.
+                    The LSBs contain the boot-time / bypass mode threshold
+                    value.
+                    The MSBs contain the value for the FIPS / CC compliant mode.
+                    See entropy_src documentation for more details.
+                    '''
+                }
+                {
                     name: "CREATOR_SW_CFG_RNG_BUCKET_THRESHOLDS",
                     size: "4",
                     desc: '''
@@ -502,6 +517,7 @@
             key_sel:    "NoKey",
             integrity:  true,
             bkout_type: false,
+            zeroizable: false,
             items: [
                 {
                     name: "OWNER_SW_CFG_ROM_ERROR_REPORTING",
@@ -836,6 +852,7 @@
                     key_sel:    "NoKey",
                     integrity:  true,
                     bkout_type: false,
+                    zeroizable: false,
                     items: [
                         {
                             name: "ROT_CREATOR_AUTH_CODESIGN_ECDSA_KEY_TYPE0",
@@ -942,6 +959,7 @@
                     key_sel:    "NoKey",
                     integrity:  true,
                     bkout_type: false,
+                    zeroizable: false,
                     items: [
                         {
                             name: "ROT_CREATOR_AUTH_STATE_ECDSA_KEY0",
@@ -1004,6 +1022,7 @@
             integrity:      true,
             bkout_type:     true,
             skip_sw_header: true,
+            zeroizable:     false,
             items: [
                 {
                     name:        "DEVICE_ID",
@@ -1044,6 +1063,7 @@
             integrity:      true,
             bkout_type:     true,
             skip_sw_header: true,
+            zeroizable:     false,
             items: [
                 {
                     name:        "EN_SRAM_IFETCH",
@@ -1054,18 +1074,6 @@
                     Enablement of execute from SRAM switch in the sram_ctrl (see
                     EXEC CSR). A kMultiBitBool8True value enables, while all
                     other values disable.
-                    '''
-                },
-                {
-                    name:        "EN_CSRNG_SW_APP_READ",
-                    size:        "1",
-                    ismubi:      true,
-                    inv_default: false,
-                    desc: '''
-                    Enablement of CSRNG software application interface. A
-                    kMultiBitBool8True value enables, while all other values
-                    disable. Enablement is required to extract output from
-                    CSRNG via software.
                     '''
                 },
                 {
@@ -1099,6 +1107,7 @@
             integrity:      true,
             bkout_type:     false,
             skip_sw_header: true,
+            zeroizable:     true,
             items: [
                 {
                     name: "TEST_UNLOCK_TOKEN",
@@ -1131,6 +1140,7 @@
             integrity:      true,
             bkout_type:     false,
             skip_sw_header: true,
+            zeroizable:     true,
             items: [
                 {
                     name: "NVM_ADDR_KEY_SEED",
@@ -1165,6 +1175,7 @@
             integrity:      true,
             bkout_type:     false,
             skip_sw_header: true,
+            zeroizable:     true,
             items: [
                 {
                     name: "RMA_TOKEN",
@@ -1200,6 +1211,7 @@
             integrity:      true,
             bkout_type:     false,
             skip_sw_header: true,
+            zeroizable:     false,
             items: [
                 // The life cycle transition count is specified
                 // first such that any programming attempt of the life cycle

@@ -22,11 +22,11 @@
       domain: Main
     }
   }
+  domain: Main
   clock_connections:
   {
     clk_peri_i: clkmgr_clocks_i.clk_io_div4_infra
   }
-  domain: Main
   connections:
   {
     main:
@@ -233,7 +233,7 @@
           {
             hart: 0x40040000
           }
-          size_byte: 0x80
+          size_byte: 0x400
         }
       ]
       xbar: false
@@ -380,7 +380,7 @@
           {
             hart: 0x40130000
           }
-          size_byte: 0x1000
+          size_byte: 0x2000
         }
       ]
       xbar: false
@@ -485,7 +485,7 @@
           {
             hart: 0x40600000
           }
-          size_byte: 0x1000
+          size_byte: 0x2000
         }
       ]
       xbar: false
@@ -573,7 +573,7 @@
         }
       ]
       xbar: false
-      stub: true
+      stub: false
       req_fifo_pass: true
     }
   ]
@@ -785,6 +785,8 @@
       domain: Main
       top_signame: pinmux_tl
       index: -1
+      external: true
+      conn_type: false
     }
     {
       name: tl_otp_ctrl__core
@@ -924,10 +926,9 @@
       inst_name: peri
       width: 1
       default: ""
-      external: true
-      conn_type: false
-      index: -1
+      domain: Main
       top_signame: ast_tl
+      index: -1
     }
   ]
 }

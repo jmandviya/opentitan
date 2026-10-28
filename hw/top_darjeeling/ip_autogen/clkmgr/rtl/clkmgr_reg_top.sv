@@ -132,6 +132,8 @@ module clkmgr_reg_top (
   logic alert_test_we;
   logic alert_test_recov_fault_wd;
   logic alert_test_fatal_fault_wd;
+  logic alert_test_regwen_qs;
+  logic alert_test_regwen_wd;
   logic jitter_regwen_we;
   logic jitter_regwen_qs;
   logic jitter_regwen_wd;
@@ -371,14 +373,17 @@ module clkmgr_reg_top (
   // Register instances
   // R[alert_test]: V(True)
   logic alert_test_qe;
-  logic [1:0] alert_test_flds_we;
+  logic [2:0] alert_test_flds_we;
   assign alert_test_qe = &alert_test_flds_we;
+  // Create REGWEN-gated WE signal
+  logic alert_test_gated_we;
+  assign alert_test_gated_we = alert_test_we && alert_test_regwen_qs;
   //   F[recov_fault]: 0:0
   prim_subreg_ext #(
     .DW    (1)
   ) u_alert_test_recov_fault (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_recov_fault_wd),
     .d      ('0),
     .qre    (),
@@ -394,7 +399,7 @@ module clkmgr_reg_top (
     .DW    (1)
   ) u_alert_test_fatal_fault (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_fatal_fault_wd),
     .d      ('0),
     .qre    (),
@@ -404,6 +409,34 @@ module clkmgr_reg_top (
     .qs     ()
   );
   assign reg2hw.alert_test.fatal_fault.qe = alert_test_qe;
+
+  //   F[regwen]: 31:31
+  prim_subreg #(
+    .DW      (1),
+    .SwAccess(prim_subreg_pkg::SwAccessW0C),
+    .RESVAL  (1'h1),
+    .Mubi    (1'b0)
+  ) u_alert_test_regwen (
+    .clk_i   (clk_i),
+    .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
+
+    // from register interface
+    .we     (alert_test_we),
+    .wd     (alert_test_regwen_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0),
+
+    // to internal hardware
+    .qe     (alert_test_flds_we[2]),
+    .q      (),
+    .ds     (),
+
+    // to register interface (read)
+    .qs     (alert_test_regwen_qs)
+  );
 
 
   // R[jitter_regwen]: V(False)
@@ -415,6 +448,7 @@ module clkmgr_reg_top (
   ) u_jitter_regwen (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (jitter_regwen_we),
@@ -446,6 +480,7 @@ module clkmgr_reg_top (
   ) u_jitter_enable (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (jitter_enable_gated_we),
@@ -474,6 +509,7 @@ module clkmgr_reg_top (
   ) u_clk_enables (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (clk_enables_we),
@@ -503,6 +539,7 @@ module clkmgr_reg_top (
   ) u_clk_hints_clk_main_aes_hint (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (clk_hints_we),
@@ -530,6 +567,7 @@ module clkmgr_reg_top (
   ) u_clk_hints_clk_main_hmac_hint (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (clk_hints_we),
@@ -557,6 +595,7 @@ module clkmgr_reg_top (
   ) u_clk_hints_clk_main_kmac_hint (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (clk_hints_we),
@@ -584,6 +623,7 @@ module clkmgr_reg_top (
   ) u_clk_hints_clk_main_otbn_hint (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (clk_hints_we),
@@ -613,6 +653,7 @@ module clkmgr_reg_top (
   ) u_clk_hints_status_clk_main_aes_val (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -640,6 +681,7 @@ module clkmgr_reg_top (
   ) u_clk_hints_status_clk_main_hmac_val (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -667,6 +709,7 @@ module clkmgr_reg_top (
   ) u_clk_hints_status_clk_main_kmac_val (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -694,6 +737,7 @@ module clkmgr_reg_top (
   ) u_clk_hints_status_clk_main_otbn_val (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -722,6 +766,7 @@ module clkmgr_reg_top (
   ) u_measure_ctrl_regwen (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (measure_ctrl_regwen_we),
@@ -755,6 +800,7 @@ module clkmgr_reg_top (
   ) u_io_meas_ctrl_en (
     .clk_i   (clk_io_i),
     .rst_ni  (rst_io_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (io_io_meas_ctrl_en_gated_we),
@@ -937,6 +983,7 @@ module clkmgr_reg_top (
   ) u_main_meas_ctrl_en (
     .clk_i   (clk_main_i),
     .rst_ni  (rst_main_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (main_main_meas_ctrl_en_gated_we),
@@ -1114,6 +1161,7 @@ module clkmgr_reg_top (
   ) u_recov_err_code_shadow_update_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (recov_err_code_we),
@@ -1141,6 +1189,7 @@ module clkmgr_reg_top (
   ) u_recov_err_code_io_measure_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (recov_err_code_we),
@@ -1168,6 +1217,7 @@ module clkmgr_reg_top (
   ) u_recov_err_code_main_measure_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (recov_err_code_we),
@@ -1195,6 +1245,7 @@ module clkmgr_reg_top (
   ) u_recov_err_code_io_timeout_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (recov_err_code_we),
@@ -1222,6 +1273,7 @@ module clkmgr_reg_top (
   ) u_recov_err_code_main_timeout_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (recov_err_code_we),
@@ -1251,6 +1303,7 @@ module clkmgr_reg_top (
   ) u_fatal_err_code_reg_intg (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -1278,6 +1331,7 @@ module clkmgr_reg_top (
   ) u_fatal_err_code_idle_cnt (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -1305,6 +1359,7 @@ module clkmgr_reg_top (
   ) u_fatal_err_code_shadow_storage_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -1368,6 +1423,8 @@ module clkmgr_reg_top (
   assign alert_test_recov_fault_wd = reg_wdata[0];
 
   assign alert_test_fatal_fault_wd = reg_wdata[1];
+
+  assign alert_test_regwen_wd = reg_wdata[31];
   assign jitter_regwen_we = addr_hit[1] & reg_we & !reg_error;
 
   assign jitter_regwen_wd = reg_wdata[0];
@@ -1437,6 +1494,7 @@ module clkmgr_reg_top (
       addr_hit[0]: begin
         reg_rdata_next[0] = '0;
         reg_rdata_next[1] = '0;
+        reg_rdata_next[31] = alert_test_regwen_qs;
       end
 
       addr_hit[1]: begin

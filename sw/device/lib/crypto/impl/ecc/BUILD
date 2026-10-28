@@ -2,7 +2,10 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["cryptolib_warnings"],
+)
 
 load("//rules/opentitan:defs.bzl", "OPENTITAN_CPU")
 
@@ -10,6 +13,12 @@ cc_library(
     name = "curve25519",
     srcs = ["curve25519.c"],
     hdrs = ["curve25519.h"],
+    local_defines = select({
+        "//sw/device/lib/crypto/configs:hashed": [
+            "FIPS_MODE",
+        ],
+        "//conditions:default": [],
+    }),
     target_compatible_with = [OPENTITAN_CPU],
     deps = [
         "//sw/device/lib/base:crc32",
@@ -31,6 +40,7 @@ cc_library(
         "//sw/device/lib/base:crc32",
         "//sw/device/lib/base:hardened",
         "//sw/device/lib/base:hardened_memory",
+        "//sw/device/lib/crypto/drivers:keymgr_dpe",
         "//sw/device/lib/crypto/drivers:otbn",
         "//sw/device/lib/crypto/drivers:rv_core_ibex",
         "//sw/device/lib/crypto/impl:integrity",
@@ -48,6 +58,7 @@ cc_library(
         "//sw/device/lib/base:crc32",
         "//sw/device/lib/base:hardened",
         "//sw/device/lib/base:hardened_memory",
+        "//sw/device/lib/crypto/drivers:keymgr_dpe",
         "//sw/device/lib/crypto/drivers:otbn",
         "//sw/device/lib/crypto/drivers:rv_core_ibex",
         "//sw/device/lib/crypto/impl:status",

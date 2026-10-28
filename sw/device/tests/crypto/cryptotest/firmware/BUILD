@@ -139,6 +139,25 @@ cc_library(
 )
 
 cc_library(
+    name = "hash_otbn",
+    srcs = ["hash_otbn.c"],
+    hdrs = ["hash.h"],
+    deps = [
+        "//sw/device/lib/base:math",
+        "//sw/device/lib/base:memory",
+        "//sw/device/lib/base:status",
+        "//sw/device/lib/crypto",
+        "//sw/device/lib/crypto/impl/sha2:sha256",
+        "//sw/device/lib/crypto/impl/sha2:sha384",
+        "//sw/device/lib/crypto/impl/sha2:sha512",
+        "//sw/device/lib/runtime:log",
+        "//sw/device/lib/testing/test_framework:ujson_ottf",
+        "//sw/device/lib/ujson",
+        "//sw/device/tests/crypto/cryptotest/json:hash_commands",
+    ],
+)
+
+cc_library(
     name = "hmac",
     srcs = ["hmac.c"],
     hdrs = ["hmac.h"],
@@ -250,6 +269,58 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "hkdf",
+    srcs = ["hkdf.c"],
+    hdrs = ["hkdf.h"],
+    deps = [
+        "//sw/device/lib/base:math",
+        "//sw/device/lib/base:memory",
+        "//sw/device/lib/base:status",
+        "//sw/device/lib/crypto",
+        "//sw/device/lib/crypto/impl:keyblob",
+        "//sw/device/lib/runtime:log",
+        "//sw/device/lib/testing/test_framework:ujson_ottf",
+        "//sw/device/lib/ujson",
+        "//sw/device/tests/crypto/cryptotest/json:hkdf_commands",
+    ],
+)
+
+cc_library(
+    name = "hkdf_otbn",
+    srcs = ["hkdf_otbn.c"],
+    hdrs = ["hkdf.h"],
+    deps = [
+        "//sw/device/lib/base:math",
+        "//sw/device/lib/base:memory",
+        "//sw/device/lib/base:status",
+        "//sw/device/lib/crypto",
+        "//sw/device/lib/crypto/impl:keyblob",
+        "//sw/device/lib/crypto/impl/sha2:hkdf",
+        "//sw/device/lib/runtime:log",
+        "//sw/device/lib/testing/test_framework:ujson_ottf",
+        "//sw/device/lib/ujson",
+        "//sw/device/tests/crypto/cryptotest/json:hkdf_commands",
+    ],
+)
+
+cc_library(
+    name = "kdf",
+    srcs = ["kdf.c"],
+    hdrs = ["kdf.h"],
+    deps = [
+        "//sw/device/lib/base:math",
+        "//sw/device/lib/base:memory",
+        "//sw/device/lib/base:status",
+        "//sw/device/lib/crypto",
+        "//sw/device/lib/runtime:log",
+        "//sw/device/lib/testing/test_framework:ujson_ottf",
+        "//sw/device/lib/ujson",
+        "//sw/device/tests/crypto/cryptotest/json:kdf_commands",
+        "//sw/device/tests/crypto/lib:crypto_test_lib",
+    ],
+)
+
 FIRMWARE_DEPS = [
     ":aes",
     ":aes_gcm",
@@ -258,7 +329,9 @@ FIRMWARE_DEPS = [
     ":ecdsa",
     ":ed25519",
     ":hash",
+    ":hkdf",
     ":hmac",
+    ":kdf",
     ":kmac",
     ":mldsa",
     ":mlkem",

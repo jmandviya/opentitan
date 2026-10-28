@@ -140,7 +140,7 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
     // No need to cover all kinds of integrity errors as they are tested in block-level.
     en_tl_intg_err_cov = 0;
 
-    // Alert_esc_agent does not support ping timeout check in chip-level.
+    // alert_agent does not support ping timeout check in chip-level.
     // User can read `loc_alert_cause` to check ping timeout.
     en_scb_ping_chk = 0;
 
@@ -207,7 +207,6 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
 
     // Create the JTAG RV debugger instance.
     debugger = jtag_rv_debugger::type_id::create("debugger");
-    debugger.set_cfg(m_jtag_agent_cfg);
     debugger.num_harts = rv_dm_reg_pkg::NrHarts;
     debugger.num_triggers = 4;  // TODO: wire this from `top_darjeeling_pkg`.
 
@@ -272,8 +271,9 @@ class chip_env_cfg #(type RAL_T = chip_ral_pkg::chip_reg_block) extends cip_base
     jtag_dmi_ral.sbcs.sbasize.set_reset(32);
     apply_jtag_dmi_ral_csr_excl();
 
-    // Finally, tell the debugger (which should already exist) about the register block we just
-    // created.
+    // Finally, tell the debugger (which should already exist) about the JTAG agent config and
+    // the register block we just created.
+    debugger.set_cfg(m_jtag_agent_cfg);
     debugger.set_ral(jtag_dmi_ral);
   endfunction
 

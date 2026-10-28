@@ -31,6 +31,10 @@ typedef struct aes_gcm_context {
    */
   aes_key_t key;
   /**
+   * Pointer to the blinded key for updating its checksum on remasking.
+   */
+  otcrypto_blinded_key_t *blinded_key;
+  /**
    * Security level of the underlying AES-CTR key.
    */
   otcrypto_key_security_level_t security_level;
@@ -299,6 +303,16 @@ status_t aes_gcm_decrypt_final(aes_gcm_context_t *ctx,
                                const otcrypto_const_word32_buf_t *tag,
                                otcrypto_byte_buf_t *output,
                                size_t *bytes_written, hardened_bool_t *success);
+
+/**
+ * Overwrite an AES-GCM context with random data.
+ *
+ * The context holds the hash subkey shares, so it must not outlive the
+ * operation. Meant to be used as a cleanup guard on stack-allocated contexts.
+ *
+ * @param ctx AES-GCM context object.
+ */
+void aes_gcm_context_shred(aes_gcm_context_t *ctx);
 
 #ifdef __cplusplus
 }  // extern "C"

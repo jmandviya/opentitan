@@ -141,7 +141,9 @@ module gpio_reg_top
   logic intr_test_we;
   logic [31:0] intr_test_wd;
   logic alert_test_we;
-  logic alert_test_wd;
+  logic alert_test_fatal_fault_wd;
+  logic alert_test_regwen_qs;
+  logic alert_test_regwen_wd;
   logic [31:0] data_in_qs;
   logic direct_out_re;
   logic direct_out_we;
@@ -313,6 +315,7 @@ module gpio_reg_top
   ) u_intr_state (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_state_we),
@@ -341,6 +344,7 @@ module gpio_reg_top
   ) u_intr_enable (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_enable_we),
@@ -382,14 +386,18 @@ module gpio_reg_top
 
   // R[alert_test]: V(True)
   logic alert_test_qe;
-  logic [0:0] alert_test_flds_we;
+  logic [1:0] alert_test_flds_we;
   assign alert_test_qe = &alert_test_flds_we;
+  // Create REGWEN-gated WE signal
+  logic alert_test_gated_we;
+  assign alert_test_gated_we = alert_test_we && alert_test_regwen_qs;
+  //   F[fatal_fault]: 0:0
   prim_subreg_ext #(
     .DW    (1)
-  ) u_alert_test (
+  ) u_alert_test_fatal_fault (
     .re     (1'b0),
-    .we     (alert_test_we),
-    .wd     (alert_test_wd),
+    .we     (alert_test_gated_we),
+    .wd     (alert_test_fatal_fault_wd),
     .d      ('0),
     .qre    (),
     .qe     (alert_test_flds_we[0]),
@@ -398,6 +406,34 @@ module gpio_reg_top
     .qs     ()
   );
   assign reg2hw.alert_test.qe = alert_test_qe;
+
+  //   F[regwen]: 31:31
+  prim_subreg #(
+    .DW      (1),
+    .SwAccess(prim_subreg_pkg::SwAccessW0C),
+    .RESVAL  (1'h1),
+    .Mubi    (1'b0)
+  ) u_alert_test_regwen (
+    .clk_i   (clk_i),
+    .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
+
+    // from register interface
+    .we     (alert_test_we),
+    .wd     (alert_test_regwen_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0),
+
+    // to internal hardware
+    .qe     (alert_test_flds_we[1]),
+    .q      (),
+    .ds     (),
+
+    // to register interface (read)
+    .qs     (alert_test_regwen_qs)
+  );
 
 
   // R[data_in]: V(False)
@@ -409,6 +445,7 @@ module gpio_reg_top
   ) u_data_in (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -625,6 +662,7 @@ module gpio_reg_top
   ) u_intr_ctrl_en_rising (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_ctrl_en_rising_we),
@@ -653,6 +691,7 @@ module gpio_reg_top
   ) u_intr_ctrl_en_falling (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_ctrl_en_falling_we),
@@ -681,6 +720,7 @@ module gpio_reg_top
   ) u_intr_ctrl_en_lvlhigh (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_ctrl_en_lvlhigh_we),
@@ -709,6 +749,7 @@ module gpio_reg_top
   ) u_intr_ctrl_en_lvllow (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_ctrl_en_lvllow_we),
@@ -737,6 +778,7 @@ module gpio_reg_top
   ) u_ctrl_en_input_filter (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ctrl_en_input_filter_we),
@@ -765,6 +807,7 @@ module gpio_reg_top
   ) u_hw_straps_data_in_valid (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -793,6 +836,7 @@ module gpio_reg_top
   ) u_hw_straps_data_in (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -823,6 +867,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_0_enable_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_0_we),
@@ -850,6 +895,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_0_continuous_mode_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_0_we),
@@ -877,6 +923,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_0_polarity_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_0_we),
@@ -904,6 +951,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_0_input_select_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_0_we),
@@ -931,6 +979,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_0_prescaler_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_0_we),
@@ -961,6 +1010,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_1_enable_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_1_we),
@@ -988,6 +1038,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_1_continuous_mode_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_1_we),
@@ -1015,6 +1066,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_1_polarity_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_1_we),
@@ -1042,6 +1094,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_1_input_select_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_1_we),
@@ -1069,6 +1122,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_1_prescaler_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_1_we),
@@ -1099,6 +1153,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_2_enable_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_2_we),
@@ -1126,6 +1181,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_2_continuous_mode_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_2_we),
@@ -1153,6 +1209,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_2_polarity_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_2_we),
@@ -1180,6 +1237,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_2_input_select_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_2_we),
@@ -1207,6 +1265,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_2_prescaler_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_2_we),
@@ -1237,6 +1296,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_3_enable_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_3_we),
@@ -1264,6 +1324,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_3_continuous_mode_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_3_we),
@@ -1291,6 +1352,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_3_polarity_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_3_we),
@@ -1318,6 +1380,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_3_input_select_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_3_we),
@@ -1345,6 +1408,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_3_prescaler_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_3_we),
@@ -1375,6 +1439,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_4_enable_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_4_we),
@@ -1402,6 +1467,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_4_continuous_mode_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_4_we),
@@ -1429,6 +1495,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_4_polarity_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_4_we),
@@ -1456,6 +1523,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_4_input_select_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_4_we),
@@ -1483,6 +1551,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_4_prescaler_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_4_we),
@@ -1513,6 +1582,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_5_enable_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_5_we),
@@ -1540,6 +1610,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_5_continuous_mode_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_5_we),
@@ -1567,6 +1638,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_5_polarity_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_5_we),
@@ -1594,6 +1666,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_5_input_select_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_5_we),
@@ -1621,6 +1694,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_5_prescaler_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_5_we),
@@ -1651,6 +1725,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_6_enable_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_6_we),
@@ -1678,6 +1753,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_6_continuous_mode_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_6_we),
@@ -1705,6 +1781,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_6_polarity_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_6_we),
@@ -1732,6 +1809,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_6_input_select_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_6_we),
@@ -1759,6 +1837,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_6_prescaler_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_6_we),
@@ -1789,6 +1868,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_7_enable_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_7_we),
@@ -1816,6 +1896,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_7_continuous_mode_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_7_we),
@@ -1843,6 +1924,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_7_polarity_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_7_we),
@@ -1870,6 +1952,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_7_input_select_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_7_we),
@@ -1897,6 +1980,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_ctrl_7_prescaler_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_ctrl_7_we),
@@ -1926,6 +2010,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_val_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_val_0_re),
@@ -1955,6 +2040,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_val_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_val_1_re),
@@ -1984,6 +2070,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_val_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_val_2_re),
@@ -2013,6 +2100,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_val_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_val_3_re),
@@ -2042,6 +2130,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_val_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_val_4_re),
@@ -2071,6 +2160,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_val_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_val_5_re),
@@ -2100,6 +2190,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_val_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_val_6_re),
@@ -2129,6 +2220,7 @@ module gpio_reg_top
   ) u_inp_prd_cnt_val_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (inp_prd_cnt_val_7_re),
@@ -2292,7 +2384,9 @@ module gpio_reg_top
   assign intr_test_wd = reg_wdata[31:0];
   assign alert_test_we = racl_addr_hit_write[3] & reg_we & !reg_error;
 
-  assign alert_test_wd = reg_wdata[0];
+  assign alert_test_fatal_fault_wd = reg_wdata[0];
+
+  assign alert_test_regwen_wd = reg_wdata[31];
   assign direct_out_re = racl_addr_hit_read[5] & reg_re & !reg_error;
   assign direct_out_we = racl_addr_hit_write[5] & reg_we & !reg_error;
 
@@ -2509,6 +2603,7 @@ module gpio_reg_top
 
       racl_addr_hit_read[3]: begin
         reg_rdata_next[0] = '0;
+        reg_rdata_next[31] = alert_test_regwen_qs;
       end
 
       racl_addr_hit_read[4]: begin

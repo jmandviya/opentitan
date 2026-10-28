@@ -126,6 +126,7 @@ static const sc_keymgr_dpe_policies_t kKeymgrDPEDefaultPolicy = {
     .child = kScKeymgrDPESlotPolAllowChild,
     .expo = kScKeymgrDPESlotPolNoExport,
     .parent = kScKeymgrDPESlotPolEraseParent,
+    .keygen = kScKeymgrDPESlotPolAllowKeygen,
 };
 
 static inline bool rom_console_enabled(void) {
@@ -288,8 +289,6 @@ static rom_error_t rom_init(void) {
   if (waking_from_low_power != kHardenedBoolTrue) {
     rom_banner();
   }
-  // This function is a NOP unless ROM is built for an fpga.
-  device_fpga_version_print();
 
   // Double check the reset reason value against the OTP-defined value.
   reset_reason_check = launder32(reset_reason_check) ^ rstmgr_reason_get();
@@ -893,7 +892,7 @@ static rom_error_t rom_verify_immutable_section(
     for (; launder32(i) < kHmacDigestNumWords; ++i) {
       if (immutable_rom_ext_hash.digest[i] !=
           actual_immutable_section_digest.digest[i]) {
-        verify_result = kErrorRomImmSection;
+        return kErrorRomImmSection;
       }
     }
     HARDENED_CHECK_EQ(i, kHmacDigestNumWords);

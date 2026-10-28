@@ -143,6 +143,12 @@
                 '''
         }
       ]
+      tags: [
+        // Don't write this register in the generic CSR tests. Its value is the live policy for
+        // every subscribing IP, so a random write can revoke the ROT role's access and make later
+        // accesses in the same test fail with d_error, which the CSR tests can't model.
+        "excl:CsrAllTests:CsrExclWrite"
+      ]
     }
     { reserved: "1" }
     % endfor
@@ -193,6 +199,7 @@
       hwaccess: "hro",
       hwqe:     "True",
       hwext:    "True",
+      inregwen: "regwen",
       fields: [
         { bits: "0",
           name: "fatal_fault",
@@ -201,6 +208,13 @@
         { bits: "1",
           name: "recov_ctrl_update_err",
           desc: "'Write 1 to trigger one alert event of this kind.'",
+        }
+        { bits: "31",
+          name: "regwen",
+          swaccess: "rw0c",
+          hwaccess: "none",
+          resval: "1",
+          desc: "Write 0 to disable alert testing until the next reset.",
         }
       ],
     }

@@ -79,6 +79,7 @@ otp_json(
                 "CREATOR_SW_CFG_RNG_REPCNTS_THRESHOLDS": otp_hex(0xffffffff),
                 "CREATOR_SW_CFG_RNG_ADAPTP_HI_THRESHOLDS": otp_hex(0xffffffff),
                 "CREATOR_SW_CFG_RNG_ADAPTP_LO_THRESHOLDS": otp_hex(0x0),
+                "CREATOR_SW_CFG_RNG_ADAPTPS_THRESHOLDS": otp_hex(0xffffffff),
                 "CREATOR_SW_CFG_RNG_BUCKET_THRESHOLDS": otp_hex(0xffffffff),
                 "CREATOR_SW_CFG_RNG_MARKOV_HI_THRESHOLDS": otp_hex(0xffffffff),
                 "CREATOR_SW_CFG_RNG_MARKOV_LO_THRESHOLDS": otp_hex(0x0),
@@ -86,8 +87,8 @@ otp_json(
                 "CREATOR_SW_CFG_RNG_EXTHT_LO_THRESHOLDS": otp_hex(0x0),
                 "CREATOR_SW_CFG_RNG_BOOT_ALERT_THRESHOLD": otp_hex(0xfffd0002),
                 "CREATOR_SW_CFG_RNG_FIPS_ALERT_THRESHOLD": otp_hex(0xfffd0002),
-                "CREATOR_SW_CFG_RNG_BOOT_CONFIG_DIGEST": otp_hex(0xddbce0ed),
-                "CREATOR_SW_CFG_RNG_FIPS_CONFIG_DIGEST": otp_hex(0xddbce0ed),
+                "CREATOR_SW_CFG_RNG_BOOT_CONFIG_DIGEST": otp_hex(0xd775bbdc),
+                "CREATOR_SW_CFG_RNG_FIPS_CONFIG_DIGEST": otp_hex(0xd775bbdc),
             },
         ),
     ],
@@ -225,9 +226,6 @@ otp_json(
             items = {
                 # Enable code execution from SRAM in PROD state.
                 "EN_SRAM_IFETCH": True,
-                # Cryptolib and chip-level tests require access to the CSRNG
-                # software interfaces.
-                "EN_CSRNG_SW_APP_READ": True,
                 # Use legacy behavior and disable late debug enable.
                 "DIS_RV_DM_LATE_DEBUG": True,
             },

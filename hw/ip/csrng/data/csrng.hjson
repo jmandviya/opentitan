@@ -96,13 +96,6 @@
       act:     "req"
       package: "entropy_src_pkg"
     }
-    { struct:  "mubi8"
-      type:    "uni"
-      name:    "otp_en_csrng_sw_app_read"
-      act:     "rcv"
-      package: "prim_mubi_pkg"
-      default: "prim_mubi_pkg::MuBi8True"
-    }
     { struct:  "lc_tx"
       type:    "uni"
       name:    "lc_hw_debug_en"
@@ -117,7 +110,7 @@
       desc: '''
             CSRNG has an application interface for the software to interact with.
 
-            Note that for software to actually retrieve random numbers from this interface, the otp_en_csrng_sw_app_read input from OTP needs to be `kMultiBitBool8True` and !!CTRL.SW_APP_ENABLE needs to be set to `kMultiBitBool4True`.
+            Note that for software to actually retrieve random numbers from this interface, !!CTRL.SW_APP_ENABLE needs to be set to `kMultiBitBool4True`.
             Otherwise the !!GENBITS register always reads 0.
             '''
     }
@@ -142,8 +135,6 @@
       desc: '''
             CSRNG allows reading the internal state of the three CTR_DRBG instances corresponding to the three interfaces.
             This is useful for debugging and validation testing.
-
-            Note that for this to work the `otp_en_csrng_sw_app_read` input from OTP needs to be `kMultiBitBool8True`.
             '''
     }
     {
@@ -161,9 +152,6 @@
     }
     { name: "CONFIG.MUBI"
       desc: "Registers have multi-bit encoded fields."
-    }
-    { name: "INTERSIG.MUBI"
-      desc: "OTP signal used to enable software access to registers."
     }
     { name: "CMD_STAGE.FSM.SPARSE"
       desc: "The CSRNG command stage state machines use a sparse state encoding."
@@ -274,8 +262,6 @@
             mubi: true
             desc: '''
                   Setting this field to kMultiBitBool4True will enable reading from the !!GENBITS register.
-                  This application interface for software (register based) will be enabled
-                  only if the otp_en_csrng_sw_app_read input vector is set to the enable encoding.
                   '''
           resval: false
         },
@@ -285,8 +271,6 @@
             mubi: true
             desc: '''
                   Setting this field to kMultiBitBool4True will enable reading from the !!INT_STATE_VAL register.
-                  Reading the internal state of the enable instances will be enabled
-                  only if the otp_en_csrng_sw_app_read input vector is set to the enable encoding.
                   Also, the !!INT_STATE_READ_ENABLE bit of the selected instance needs to be set to true for this to work.
                   '''
           resval: false
@@ -419,9 +403,9 @@
             { value: "2",
               name: "INVALID_GEN_CMD",
               desc: '''
-                    Request completed with an invalid counter DRBG generation command error.
-                    This error indicates that CSRNG entropy was generated for a command that is not a Generate command.
-                    In this case the entropy should not be considered as valid.
+                    Request completed with an invalid Generate command error.
+                    This error indicates that a Generate command was issued with a `glen` field of zero.
+                    The command is ignored and no entropy is generated.
                     '''
             },
             { value: "3",
@@ -436,6 +420,14 @@
               name: "RESEED_CNT_EXCEEDED",
               desc: '''
                     This error indicates that the number of generate requests between reseeds exceeded the maximum number allowed (see !!RESEED_INTERVAL).
+                    This happens only for Generate commands.
+                    '''
+            },
+            { value: "5",
+              name: "GEN_ABORTED",
+              desc: '''
+                    This bit indicates that a Generate command for this instance was aborted via !!GEN_ABORT before returning all requested genbits.
+                    The instance has been uninstantiated as a result and must be instantiated again before further commands will succeed.
                     This happens only for Generate commands.
                     '''
             },
@@ -477,9 +469,23 @@
                 a `clen` value of 4 requires this register to be read 16 times to get all
                 of the data out of the FIFO path.
                 Note that for !!GENBITS to be able to deliver random numbers, also !!CTRL.SW_APP_ENABLE needs to be set to `kMultiBitBool4True`.
-                In addition, the otp_en_csrng_sw_app_read input needs to be set to `kMultiBitBool8True`.
                 Otherwise, the register reads as 0.
                 '''
+        }
+      ]
+    },
+    {
+      name: "INT_STATE_READ_ENABLE_REGWEN",
+      desc: "Internal state read enable REGWEN register",
+      swaccess: "rw0c",
+      hwaccess: "none",
+      fields: [
+        { bits: "0",
+          desc: '''
+                INT_STATE_READ_ENABLE register configuration enable bit.
+                If this is cleared to 0, the INT_STATE_READ_ENABLE register cannot be written anymore.
+                '''
+          resval: 1,
         }
       ]
     },
@@ -496,24 +502,8 @@
                 Per-instance internal state read enable.
                 Defines whether the internal state of the corresponding instance is readable via !!INT_STATE_VAL.
                 Note that for !!INT_STATE_VAL to provide read access to the internal state, also !!CTRL.READ_INT_STATE needs to be set to `kMultiBitBool4True`.
-                In addition, the otp_en_csrng_sw_app_read input needs to be set to `kMultiBitBool8True`.
                 '''
           resval: 0x7
-        }
-      ]
-    },
-    {
-      name: "INT_STATE_READ_ENABLE_REGWEN",
-      desc: "Internal state read enable REGWEN register",
-      swaccess: "rw0c",
-      hwaccess: "none",
-      fields: [
-        { bits: "0",
-          desc: '''
-                INT_STATE_READ_ENABLE register configuration enable bit.
-                If this is cleared to 0, the INT_STATE_READ_ENABLE register cannot be written anymore.
-                '''
-          resval: 1,
         }
       ]
     },
@@ -558,7 +548,6 @@
                 can be re-written at this time (internal read pointer is also reset), and then
                 another internal state field can be read.
                 Note that for !!INT_STATE_VAL to provide read access to the internal state, also !!CTRL.READ_INT_STATE needs to be set to `kMultiBitBool4True`.
-                In addition, the otp_en_csrng_sw_app_read input needs to be set to `kMultiBitBool8True`.
                 Also, the !!INT_STATE_READ_ENABLE bit of the selected instance needs to be set to true for this to work.
                 Otherwise, the register reads as 0.
                 '''
@@ -584,6 +573,68 @@
                 '''
         }
       ]
+    },
+    { name: "GEN_ABORT_REGWEN",
+      desc: "Register write enable for !!GEN_ABORT",
+      swaccess: "rw0c",
+      hwaccess: "none",
+      fields: [
+        { bits: "0",
+          desc: '''
+                When true, the !!GEN_ABORT register can be written.
+                When false, it becomes read-only until the next reset.
+                '''
+          resval: 1
+        }
+      ]
+    },
+    { multireg: {
+      name: "GEN_ABORT",
+      desc: "Generate command abort request register",
+      count: "NumApps",
+      cname: "GEN_ABORT",
+      compact: false,
+      swaccess: "rw1s",
+      hwaccess: "hrw",
+      regwen: "GEN_ABORT_REGWEN",
+      tags: [// This register self-clears every cycle and a write can affect RECOV_ALERT_STS.
+                 "excl:CsrAllTests:CsrExclWrite"]
+      fields: [
+        { bits: "3:0",
+          name: "GEN_ABORT",
+          mubi: true,
+          resval: false,
+          desc: '''
+                Setting this field to kMultiBitBool4True requests aborting a Generate command that is currently in progress for this instance.
+                The instance is zeroed as a result.
+                It must be instantiated again before further Reseed, Update, or Generate commands can succeed.
+
+                This request is only accepted while a Generate command is actually in progress for this instance.
+                If no Generate command is in progress, the write is ignored and !!RECOV_ALERT_STS.GEN_ABORT_INVALID_ALERT is set instead.
+                '''
+        }
+      ]
+      }
+    },
+    { multireg: {
+      name: "GEN_ABORT_STATUS",
+      desc: "Generate command abort completion status register",
+      count: "NumApps",
+      cname: "GEN_ABORT_STATUS",
+      compact: false,
+      swaccess: "rw1c",
+      hwaccess: "hwo",
+      fields: [
+        { bits: "0",
+          name: "GEN_ABORT_STATUS",
+          resval: false,
+          desc: '''
+                This bit is set when a Generate command abort requested via !!GEN_ABORT for this instance has completed.
+                Write 1 to clear.
+                '''
+        }
+      ]
+      }
     },
     {
       name: "HW_EXC_STS",
@@ -649,6 +700,21 @@
                 Writing a zero resets this status bit.
                 '''
         }
+        { bits: "5",
+          name: "GEN_ABORT_INVALID_ALERT",
+          desc: '''
+                This bit is set when a field of the !!GEN_ABORT register is set to kMultiBitBool4True for an instance that does not currently have a Generate command in progress.
+                The write is ignored and CSRNG continues to operate.
+                Writing a zero resets this status bit.
+                '''
+        }
+        { bits: "6",
+          name: "GEN_ABORT_FIELD_ALERT",
+          desc: '''
+                This bit is set when a field of the !!GEN_ABORT register is set to a value other than kMultiBitBool4True or kMultiBitBool4False.
+                Writing a zero resets this status bit.
+                '''
+        }
         { bits: "12",
           name: "CS_BUS_CMP_ALERT",
           desc: '''
@@ -667,6 +733,14 @@
                 '''
         }
         { bits: "14",
+          name: "CMD_STAGE_INVALID_GEN_CMD_ALERT",
+          desc: '''
+                This bit is set when a Generate command is received with a `glen` field of zero.
+                The invalid command is ignored and CSRNG continues to operate.
+                Writing a zero resets this status bit.
+                '''
+        }
+        { bits: "15",
           name: "CMD_STAGE_INVALID_CMD_SEQ_ALERT",
           desc: '''
                 This bit is set when an out of order command is received by the main state machine.
@@ -677,7 +751,7 @@
                 Writing a zero resets this status bit.
                 '''
         }
-        { bits: "15",
+        { bits: "16",
           name: "CMD_STAGE_RESEED_CNT_ALERT",
           desc: '''
                 This bit is set when the maximum number of generate requests between reseeds is

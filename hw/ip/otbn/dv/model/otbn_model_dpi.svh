@@ -32,8 +32,8 @@ import "DPI-C" function int otbn_model_urnd_cdc_done(chandle model);
 import "DPI-C" function int otbn_model_otp_key_cdc_done(chandle model);
 
 import "DPI-C" function
-  int otbn_model_set_keymgr_value(chandle model, logic [383:0] key0,
-                                  logic [383:0] key1, bit valid);
+  int otbn_model_set_keymgr_value(chandle model, logic [511:0] key0,
+                                  logic [511:0] key1, bit valid);
 
 import "DPI-C" context function
   int unsigned otbn_model_step(chandle          model,
@@ -54,6 +54,8 @@ import "DPI-C" function int otbn_model_invalidate_dmem(chandle model);
 import "DPI-C" function int otbn_model_set_software_errs_fatal(chandle model, bit new_val);
 
 import "DPI-C" function int otbn_model_set_wfi_enabled(chandle model, bit new_val);
+
+import "DPI-C" function int otbn_model_set_urnd_ctrl_enabled(chandle model, bit new_val);
 
 import "DPI-C" function int otbn_model_tolerate_result_mismatch(chandle model,
                                                                 int unsigned num_checks);

@@ -8,6 +8,7 @@
 #include "sw/device/lib/base/hardened_memory.h"
 #include "sw/device/lib/base/math.h"
 #include "sw/device/lib/crypto/drivers/entropy.h"
+#include "sw/device/lib/crypto/impl/hash.h"
 #include "sw/device/lib/crypto/impl/rsa/rsa_padding.h"
 #include "sw/device/lib/crypto/impl/rsa/run_rsa.h"
 
@@ -26,48 +27,61 @@
  */
 OT_WARN_UNUSED_RESULT
 static status_t digest_check(const otcrypto_hash_digest_t digest) {
-  size_t num_words = 0;
-  otcrypto_hash_mode_t used_mode = launder32(0);
-  switch (digest.mode) {
-    case kOtcryptoHashModeSha3_224:
-      used_mode = launder32(used_mode) | kOtcryptoHashModeSha3_224;
-      num_words = 224 / 32;
-      break;
-    case kOtcryptoHashModeSha256:
-      used_mode = launder32(used_mode) | kOtcryptoHashModeSha256;
-      num_words = 256 / 32;
-      break;
-    case kOtcryptoHashModeSha3_256:
-      used_mode = launder32(used_mode) | kOtcryptoHashModeSha3_256;
-      num_words = 256 / 32;
-      break;
-    case kOtcryptoHashModeSha384:
-      used_mode = launder32(used_mode) | kOtcryptoHashModeSha384;
-      num_words = 384 / 32;
-      break;
-    case kOtcryptoHashModeSha3_384:
-      used_mode = launder32(used_mode) | kOtcryptoHashModeSha3_384;
-      num_words = 384 / 32;
-      break;
-    case kOtcryptoHashModeSha512:
-      used_mode = launder32(used_mode) | kOtcryptoHashModeSha512;
-      num_words = 512 / 32;
-      break;
-    case kOtcryptoHashModeSha3_512:
-      used_mode = launder32(used_mode) | kOtcryptoHashModeSha3_512;
-      num_words = 512 / 32;
-      break;
-    default:
-      return OTCRYPTO_BAD_ARGS;
-  }
-  HARDENED_CHECK_GT(num_words, 0);
-  HARDENED_CHECK_EQ(launder32(used_mode), digest.mode);
-
-  if (num_words != digest.len) {
+  hash_info_t info;
+  HARDENED_TRY(hash_info_get(digest.mode, &info));
+  if (info.der_oid == NULL || launder32(digest.len) != info.digest_wordlen) {
     return OTCRYPTO_BAD_ARGS;
   }
+  HARDENED_CHECK_EQ(digest.len, info.digest_wordlen);
   return OTCRYPTO_OK;
 }
+
+#ifdef FIPS_MODE
+OT_WARN_UNUSED_RESULT
+static status_t rsa_digest_check_fips(
+    const otcrypto_hash_digest_t message_digest,
+    const rsa_signature_padding_t padding_mode, size_t encoded_message_len) {
+  // Per NIST SP 800-57 Part 1 Table 3, the security strength of a hash function
+  // for digital signatures (collision resistance) is half its output size (N/2
+  // bits):
+  //   - SHA3-224 (224-bit output)  -> 112-bit security strength
+  //   - SHA-256 / SHA3-256 / SHAKE128 -> 128-bit security strength
+  //   - SHA-384 / SHA3-384        -> 192-bit security strength (>= 150-bit)
+  //   - SHA-512 / SHA3-512 / SHAKE256 -> 256-bit security strength
+  //
+  // Minimum digest output size (min_bits = 2 * required_security_strength):
+  //   - RSA-2048 (112-bit strength) -> min_bits = 224
+  //   - RSA-3072 (128-bit strength) -> min_bits = 256
+  //   - RSA-4096 (150-bit strength) -> min_bits = 384
+  size_t min_bits = 224;
+  if (launder32(encoded_message_len) == kRsa3072NumWords) {
+    min_bits = 256;
+  } else if (launder32(encoded_message_len) == kRsa4096NumWords) {
+    min_bits = 384;
+  }
+
+  // Get digest output size and check for XOF modes (SHAKE only allowed for
+  // PSS).
+  size_t digest_bits = message_digest.len * 32;
+  if (launder32(message_digest.mode) == kOtcryptoHashXofModeShake128) {
+    // COVERAGE (FI CM) Unreachable as digest_check already rejects XOF modes.
+    digest_bits = 256;
+    if (padding_mode != kRsaSignaturePaddingPss)
+      return OTCRYPTO_BAD_ARGS;
+  } else if (launder32(message_digest.mode) == kOtcryptoHashXofModeShake256) {
+    // COVERAGE (FI CM) Unreachable as digest_check already rejects XOF modes.
+    digest_bits = 512;
+    if (padding_mode != kRsaSignaturePaddingPss)
+      return OTCRYPTO_BAD_ARGS;
+  }
+
+  if (digest_bits < min_bits) {
+    return OTCRYPTO_BAD_ARGS;
+  }
+
+  return OTCRYPTO_OK;
+}
+#endif
 
 /**
  * Encode the message with the provided padding mode and hash function.
@@ -85,6 +99,10 @@ static status_t message_encode(const otcrypto_hash_digest_t message_digest,
                                uint32_t *encoded_message) {
   // Check that the digest length is OK.
   HARDENED_TRY(digest_check(message_digest));
+#ifdef FIPS_MODE
+  HARDENED_TRY(
+      rsa_digest_check_fips(message_digest, padding_mode, encoded_message_len));
+#endif
 
   switch (launder32(padding_mode)) {
     case kRsaSignaturePaddingPkcs1v15:
@@ -95,13 +113,11 @@ static status_t message_encode(const otcrypto_hash_digest_t message_digest,
       HARDENED_CHECK_EQ(padding_mode, kRsaSignaturePaddingPss);
       // Generate a random salt value whose length matches the digest length.
       uint32_t salt[message_digest.len];
-      HARDENED_TRY(entropy_csrng_uninstantiate());
       HARDENED_TRY(entropy_csrng_instantiate(
-          /*disable_trng_input=*/kHardenedBoolFalse, &kEntropyEmptySeed));
-      HARDENED_TRY(entropy_csrng_generate(&kEntropyEmptySeed, salt,
+          /*disable_trng_input=*/kHardenedBoolFalse, /*seed_material=*/NULL));
+      HARDENED_TRY(entropy_csrng_generate(/*seed_material=*/NULL, salt,
                                           ARRAYSIZE(salt),
                                           /*fips_check=*/kHardenedBoolTrue));
-      HARDENED_TRY(entropy_csrng_uninstantiate());
       return rsa_padding_pss_encode(message_digest, salt, ARRAYSIZE(salt),
                                     encoded_message_len, encoded_message);
     }
@@ -138,6 +154,10 @@ static status_t encoded_message_verify(
     const size_t encoded_message_len, hardened_bool_t *result) {
   // Check that the digest length is OK.
   HARDENED_TRY(digest_check(message_digest));
+#ifdef FIPS_MODE
+  HARDENED_TRY(
+      rsa_digest_check_fips(message_digest, padding_mode, encoded_message_len));
+#endif
 
   switch (launder32(padding_mode)) {
     case kRsaSignaturePaddingPkcs1v15:
@@ -159,8 +179,9 @@ static status_t encoded_message_verify(
 }
 
 status_t rsa_signature_generate_start(
-    rsa_size_t size, const uint32_t *d0, const uint32_t *d1, const uint32_t *n,
-    uint32_t checksum, const otcrypto_hash_digest_t message_digest,
+    rsa_size_t size, const uint32_t *d0, const uint32_t *d1, uint32_t e,
+    const uint32_t *n, uint32_t checksum,
+    const otcrypto_hash_digest_t message_digest,
     const rsa_signature_padding_t padding_mode) {
   size_t num_words = 0;
   switch (launder32(size)) {
@@ -191,17 +212,19 @@ status_t rsa_signature_generate_start(
       message_encode(message_digest, padding_mode, num_words, encoded_message));
 
   // Start computing (encoded_message ^ d) mod n.
-  return rsa_modexp_consttime_start(size, encoded_message, d0, d1, n, checksum);
+  return rsa_modexp_consttime_start(size, encoded_message, d0, d1, e, n,
+                                    checksum);
 }
 
 status_t rsa_signature_generate_finalize(rsa_size_t size, uint32_t *signature) {
   return rsa_modexp_finalize_size(size, signature);
 }
 
-status_t rsa_signature_verify_start(rsa_size_t size, const uint32_t *n,
+status_t rsa_signature_verify_start(rsa_size_t size, uint32_t e,
+                                    const uint32_t *n,
                                     const uint32_t *signature) {
   // Start computing (sig ^ e) mod n with a variable-time exponentiation.
-  return rsa_modexp_vartime_start(size, signature, n);
+  return rsa_modexp_vartime_start(size, signature, e, n);
 }
 
 status_t rsa_signature_verify_finalize(

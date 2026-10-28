@@ -30,6 +30,10 @@ class RegBase:
     register/multiregister. Unlike an asynchronous clock, there is no CDC
     needed between the main clock and the clock used by the register.'''
 
+    reinit: str | None
+    '''An optional input that may be used to reinitialize the register
+    to its reset state, e.g. in response to a software request.'''
+
     alias_target: str | None
     '''The name of an analogous register/multiregister that we are going to
     override. This is used when building closed source components which
@@ -56,13 +60,16 @@ class RegBase:
         '''
         raise NotImplementedError()
 
-    def is_homogeneous(self) -> bool:
+    def is_homogeneous(self, inregwen: bool = False) -> bool:
         '''True if every field in the block is identical
 
         For a single register, this is true if it only has one field. For a
         multireg, it is true if the generating register has just one field.
         Note that if the compact flag is set, the generated registers might
         have multiple (replicated) fields.
+
+        When inregwen is True, the inregwen control field is ignored so that
+        this bit does not affect the number of fields in a register.
 
         '''
         raise NotImplementedError()

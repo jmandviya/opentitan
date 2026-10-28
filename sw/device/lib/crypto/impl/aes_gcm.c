@@ -13,7 +13,9 @@
 #include "sw/device/lib/crypto/drivers/rv_core_ibex.h"
 #include "sw/device/lib/crypto/impl/aes_gcm/aes_gcm.h"
 #include "sw/device/lib/crypto/impl/aes_gcm/ghash.h"
+#include "sw/device/lib/crypto/impl/cmvp.h"
 #include "sw/device/lib/crypto/impl/keyblob.h"
+#include "sw/device/lib/crypto/impl/state.h"
 #include "sw/device/lib/crypto/impl/status.h"
 #include "sw/device/lib/crypto/include/config.h"
 #include "sw/device/lib/crypto/include/datatypes.h"
@@ -45,12 +47,15 @@ enum {
 /**
  * AES cleanup guard.
  */
-static void aes_wipe_guard(uint32_t *dummy) { (void)aes_clear(); }
+OT_USED static void aes_wipe_guard(uint32_t *dummy) {
+  (void)dummy;
+  (void)aes_clear();
+}
 
 /**
  * Sideload cleanup guard.
  */
-static void sideload_wipe_guard(hardened_bool_t *is_sideloaded) {
+OT_USED static void sideload_wipe_guard(hardened_bool_t *is_sideloaded) {
   if (*is_sideloaded == kHardenedBoolTrue) {
     (void)keymgr_dpe_sideload_clear_aes();
   }
@@ -103,8 +108,10 @@ status_t gcm_remask_key(aes_gcm_context_t *internal_ctx) {
                           internal_ctx->key.key_len);
     hardened_xor_in_place((uint32_t *)internal_ctx->key.key_shares[1], mask,
                           internal_ctx->key.key_len);
-    // Update the checksum.
+    // Update the checksums.
     internal_ctx->key.checksum = aes_key_integrity_checksum(&internal_ctx->key);
+    internal_ctx->blinded_key->checksum =
+        otcrypto_integrity_blinded_checksum(internal_ctx->blinded_key);
   } else {
     HARDENED_CHECK_EQ(internal_ctx->key.sideload, kHardenedBoolTrue);
   }
@@ -199,6 +206,12 @@ static status_t aes_gcm_key_construct(otcrypto_blinded_key_t *blinded_key,
  */
 status_t aes_gcm_check_tag_length(size_t word_len,
                                   otcrypto_aes_gcm_tag_len_t tag_len) {
+#ifdef FIPS_MODE
+  if (launder32(tag_len) != kOtcryptoAesGcmTagLen128 &&
+      launder32(tag_len) != kOtcryptoAesGcmTagLen96) {
+    return OTCRYPTO_BAD_ARGS;
+  }
+#endif
   size_t bit_len = 0;
   otcrypto_aes_gcm_tag_len_t tag_len_set = launder32(0);
   switch (launder32(tag_len)) {
@@ -274,6 +287,10 @@ otcrypto_status_t otcrypto_aes_gcm_encrypt(
     const otcrypto_const_word32_buf_t *iv, const otcrypto_const_byte_buf_t *aad,
     otcrypto_aes_gcm_tag_len_t tag_len, otcrypto_byte_buf_t *ciphertext,
     otcrypto_word32_buf_t *auth_tag) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_AES_GCM_ENCRYPT);
+  OTCRYPTO_HEALTH_CHECK(kTestAesEcb256DecryptBit);
+  OTCRYPTO_HEALTH_CHECK(kTestAesGcm256EncryptBit);
+  OTCRYPTO_HEALTH_CHECK(kTestAesGcm256DecryptBit);
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
   // Check for NULL pointers in input pointers and required-nonzero-length data
   // buffers.
@@ -330,11 +347,17 @@ otcrypto_status_t otcrypto_aes_gcm_decrypt(
     otcrypto_aes_gcm_tag_len_t tag_len,
     const otcrypto_const_word32_buf_t *auth_tag, otcrypto_byte_buf_t *plaintext,
     hardened_bool_t *success) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_AES_GCM_DECRYPT);
+  OTCRYPTO_HEALTH_CHECK(kTestAesEcb256DecryptBit);
+  OTCRYPTO_HEALTH_CHECK(kTestAesGcm256EncryptBit);
+  OTCRYPTO_HEALTH_CHECK(kTestAesGcm256DecryptBit);
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
   // Check for NULL pointers in input pointers and required-nonzero-length data
   // buffers.
   if (key == NULL || key->keyblob == NULL || iv == NULL || iv->data == NULL ||
       auth_tag == NULL || auth_tag->data == NULL) {
+    // COVERAGE (MISSING) Null required input pointers in decrypt are not
+    // covered.
     return OTCRYPTO_BAD_ARGS;
   }
 
@@ -380,6 +403,10 @@ otcrypto_status_t otcrypto_aes_gcm_decrypt(
 otcrypto_status_t otcrypto_aes_gcm_encrypt_init(
     otcrypto_blinded_key_t *key, const otcrypto_const_word32_buf_t *iv,
     otcrypto_aes_gcm_context_t *ctx) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_AES_GCM_ENCRYPT_INIT);
+  OTCRYPTO_HEALTH_CHECK(kTestAesEcb256DecryptBit);
+  OTCRYPTO_HEALTH_CHECK(kTestAesGcm256EncryptBit);
+  OTCRYPTO_HEALTH_CHECK(kTestAesGcm256DecryptBit);
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
   if (key == NULL || key->keyblob == NULL || iv == NULL || iv->data == NULL ||
       ctx == NULL) {
@@ -401,8 +428,10 @@ otcrypto_status_t otcrypto_aes_gcm_encrypt_init(
   HARDENED_TRY(load_key_if_sideloaded(aes_key));
 
   // Call the internal init operation.
-  aes_gcm_context_t internal_ctx;
+  aes_gcm_context_t internal_ctx
+      __attribute__((cleanup(aes_gcm_context_shred)));
   internal_ctx.security_level = key->config.security_level;
+  internal_ctx.blinded_key = key;
   HARDENED_TRY(aes_gcm_encrypt_init(aes_key, iv, &internal_ctx));
 
   // Save the context.
@@ -414,6 +443,10 @@ otcrypto_status_t otcrypto_aes_gcm_encrypt_init(
 otcrypto_status_t otcrypto_aes_gcm_decrypt_init(
     otcrypto_blinded_key_t *key, const otcrypto_const_word32_buf_t *iv,
     otcrypto_aes_gcm_context_t *ctx) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_AES_GCM_DECRYPT_INIT);
+  OTCRYPTO_HEALTH_CHECK(kTestAesEcb256DecryptBit);
+  OTCRYPTO_HEALTH_CHECK(kTestAesGcm256EncryptBit);
+  OTCRYPTO_HEALTH_CHECK(kTestAesGcm256DecryptBit);
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
   if (key == NULL || key->keyblob == NULL || iv == NULL || iv->data == NULL ||
       ctx == NULL) {
@@ -430,13 +463,17 @@ otcrypto_status_t otcrypto_aes_gcm_decrypt_init(
   aes_key_t aes_key;
   HARDENED_TRY(aes_gcm_key_construct(key, &aes_key));
   if (launder32(aes_key.sideload) == kHardenedBoolTrue) {
+    // COVERAGE (MISSING) Sideloaded keys with streaming decrypt_init are not
+    // covered.
     is_sideloaded = kHardenedBoolTrue;
   }
   HARDENED_TRY(load_key_if_sideloaded(aes_key));
 
   // Call the internal init operation.
-  aes_gcm_context_t internal_ctx;
+  aes_gcm_context_t internal_ctx
+      __attribute__((cleanup(aes_gcm_context_shred)));
   internal_ctx.security_level = key->config.security_level;
+  internal_ctx.blinded_key = key;
   HARDENED_TRY(aes_gcm_decrypt_init(aes_key, iv, &internal_ctx));
 
   // Save the context.
@@ -447,6 +484,8 @@ otcrypto_status_t otcrypto_aes_gcm_decrypt_init(
 
 otcrypto_status_t otcrypto_aes_gcm_update_aad(
     otcrypto_aes_gcm_context_t *ctx, const otcrypto_const_byte_buf_t *aad) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_AES_GCM_UPDATE_AAD);
+  OTCRYPTO_LOCKED_STATE_CHECK();
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
   if (ctx == NULL || aad == NULL || aad->data == NULL) {
     return OTCRYPTO_BAD_ARGS;
@@ -455,7 +494,7 @@ otcrypto_status_t otcrypto_aes_gcm_update_aad(
 
   if (aad->len == 0) {
     // Nothing to do.
-    return OTCRYPTO_OK;
+    return otcrypto_eval_exit(OTCRYPTO_OK);
   }
 
   hardened_bool_t is_sideloaded __attribute__((cleanup(sideload_wipe_guard))) =
@@ -464,7 +503,8 @@ otcrypto_status_t otcrypto_aes_gcm_update_aad(
   barrier32(hw_cleanup_guard);
 
   // Restore the AES-GCM context object and load the key if needed.
-  aes_gcm_context_t internal_ctx;
+  aes_gcm_context_t internal_ctx
+      __attribute__((cleanup(aes_gcm_context_shred)));
   HARDENED_TRY(gcm_context_restore(ctx, &internal_ctx));
   if (launder32(internal_ctx.key.sideload) == kHardenedBoolTrue) {
     is_sideloaded = kHardenedBoolTrue;
@@ -483,6 +523,8 @@ otcrypto_status_t otcrypto_aes_gcm_update_aad(
 otcrypto_status_t otcrypto_aes_gcm_update_encrypted_data(
     otcrypto_aes_gcm_context_t *ctx, const otcrypto_const_byte_buf_t *input,
     otcrypto_byte_buf_t *output, size_t *output_bytes_written) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_AES_GCM_UPDATE_ENCRYPTED_DATA);
+  OTCRYPTO_LOCKED_STATE_CHECK();
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
   if (ctx == NULL || input == NULL || input->data == NULL || output == NULL ||
       output->data == NULL || output_bytes_written == NULL) {
@@ -493,7 +535,7 @@ otcrypto_status_t otcrypto_aes_gcm_update_encrypted_data(
 
   if (input->len == 0) {
     // Nothing to do.
-    return OTCRYPTO_OK;
+    return otcrypto_eval_exit(OTCRYPTO_OK);
   }
 
   hardened_bool_t is_sideloaded __attribute__((cleanup(sideload_wipe_guard))) =
@@ -502,7 +544,8 @@ otcrypto_status_t otcrypto_aes_gcm_update_encrypted_data(
   barrier32(hw_cleanup_guard);
 
   // Restore the AES-GCM context object and load the key if needed.
-  aes_gcm_context_t internal_ctx;
+  aes_gcm_context_t internal_ctx
+      __attribute__((cleanup(aes_gcm_context_shred)));
   HARDENED_TRY(gcm_context_restore(ctx, &internal_ctx));
   if (launder32(internal_ctx.key.sideload) == kHardenedBoolTrue) {
     is_sideloaded = kHardenedBoolTrue;
@@ -538,6 +581,8 @@ otcrypto_status_t otcrypto_aes_gcm_encrypt_final(
     otcrypto_aes_gcm_context_t *ctx, otcrypto_aes_gcm_tag_len_t tag_len,
     otcrypto_byte_buf_t *ciphertext, size_t *ciphertext_bytes_written,
     otcrypto_word32_buf_t *auth_tag) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_AES_GCM_ENCRYPT_FINAL);
+  OTCRYPTO_LOCKED_STATE_CHECK();
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
   if (ctx == NULL || ciphertext_bytes_written == NULL || auth_tag == NULL ||
       auth_tag->data == NULL) {
@@ -562,7 +607,8 @@ otcrypto_status_t otcrypto_aes_gcm_encrypt_final(
   barrier32(hw_cleanup_guard);
 
   // Restore the AES-GCM context object and load the key if needed.
-  aes_gcm_context_t internal_ctx;
+  aes_gcm_context_t internal_ctx
+      __attribute__((cleanup(aes_gcm_context_shred)));
   HARDENED_TRY(gcm_context_restore(ctx, &internal_ctx));
   if (launder32(internal_ctx.key.sideload) == kHardenedBoolTrue) {
     is_sideloaded = kHardenedBoolTrue;
@@ -593,6 +639,8 @@ otcrypto_status_t otcrypto_aes_gcm_decrypt_final(
     const otcrypto_const_word32_buf_t *auth_tag,
     otcrypto_aes_gcm_tag_len_t tag_len, otcrypto_byte_buf_t *plaintext,
     size_t *plaintext_bytes_written, hardened_bool_t *success) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_AES_GCM_DECRYPT_FINAL);
+  OTCRYPTO_LOCKED_STATE_CHECK();
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
   if (ctx == NULL || plaintext_bytes_written == NULL || auth_tag == NULL ||
       auth_tag->data == NULL || success == NULL) {
@@ -614,9 +662,12 @@ otcrypto_status_t otcrypto_aes_gcm_decrypt_final(
   barrier32(hw_cleanup_guard);
 
   // Restore the AES-GCM context object and load the key if needed.
-  aes_gcm_context_t internal_ctx;
+  aes_gcm_context_t internal_ctx
+      __attribute__((cleanup(aes_gcm_context_shred)));
   HARDENED_TRY(gcm_context_restore(ctx, &internal_ctx));
   if (launder32(internal_ctx.key.sideload) == kHardenedBoolTrue) {
+    // COVERAGE (MISSING) Sideloaded keys with streaming decrypt_final are not
+    // covered.
     is_sideloaded = kHardenedBoolTrue;
   }
   HARDENED_TRY(load_key_if_sideloaded(internal_ctx.key));

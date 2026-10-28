@@ -288,6 +288,7 @@ module rram_ctrl_otp
   ////////////////////////////////
 
   // Integrity computation
+  // SEC_CM: OTP.MEM.INTEGRITY
   // Instantiate secded encoder and decoder based on parameters.
   `include "prim_secded_inc.svh"
   logic [OtpIntgDataWidth-1:0] unused_data, data_plain;
@@ -721,5 +722,11 @@ module rram_ctrl_otp
                              |-> (otp_macro_req_i.addr[1:0] == '0), clk_otp_i, !rst_otp_ni)
   `ASSERT(IllegalSize,      (otp_macro_req_i.valid |-> (otp_macro_req_i.size != 2'd2)),
                              clk_otp_i, !rst_otp_ni)
+
+  // OTP data must fit into OtpPages-1 pages, its integrity bytes into the first page.
+  `ASSERT_INIT(OtpDataFitsRramRegion_A,
+               OtpDepth * OtpWidth <= (OtpPages - 1) * WordsPerPage * DataWidth)
+  `ASSERT_INIT(OtpIntgFitsRramIntgPage_A,
+               OtpDepth * OtpWidth / OtpIntgDataWidth * OtpIntgWidth <= WordsPerPage * DataWidth)
 
 endmodule : rram_ctrl_otp

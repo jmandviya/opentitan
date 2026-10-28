@@ -211,6 +211,10 @@
                     size: "4"
                 }
                 {
+                    name: "CREATOR_SW_CFG_RNG_ADAPTPS_THRESHOLDS",
+                    size: "4"
+                }
+                {
                     name: "CREATOR_SW_CFG_RNG_BUCKET_THRESHOLDS",
                     size: "4"
                 }
@@ -915,18 +919,6 @@
                       SOC_DBG_PROD: this is the state where the SOC moves to production,
                         and the challenge-response based authentication protocol is
                         required to unlock SOC debug features
-                    '''
-                },
-                {
-                    name:        "EN_CSRNG_SW_APP_READ",
-                    size:        "1",
-                    ismubi:      true,
-                    inv_default: false,
-                    desc: '''
-                    Enablement of CSRNG software application interface. A
-                    kMultiBitBool8True value enables, while all other values
-                    disable. Enablement is required to extract output from
-                    CSRNG via software.
                     '''
                 },
                 {

@@ -131,20 +131,6 @@
       act:     "req",
       package: "entropy_src_pkg",
     }
-    { struct:  "mubi8"
-      type:    "uni"
-      name:    "otp_en_entropy_src_fw_read"
-      act:     "rcv"
-      package: "prim_mubi_pkg"
-      default: "prim_mubi_pkg::MuBi8True"
-    }
-    { struct:  "mubi8"
-      type:    "uni"
-      name:    "otp_en_entropy_src_fw_over"
-      act:     "rcv"
-      package: "prim_mubi_pkg"
-      default: "prim_mubi_pkg::MuBi8True"
-    }
     { struct:  "logic"
       type:    "uni"
       name:    "rng_fips"
@@ -291,9 +277,7 @@
             By default, ENTROPY_SRC routes the generated entropy out of ENTROPY_SRC via the hardware interface for consumption by CSRNG.
             For validation testing, it is possible to instead route the generated entropy to the !!ENTROPY_DATA register to be read by firmware.
 
-            Note that for this to work the `otp_en_entropy_src_fw_read` input from OTP needs to be `kMultiBitBool8True`.
-
-            Further note that when routing entropy to firmware, 1) no entropy is being passed to the hardware interface, and 2) it is possible to optionally bypass the hardware conditioner using !!ENTROPY_CONTROL.ES_TYPE.
+            Note that when routing entropy to firmware, 1) no entropy is being passed to the hardware interface, and 2) it is possible to optionally bypass the hardware conditioner using !!ENTROPY_CONTROL.ES_TYPE.
             '''
     },
     {
@@ -303,8 +287,6 @@
             This can be useful, e.g., for validation testing.
 
             Note that the post-health test entropy bits collected in the observe FIFO continue to flow through the hardware pipeline and may eventually reach the hardware interface.
-
-            Note that for this to work the `otp_en_entropy_src_fw_over` input from OTP needs to be set to `kMultiBitBool8True`.
             '''
     },
     {
@@ -318,8 +300,6 @@
 
             Note that the post-health test entropy bits collected in the observe FIFO do not continue to flow through the hardware pipeline.
             Only entropy bits inserted by firmware through !!FW_OV_WR_DATA may eventually reach the block hardware interface.
-
-            Note that for this feature to work the `otp_en_entropy_src_fw_over` input from OTP needs to be set to `kMultiBitBool8True`.
             '''
     },
   ],
@@ -332,9 +312,6 @@
     }
     { name: "CONFIG.REDUN"
       desc: "Threshold register has an inverted copy to compare against."
-    }
-    { name: "INTERSIG.MUBI"
-      desc: "OTP signal used to enable software access to registers."
     }
     { name: "MAIN_SM.FSM.SPARSE"
       desc: "The ENTROPY_SRC main state machine uses a sparse state encoding."
@@ -365,20 +342,6 @@
 
   regwidth: "32",
   registers: [
-    { name: "ME_REGWEN",
-      desc: "Register write enable for module enable register",
-      swaccess: "rw0c",
-      hwaccess: "none",
-      fields: [
-        {
-            bits: "0",
-            desc: ''' When true, the !!MODULE_ENABLE register can be modified.
-            When false, it becomes read-only.
-            '''
-            resval: 1
-        }
-      ]
-    },
     { name: "SW_REGUPD",
       desc: "Register write enable for control and threshold registers",
       swaccess: "rw0c",
@@ -418,7 +381,6 @@
       desc: "Module enable register",
       swaccess: "rw",
       hwaccess: "hro",
-      regwen:   "ME_REGWEN",
       tags: [// Exclude from writes to these field because they cause side affects.
              "excl:CsrAllTests:CsrExclAll"]
       fields: [
@@ -503,7 +465,6 @@
           mubi: true,
           desc: '''
                 Setting this field to `kMultiBitBool4True` will enable reading entropy values from the !!ENTROPY_DATA register.
-                This function also requires that the otp_en_entropy_src_fw_read input is set to `kMultiBitBool8True`.
                 '''
           resval: false
         }
@@ -531,7 +492,6 @@
                 When this field is `kMultiBitBool4False`, the generated entropy will be forwarded out of this module to the hardware interface.
                 Setting this field to `kMultiBitBool4True` routes the generated entropy to the !!ENTROPY_DATA register to be read by firmware.
                 Note that for !!ENTROPY_DATA to become readable, also !!CONF.ENTROPY_DATA_REG_ENABLE needs to be set to `kMultiBitBool4True`.
-                In addition, the otp_en_entropy_src_fw_read input needs to be set to `kMultiBitBool8True`.
                 '''
           resval: false
         },
@@ -560,7 +520,6 @@
           desc: '''
                 A read of this register provides generated entropy bits to firmware.
                 For this to work also !!CONF.ENTROPY_DATA_REG_ENABLE needs to be set to `kMultiBitBool4True`.
-                In addition, the otp_en_entropy_src_fw_read input needs to be set to `kMultiBitBool8True`.
                 '''
         }
       ]
@@ -613,7 +572,7 @@
           hwaccess: "hro",
           name: "THRESHOLD_ONEWAY",
           desc: '''
-                Setting this field to `kMultiBitBool4True` will enable enable the one-way behavior of the health test threshold registers.
+                Setting this field to `kMultiBitBool4True` will enable the one-way behavior of the health test threshold registers.
                 After reset, this field reads as `kMultiBitBool4False` and the health test threshold registers can be configured without limitations.
                 '''
         },
@@ -660,7 +619,7 @@
       ]
     },
     { name: "ADAPTP_HI_THRESHOLD",
-      desc: "Adaptive proportion test high threshold register",
+      desc: "Adaptive Proportion Test high threshold register",
       swaccess: "rw",
       hwaccess: "hrw",
       hwext: "true",
@@ -680,7 +639,7 @@
       ]
     },
     { name: "ADAPTP_LO_THRESHOLD",
-      desc: "Adaptive proportion test low threshold register",
+      desc: "Adaptive Proportion Test low threshold register",
       swaccess: "rw",
       hwaccess: "hrw",
       hwext: "true",
@@ -696,6 +655,26 @@
                    A read from this register always reflects the current value.
                 '''
           resval: "0x0000"
+        }
+      ]
+    },
+    { name: "ADAPTPS_THRESHOLD",
+      desc: "Adaptive Proportion Symbol Test threshold register",
+      swaccess: "rw",
+      hwaccess: "hrw",
+      hwext: "true",
+      hwqe:  "true",
+      regwen:   "REGWEN",
+      tags: [// Exclude from writes to these field because they are one-way updates
+             "excl:CsrNonInitTests:CsrExclWrite"]
+      fields: [
+        { bits: "15:0",
+          desc: '''This is the threshold for the Adaptive Proportion Symbol Test.
+                   This register must be written before the module is enabled.
+                   If !!THRESHOLD_ONEWAY is set to `kMultiBitBool4True`, writing to this register will only update the register if the written value is less than the current value of this register.
+                   A read from this register always reflects the current value.
+                '''
+          resval: "0xFFFF"
         }
       ]
     },
@@ -814,7 +793,7 @@
           resval: "0",
           desc: '''
                 The value of this field defines the health test for which the HT_WATERMARK register records the watermark.
-                Invalid input values, i.e., values greater than 8 are mapped to 0.
+                Invalid input values, i.e., values greater than 9 are mapped to 0.
 
                 This register must be written before the module is enabled.
                 '''
@@ -834,40 +813,46 @@
             { value: "2",
               name: "ADAPTP_HI",
               desc: '''
-                    Adaptive proportion test high watermark.
+                    Adaptive Proportion Test high watermark.
                     '''
             },
             { value: "3",
               name: "ADAPTP_LO",
               desc: '''
-                    Adaptive proportion test low watermark.
+                    Adaptive Proportion Test low watermark.
                     '''
             },
             { value: "4",
+              name: "ADAPTPS_HI",
+              desc: '''
+                    Adaptive Proportion Symbol Test watermark.
+                    '''
+            },
+            { value: "5",
               name: "BUCKET_HI",
               desc: '''
                     Bucket test high watermark.
                     '''
             },
-            { value: "5",
+            { value: "6",
               name: "MARKOV_HI",
               desc: '''
                     Markov test high watermark.
                     '''
             },
-            { value: "6",
+            { value: "7",
               name: "MARKOV_LO",
               desc: '''
                     Markov test low watermark.
               '''
             },
-            { value: "7",
+            { value: "8",
               name: "EXTHT_HI",
               desc: '''
                     External health test high watermark.
                     '''
             },
-            { value: "8",
+            { value: "9",
               name: "EXTHT_LO",
               desc: '''
                     External health test low watermark.
@@ -925,7 +910,7 @@
       ]
     },
     { name:     "ADAPTP_HI_TOTAL_FAILS",
-      desc:     "Adaptive proportion high test failure counter register",
+      desc:     "Adaptive Proportion high test failure counter register",
       swaccess: "ro",
       hwaccess: "hwo",
       hwext: "true",
@@ -939,7 +924,7 @@
       ]
     },
     { name:     "ADAPTP_LO_TOTAL_FAILS",
-      desc:     "Adaptive proportion low test failure counter register",
+      desc:     "Adaptive Proportion low test failure counter register",
       swaccess: "ro",
       hwaccess: "hwo",
       hwext: "true",
@@ -948,6 +933,20 @@
           name: "ADAPTP_LO_TOTAL_FAILS",
           desc: '''This register will hold a running count of test failures observed
                    during normal operation. It will persist until cleared.
+                '''
+        }
+      ]
+    },
+    { name:     "ADAPTPS_TOTAL_FAILS",
+      desc:     "Adaptive Proportion Symbol Test failure counter register",
+      swaccess: "ro",
+      hwaccess: "hwo",
+      hwext: "true",
+      fields: [
+        { bits: "31:0",
+          name: "ADAPTPS_TOTAL_FAILS",
+          desc: '''This register will hold a running count of test failures observed during normal operation.
+                   It will persist until cleared.
                 '''
         }
       ]
@@ -1099,8 +1098,14 @@
       hwaccess: "hwo",
       hwext: "true",
       fields: [
-        { bits: "7:4",
+        { bits: "3:0",
           name: "REPCNT_FAIL_COUNT",
+          desc: '''
+                The number of symbols during which this test failed since the last passing health test window.
+                '''
+        }
+        { bits: "7:4",
+          name: "REPCNTS_FAIL_COUNT",
           desc: '''
                 The number of symbols during which this test failed since the last passing health test window.
                 '''
@@ -1118,27 +1123,27 @@
                 '''
         }
         { bits: "19:16",
-          name: "BUCKET_FAIL_COUNT",
+          name: "ADAPTPS_FAIL_COUNT",
           desc: '''
                 The number of health test windows during which this test failed since the last passing health test window.
                 '''
         }
         { bits: "23:20",
-          name: "MARKOV_HI_FAIL_COUNT",
+          name: "BUCKET_FAIL_COUNT",
           desc: '''
                 The number of health test windows during which this test failed since the last passing health test window.
                 '''
         }
         { bits: "27:24",
-          name: "MARKOV_LO_FAIL_COUNT",
+          name: "MARKOV_HI_FAIL_COUNT",
           desc: '''
                 The number of health test windows during which this test failed since the last passing health test window.
                 '''
         }
         { bits: "31:28",
-          name: "REPCNTS_FAIL_COUNT",
+          name: "MARKOV_LO_FAIL_COUNT",
           desc: '''
-                The number of symbols during which this test failed since the last passing health test window.
+                The number of health test windows during which this test failed since the last passing health test window.
                 '''
         }
       ]
@@ -1187,7 +1192,6 @@
                 In this mode, firmware can monitor the post-health test entropy by reading
                 the observe FIFO (see !!FW_OV_RD_DATA).
                 This includes the entropy bits used for the startup health testing.
-                For this to work, the otp_en_entropy_src_fw_over input needs to be set to `kMultiBitBool8True`.
 
                 Note that the post-health test entropy bits collected in the observe FIFO continue to flow through the hardware pipeline and may eventually reach the block hardware interface.
                 '''
@@ -1200,7 +1204,6 @@
                 Setting this field to `kMultiBitBool4True` allows firmware to extract entropy bits by reading the observe FIFO (see !!FW_OV_RD_DATA) and insert entropy bits into the entropy flow by writing the !!FW_OV_WR_DATA register.
                 This is useful e.g. for performing additional health tests and/or firmware-based conditioning.
                 For this to work, !!FW_OV_CONTROL.FW_OV_MODE needs to be set to `kMultiBitBool4True`.
-                In addition, the otp_en_entropy_src_fw_over input needs to be set to `kMultiBitBool8True`.
 
                 Firmware can use the hardware conditioning for the inserted entropy bits (see !!FW_OV_SHA3_START).
 
@@ -1285,7 +1288,6 @@
           desc: '''
                 A read of this register pops and returns the top of the observe FIFO.
                 For this to work, the !!FW_OV_CONTROL.FW_OV_MODE field needs to be set to `kMultiBitBool4True`
-                In addition, the otp_en_entropy_src_fw_over input needs to be set to `kMultiBitBool8True`.
                 Reading this register while the observe FIFO is empty results in a fatal error with !!ERR_CODE.FIFO_READ_ERR and !!ERR_CODE.SFIFO_OBSERVE_ERR going high.
                 '''
         }
@@ -1302,7 +1304,6 @@
           desc: '''
                 A write to this register will insert entropy back into the entropy source module flow.
                 For this to work, both the !!FW_OV_CONTROL.FW_OV_MODE and !!FW_OV_CONTROL.FW_OV_ENTROPY_INSERT fields need to be set to `kMultiBitBool4True`.
-                In addition, the otp_en_entropy_src_fw_over input needs to be set to `kMultiBitBool8True`.
                 '''
         }
       ]

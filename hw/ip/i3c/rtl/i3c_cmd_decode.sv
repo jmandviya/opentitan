@@ -12,13 +12,7 @@ module i3c_cmd_decode
   import i3c_consts_pkg::*;
   import i3c_controller_pkg::*;
   import i3c_pkg::*;
-#(
-  // Number of entries in the Device Address Table.
-  parameter int unsigned NumDATEntries = i3c_pkg::NumDATEntries,
-
-  // Derived parameters.
-  localparam int unsigned DATAddrW = $clog2(NumDATEntries)
-) (
+(
   // No requirement for clock or reset.
 
   // Current command state.
@@ -49,7 +43,7 @@ module i3c_cmd_decode
   output logic                      err_o
 
   // Additional information presented in the Controller-side registers may be of diagnostic use.
-  // TODO: Supply additional information?
+  // TODO(#31307): Supply additional information?
 );
 
   // This is likely to be required once we are selecting the input command from multiple sources.
@@ -82,7 +76,7 @@ module i3c_cmd_decode
   // otherwise deadlock the Controller and Driver.
   always_comb begin
     // Is this a Common Command Code transfer?
-    case (cmd_reg_o.cmd_attr)
+    unique case (cmd_reg_o.cmd_attr)
       CmdAttr_ImmTransfer,
       CmdAttr_RegTransfer: begin
         // HCI version 1.2 supports CCC Framing in SDR only (not HDR modes), but the CMD field may
@@ -99,7 +93,7 @@ module i3c_cmd_decode
     init_ok_o = !(cmd_attrs_o.is_ccc & tcri_blocked_ccc(cmd_reg_o.cmd));
 
     // Initial dispatch checks based on the type of Command Descriptor.
-    case (cmd_reg_o.cmd_attr)
+    unique case (cmd_reg_o.cmd_attr)
       CmdAttr_ImmTransfer:    init_ok_o = init_ok_o & !cmd_imm_o.rnw;  // Write Transfers only.
       // Any CCC command having just a Defining Byte and no data payload shall be sent as an
       // Immediate Data Transfer Command.
@@ -108,13 +102,13 @@ module i3c_cmd_decode
       // Address Assignment Commands support SETDASA and ENTDAA, but not SETAASA (HCI 8.4.1).
       CmdAttr_AddrAssignment: init_ok_o = init_ok_o & (cmd_daa_o.cmd inside {ENTDAA, SETDASA});
       CmdAttr_InternalCtrl:
-        case (cmd_intn_o.mipi_cmd)
+        unique case (cmd_intn_o.mipi_cmd)
           MIPICmd_NoOp,
           MIPICmd_BroadAddrEnable: init_ok_o = 1'b1;
           MIPICmd_TargRstPattern:
             init_ok_o = (cmd_intn_o.mipi_reserved[13:12] != RstOpType_Reserved);
           MIPICmd_CtrlSDARecovery,
-          // TODO: We need to block the use of CtrlHandOff if not in the 'transition period'
+          // TODO(#31308): We need to block the use of CtrlHandOff if not in the 'transition period'
           MIPICmd_CtrlHandoff,
           MIPICmd_AttemptDBR:  /* Nothing to do */;
           MIPICmd_EndXferHDR:
@@ -150,7 +144,7 @@ module i3c_cmd_decode
     cmd_attrs_o.ddr  = hdr_ddr;
 
     // Determine maximum number of retries; this depends upon the device properties as well.
-    case (cmd_reg_o.cmd_attr)
+    unique case (cmd_reg_o.cmd_attr)
       CmdAttr_ImmTransfer,
       CmdAttr_RegTransfer,
       CmdAttr_ComboTransfer: begin
@@ -170,6 +164,7 @@ module i3c_cmd_decode
     cmd_attrs_o.toc      = cmd_reg_o.toc;
     cmd_attrs_o.has_defb = 1'b0;
     cmd_attrs_o.defb     = 8'b0;  // Not needed by default; just avoids latch creation.
+    cmd_attrs_o.data_len = 16'b0;
 
     // Index to DAT is at the same position for the majority of command descriptors.
     cmd_attrs_o.dev_index = cmd_reg_o.dev_index;
@@ -179,12 +174,20 @@ module i3c_cmd_decode
     // Default to acceptance, unless it's a CCC that's prohibited in Command Descriptors (TCRI 6.2).
     err_o = cmd_attrs_o.is_ccc & tcri_blocked_ccc(cmd_imm_o.cmd);
 
+    // TODO(#31305): Check the validity of the address being used, remembering that it may be the
+    // static address rather than the dynamic address.
+
     // The most significant field is the command type (`cmd_attr`).
     // - the validity of fields is type-specific.
-    case (cmd_reg_o.cmd_attr)
+    unique case (cmd_reg_o.cmd_attr)
       CmdAttr_ImmTransfer: begin
         cmd_attrs_o.has_defb = (cmd_imm_o.dtt > 'h4);
         cmd_attrs_o.defb     =  cmd_imm_o.data_byte_1;
+        unique case (cmd_imm_o.dtt)
+          // Data length does _not_ include the Defining Byte.
+          3'h5, 3'h6, 3'h7: cmd_attrs_o.data_len = 16'(cmd_imm_o.dtt - 3'h5);
+          default:          cmd_attrs_o.data_len = 16'(cmd_imm_o.dtt);
+        endcase
         if (cmd_imm_o.rnw) err_o = 1'b1;  // Immediate transfers are Write only.
         // Not all Transfer mode values are valid/supported.
         if (!mode_supported(cmd_attrs_o.mode, cmd_attrs_o.i2c)) err_o = 1'b1;
@@ -192,6 +195,7 @@ module i3c_cmd_decode
       CmdAttr_RegTransfer: begin
         cmd_attrs_o.has_defb = cmd_reg_o.dbp;
         cmd_attrs_o.defb     = cmd_reg_o.def_byte;
+        cmd_attrs_o.data_len = cmd_reg_o.data_length;
         // Not all Transfer mode values are valid/supported, and zero-length transfers shall be done
         // using Immediate Data Transfer commands.
         if (!mode_supported(cmd_attrs_o.mode, cmd_attrs_o.i2c) || ~|cmd_reg_o.data_length) begin
@@ -200,8 +204,10 @@ module i3c_cmd_decode
         if (cmd_attrs_o.is_ccc & tcri_blocked_ccc(cmd_reg_o.cmd)) err_o = 1'b1;
       end
       CmdAttr_ComboTransfer: begin
+        // TODO(#31304). Combo Transfer Commands are declared as unsupported, and not implemented.
+        cmd_attrs_o.data_len  = cmd_combo_o.data_length;
         // There are two phases to a Combo Transfer command.
-        cmd_attrs_o.reps_left = !cmd_state_i.rep_start;
+        cmd_attrs_o.reps_left = CmdRepW'(!cmd_state_i.rep_start);
         // Not all Transfer mode values are valid/supported, and zero-length transfers are invalid.
         if (!mode_supported(cmd_attrs_o.mode, cmd_attrs_o.i2c) || ~|cmd_combo_o.data_length ||
             &cmd_combo_o.dlp) begin
@@ -214,10 +220,12 @@ module i3c_cmd_decode
         cmd_attrs_o.mode    = XferMode_SDR0;
         cmd_attrs_o.i2c     = 1'b0;
         cmd_attrs_o.toc     = 1'b0;
+        // TODO(#31304): Dynamic address during the write phase, but this is possibly not required.
+        cmd_attrs_o.data_len  = 'h1;
         // The first segment is a write operation, sending the CCC.
         // Subsequent segments are predominantly reads, collecting the target characteristics,
         // and then transparently changing to a write mid-segment.
-        cmd_attrs_o.rnw     = cmd_state_i.rep_start;
+        cmd_attrs_o.rnw       = cmd_state_i.rep_start;
         // The index into the DAT advances for each command phase, and is incremented _before_ use.
         cmd_attrs_o.dev_index = cmd_state_i.rep_start ? (cmd_state_i.dev_index + 'b1)
                                                       : (cmd_daa_o.dev_index   - 'b1);
@@ -227,7 +235,7 @@ module i3c_cmd_decode
                                                       : cmd_daa_o.dev_count;
       end
       CmdAttr_InternalCtrl:
-        case (cmd_intn_o.mipi_cmd)
+        unique case (cmd_intn_o.mipi_cmd)
           MIPICmd_NoOp,
           MIPICmd_BroadAddrEnable: err_o = 1'b0;
           MIPICmd_TargRstPattern:
@@ -248,7 +256,19 @@ module i3c_cmd_decode
     endcase
 
     // Derived properties.
-    cmd_attrs_o.brd_ccc = cmd_attrs_o.is_ccc & !cmd_attrs_o.ccc[7];
+    cmd_attrs_o.brd_ccc = cmd_attrs_o.is_ccc & broadcast_ccc(cmd_attrs_o.ccc);
   end
+
+  // Signals that the logic does not use (yet).
+  // - fields of the shared command state and DAT entry structs that the decoder does not need.
+  logic unused_decode_inputs;
+  assign unused_decode_inputs = ^{cmd_state_i.available, cmd_state_i.retry_cnt,
+                                  cmd_state_i.rst_csect, cmd_state_i.started,
+                                  dat_entry_i.autocmd_hdr_code, dat_entry_i.autocmd_mask,
+                                  dat_entry_i.autocmd_mode, dat_entry_i.autocmd_value,
+                                  dat_entry_i.crr_reject, dat_entry_i.dynamic_address,
+                                  dat_entry_i.ibi_payload, dat_entry_i.ibi_reject,
+                                  dat_entry_i.ring_id, dat_entry_i.static_address,
+                                  dat_entry_i.ts};
 
 endmodule

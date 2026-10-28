@@ -651,6 +651,35 @@ opentitan_test(
 )
 
 opentitan_test(
+    name = "pct_functest",
+    srcs = ["pct_functest.c"],
+    exec_env = CRYPTOTEST_EXEC_ENVS,
+    fpga = fpga_params(
+        timeout = "long",
+        tags = ["manual"],
+    ),
+    verilator = verilator_params(
+        timeout = "eternal",
+        # This test can take > 60 minutes, so mark it manual as it shouldn't
+        # run in CI/nightlies.
+        tags = ["manual"],
+    ),
+    deps = [
+        "//sw/device/lib/base:macros",
+        "//sw/device/lib/crypto",
+        "//sw/device/lib/crypto/impl:keyblob",
+        "//sw/device/lib/crypto/include:crypto_hdrs",
+        "//sw/device/lib/runtime:log",
+        "//sw/device/lib/testing/test_framework:ottf_main",
+    ],
+)
+
+fips_wrap_opentitan_test(
+    name = "pct_functest",
+    exec_env = CRYPTOTEST_FIPS_EXEC_ENVS,
+)
+
+opentitan_test(
     name = "ecdh_p256_sideload_functest",
     srcs = ["ecdh_p256_sideload_functest.c"],
     exec_env = CRYPTOTEST_EXEC_ENVS,
@@ -1140,18 +1169,66 @@ opentitan_test(
 )
 
 opentitan_test(
-    name = "kats_functest",
-    srcs = ["kats_functest.c"],
+    name = "stateful_kats_functest",
+    srcs = ["stateful_kats_functest.c"],
     exec_env = CRYPTOTEST_EXEC_ENVS,
+    local_defines = select({
+        "//sw/device/lib/crypto/configs:hashed": ["FIPS_MODE"],
+        "//conditions:default": [],
+    }),
     verilator = verilator_params(
         timeout = "long",
     ),
     deps = [
-        "//sw/device/lib/crypto/impl:config",
-        "//sw/device/lib/crypto/impl:kats",
+        "//sw/device/lib/base:csr",
+        "//sw/device/lib/crypto",
+        "//sw/device/lib/crypto/impl:state",
+        "//sw/device/lib/crypto/include:crypto_hdrs",
+        "//sw/device/lib/runtime:ibex",
+        "//sw/device/lib/runtime:log",
         "//sw/device/lib/testing/test_framework:check",
         "//sw/device/lib/testing/test_framework:ottf_main",
     ],
+)
+
+# Call the kats test with --config=crypto_fips_all
+# Call for example stateful_kats_functest_fips_fpga_cw340_sival_rom_ext, i.e., append fips behind the name and before the exec_env
+fips_wrap_opentitan_test(
+    name = "stateful_kats_functest",
+    exec_env = CRYPTOTEST_FIPS_EXEC_ENVS,
+)
+
+opentitan_test(
+    name = "kats_functest",
+    srcs = ["kats_functest.c"],
+    exec_env = CRYPTOTEST_EXEC_ENVS,
+    local_defines = select({
+        "//sw/device/lib/crypto/configs:hashed": ["FIPS_MODE"],
+        "//conditions:default": [],
+    }),
+    verilator = verilator_params(
+        timeout = "long",
+    ),
+    deps = [
+        "//sw/device/lib/base:csr",
+        "//sw/device/lib/crypto",
+        "//sw/device/lib/crypto/include:crypto_hdrs",
+        "//sw/device/lib/runtime:log",
+        "//sw/device/lib/testing/test_framework:check",
+        "//sw/device/lib/testing/test_framework:ottf_main",
+    ] + select({
+        "//sw/device/lib/crypto/configs:type_binary_blob": [
+            "//sw/device/lib/crypto/impl:kats",
+        ],
+        "//conditions:default": [
+            "//sw/device/lib/crypto/impl:kats_hdrs",
+        ],
+    }),
+)
+
+fips_wrap_opentitan_test(
+    name = "kats_functest",
+    exec_env = CRYPTOTEST_FIPS_EXEC_ENVS,
 )
 
 opentitan_test(
@@ -1601,6 +1678,23 @@ opentitan_test(
 )
 
 opentitan_test(
+    name = "hkdf_otbn_masked_functest",
+    srcs = ["hkdf_otbn_masked_functest.c"],
+    exec_env = CRYPTOTEST_EXEC_ENVS,
+    verilator = verilator_params(
+        timeout = "long",
+    ),
+    deps = [
+        "//sw/device/lib/crypto/impl:config",
+        "//sw/device/lib/crypto/impl:entropy_src",
+        "//sw/device/lib/crypto/impl:keyblob",
+        "//sw/device/lib/crypto/impl/sha2:hkdf",
+        "//sw/device/lib/runtime:log",
+        "//sw/device/lib/testing/test_framework:ottf_main",
+    ],
+)
+
+opentitan_test(
     name = "hmac_sha256_functest",
     srcs = ["hmac_sha256_functest.c"],
     exec_env = CRYPTOTEST_EXEC_ENVS,
@@ -1704,11 +1798,33 @@ opentitan_test(
 )
 
 opentitan_test(
+    name = "sha2_otbn_masked_functest",
+    srcs = ["sha2_otbn_masked_functest.c"],
+    exec_env = CRYPTOTEST_EXEC_ENVS,
+    kind = "flash",
+    verilator = verilator_params(
+        timeout = "long",
+    ),
+    deps = [
+        "//hw/top:entropy_src_c_regs",
+        "//hw/top_earlgrey/sw/autogen:top_earlgrey",
+        "//sw/device/lib/base:abs_mmio",
+        "//sw/device/lib/crypto/drivers:entropy",
+        "//sw/device/lib/crypto/impl:status",
+        "//sw/device/lib/crypto/impl/sha2:sha256",
+        "//sw/device/lib/crypto/impl/sha2:sha384",
+        "//sw/device/lib/crypto/impl/sha2:sha512",
+        "//sw/device/lib/runtime:log",
+        "//sw/device/lib/testing/test_framework:ottf_main",
+    ],
+)
+
+opentitan_test(
     name = "otcrypto_hash_test",
     srcs = ["otcrypto_hash_test.c"],
     exec_env = CRYPTOTEST_EXEC_ENVS,
     local_defines = select({
-        "//sw/device/lib/crypto/configs:hashed": ["HASH_SELF_CHECK_ENABLE"],
+        "//sw/device/lib/crypto/configs:hashed": ["FIPS_MODE"],
         "//conditions:default": [],
     }),
     deps = [
@@ -1811,8 +1927,10 @@ test_suite(
         ":rsa_2048_key_from_cofactor_functest",
         ":rsa_2048_signature_functest",
         ":rsa_3072_encryption_functest",
+        ":rsa_3072_key_from_cofactor_functest",
         ":rsa_3072_signature_functest",
         ":rsa_4096_encryption_functest",
+        ":rsa_4096_key_from_cofactor_functest",
         ":rsa_4096_signature_functest",
         ":sha256_functest",
         ":sha384_functest",
@@ -1820,12 +1938,14 @@ test_suite(
         ":status_functest",
         ":symmetric_keygen_functest",
         ":x25519_functest",
+        ":x25519_sideload_functest",
     ],
 )
 
 test_suite(
     name = "cryptolib_keygen_test_suite",
     tests = [
+        ":pct_functest",
         ":rsa_2048_keygen_functest",
         ":rsa_3072_keygen_functest",
         ":rsa_4096_keygen_functest",

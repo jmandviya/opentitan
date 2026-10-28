@@ -6,13 +6,22 @@
 
 Partial support:
 
-  - This doesn't currently support .include directives fully (the included file
-    will not be transformed, so OTBN instructions won't work there).
+  - .include directives are supported and transformed here before being passed
+    to the binutils assembler. For simplicity, recursive includes are not
+    allowed.
+
+  - .macro definitions are supported and also transformed here before being
+    passed to the binutils assembler. For simplicity, recursive macros are not
+    allowed.
 
   - .file support assumes we're not using DWARF2 file numbers.
 
-  - Operands may not have embedded spaces or commas. Complicated immediate
-    expressions are not currently supported.
+  - Operands may not have embedded spaces or commas.
+
+  - Immediates for instructions that are not part of the RV32I instruction set
+    (including the LI macro) are parsed here. They must be integer literals or
+    symbols that were defined with .equ, .set or .equiv earlier in the same
+    file. Expressions are not supported.
 
 '''
 
@@ -441,6 +450,17 @@ def parse_positionals(
     return (positionals, others, flags)
 
 
+def resolve_const(expr: str, constants: Dict[str, int]) -> Optional[int]:
+    '''Interpret expr as an integer literal or a symbol from `constants`
+
+    Returns None if it is neither.
+    '''
+    try:
+        return int(expr, 0)
+    except ValueError:
+        return constants.get(expr.strip())
+
+
 def _unpack_lx(where: str, mnemonic: str,
                op_to_expr: Dict[str, Optional[str]]) -> Tuple[str, str]:
     '''Unpack the arguments to li or la'''
@@ -475,7 +495,8 @@ def _unpack_lx(where: str, mnemonic: str,
     return (grd_txt, imm)
 
 
-def expand_li(where: str, op_to_expr: Dict[str, Optional[str]]) -> List[str]:
+def expand_li(where: str, op_to_expr: Dict[str, Optional[str]],
+              constants: Dict[str, int]) -> List[str]:
     '''Expand the li pseudo-op'''
 
     # This logic is slightly complicated so it has some associated tests in the
@@ -484,9 +505,8 @@ def expand_li(where: str, op_to_expr: Dict[str, Optional[str]]) -> List[str]:
     # hw/ip/otbn/dv/otbnsim/test/simple/pseudos/li.s.
 
     grd_txt, imm = _unpack_lx(where, 'li', op_to_expr)
-    try:
-        imm_int = int(imm, 0)
-    except ValueError:
+    imm_int = resolve_const(imm, constants)
+    if imm_int is None:
         raise RuntimeError('{}: Cannot parse {!r}, the immediate for an LI '
                            'instruction, as an integer.'.format(where, imm))
 
@@ -538,7 +558,8 @@ def expand_li(where: str, op_to_expr: Dict[str, Optional[str]]) -> List[str]:
     ]
 
 
-def expand_la(where: str, op_to_expr: Dict[str, Optional[str]]) -> List[str]:
+def expand_la(where: str, op_to_expr: Dict[str, Optional[str]],
+              constants: Dict[str, int]) -> List[str]:
     '''Expand the la pseudo-op'''
 
     # For RISC-V, "la rd, symbol" expands to two instructions:
@@ -562,6 +583,44 @@ def expand_la(where: str, op_to_expr: Dict[str, Optional[str]]) -> List[str]:
 
 
 _PSEUDO_OP_ASSEMBLERS = {'li': expand_li, 'la': expand_la}
+
+
+class Macro:
+    '''A macro defined with .macro
+
+    Transforms the instructions in the macro before feeding the result back
+    through the transformer. We assume that the body only contains
+    instructions and that arguments are positional.
+    '''
+
+    def __init__(self, operand: str) -> None:
+        # The operand of the .macro directive is the name followed by the
+        # parameters. :vararg denotes an argument ellipse.
+        name, *params = re.split(r'[,\s]+', operand.strip())
+        self.name = name.lower()
+        self.vararg = bool(params) and params[-1].endswith(':vararg')
+        if self.vararg:
+            params = params[:-1] + [params[-1][:-len(':vararg')]]
+        self.params = params
+        self.body = []  # type: List[str]
+
+    def expand(self, args_str: str, where: str) -> List[str]:
+        '''Return the lines of the body with the substituted arguments'''
+        args = []
+        if args_str.strip():
+            args = [a.strip() for a in args_str.split(',')]
+        if self.vararg and len(args) >= len(self.params) - 1:
+            fixed = len(self.params) - 1
+            args = args[:fixed] + [', '.join(args[fixed:])]
+        if len(args) != len(self.params):
+            raise RuntimeError('{}: Expected {} macro argument(s), but got {}.'
+                               .format(where, len(self.params), len(args)))
+
+        # Replace each \name with its value.
+        values = dict(zip(self.params, args))
+        return [re.sub(r'\\(\w+)',
+                       lambda m: values.get(m.group(1), m.group(0)), line)
+                for line in self.body]
 
 
 class Transformer:
@@ -635,6 +694,13 @@ class Transformer:
         self.in_comment = False
         self.in_string = False
 
+        # Symbols defined with .equ, .set or .equiv.
+        self.constants = {}  # type: Dict[str, int]
+
+        # Macros defined with .macro and the one currently being defined.
+        self.macros = {}  # type: Dict[str, Macro]
+        self.macro_def = None  # type: Optional[Macro]
+
         # FSM state.
         #
         #    0: Waiting for statement
@@ -671,6 +737,11 @@ class Transformer:
                 raise RuntimeError('{}:{}: {}'.format(self.in_path,
                                                       self.line_number,
                                                       err)) from None
+            if op_val is None:
+                # This is not an integer literal, but it might be a constant
+                # that was defined earlier with .equ etc.
+                assert expr is not None
+                op_val = self.constants.get(expr.strip())
             if op_val is None:
                 raise RuntimeError('{}:{}: Cannot resolve operand expression '
                                    '{!r} to an index and the instruction {!r} '
@@ -786,7 +857,7 @@ class Transformer:
         if insn.python_pseudo_op:
             where = '{}:{}'.format(self.in_path, self.line_number)
             po_assembler = _PSEUDO_OP_ASSEMBLERS[insn.mnemonic]
-            expansion = po_assembler(where, op_to_expr)
+            expansion = po_assembler(where, op_to_expr, self.constants)
 
         reconstructed = self.key_sym + ''.join(self.acc).rstrip()
         assert '\n' not in reconstructed
@@ -880,22 +951,21 @@ class Transformer:
             quot_idx = line.find('"', pos)
             esc_quot_idx = line.find('\\"', pos)
 
-            if max(quot_idx, esc_quot_idx) < 0:
+            if quot_idx < 0:
                 # EOL within string.
                 self.acc.append(line[pos:])
                 return len(line)
 
-            if quot_idx < 0:
-                # No " before EOL, but there is a \". Eat that and keep going.
+            if 0 <= esc_quot_idx < quot_idx:
+                # The first " is part of a \". Eat that and keep going.
                 self.acc.append(line[pos:esc_quot_idx + 2])
                 pos = esc_quot_idx + 2
                 continue
 
-            if esc_quot_idx < 0 or quot_idx < esc_quot_idx:
-                # Either no \" or " comes first anyway
-                self.acc.append(line[pos:quot_idx + 1])
-                self.in_string = False
-                return quot_idx + 1
+            # Otherwise the first " ends the string.
+            self.acc.append(line[pos:quot_idx + 1])
+            self.in_string = False
+            return quot_idx + 1
 
     def _eat_ws(self, line: str, pos: int) -> int:
         '''Consume whitespace, updating FSM state if necessary'''
@@ -956,6 +1026,7 @@ class Transformer:
         assert pos < len(line)
         if line[pos] == '"':
             self.acc.append(line[pos])
+            self.in_string = True
             return self._continue_string(line, pos + 1)
 
         match = re.match(r'[^ \t"]*', line[pos:])
@@ -984,6 +1055,70 @@ class Transformer:
         raise RuntimeError('{}:{}: Unknown mnemonic: {!r}.'.format(
             self.in_path, self.line_number, self.key_sym))
 
+    def _record_const(self, key_sym: str, body: str) -> None:
+        '''Remember a constant defined by directive key_sym with operands body
+
+        This spots .equ, .set and .equiv directives whose value is an integer
+        literal or another known constant. Anything else is ignored and left
+        to binutils.
+        '''
+        if key_sym.lower() not in ['.equ', '.set', '.equiv']:
+            return
+
+        sym, sep, val = body.partition(',')
+        if not sep:
+            return
+
+        result = resolve_const(val, self.constants)
+        if result is not None:
+            self.constants[sym.strip()] = result
+
+    def _include(self, operand: str) -> None:
+        '''Handle a .include directive, whose operand is in operand
+
+        The directive is passed through to binutils, which does the actual
+        inclusion. We also read the included file here to record any
+        constants that it defines with .equ, .set and .equiv and any macros
+        that it defines with .macro.
+        '''
+        where = '{}:{}'.format(self.in_path, self.line_number)
+        match = re.fullmatch(r'"([^"\\]*)"', operand.strip())
+        if match is None:
+            raise RuntimeError('{}: Expected a quoted file name after '
+                               '.include, but found {!r}.'.format(
+                                   where, operand.strip()))
+
+        path = os.path.join(os.path.dirname(self.in_path), match.group(1))
+        if not os.path.isfile(path):
+            raise RuntimeError('{}: Cannot find {!r} for .include.'.format(
+                where, path))
+
+        with open(path, 'r') as handle:
+            for line in handle:
+                if self.macro_def is not None:
+                    self._take_macro_line(line)
+                    continue
+
+                # Strip comments, then split the directive from its operands.
+                words = re.sub(r'/\*.*?\*/|#.*', '', line).split(None, 1)
+                if len(words) == 2:
+                    if words[0].lower() == '.macro':
+                        self.macro_def = Macro(words[1])
+                    else:
+                        self._record_const(words[0], words[1])
+
+        self.out_handle.write(f'.include "{path}"\n')
+
+    def _take_macro_line(self, line: str) -> None:
+        '''Record a line of a macro body'''
+        assert self.macro_def is not None
+        words = line.split()
+        if words and words[0].lower() in ['.endm', '.endmacro']:
+            self.macros[self.macro_def.name] = self.macro_def
+            self.macro_def = None
+        else:
+            self.macro_def.body.append(line)
+
     def _end_stmt_line(self) -> None:
         '''Called at end of a stmt line to deal with any completed statement'''
         assert self.state == 1
@@ -999,10 +1134,32 @@ class Transformer:
         # If key_sym is a directive (starts with '.'), we can just pass it
         # straight through.
         if self.key_sym.startswith('.'):
-            self.out_handle.write(self.key_sym)
-            self.out_handle.write(''.join(self.acc))
+            key = self.key_sym.lower()
+            body = ''.join(self.acc)
+            if key == '.include':
+                self._include(body)
+            elif key == '.macro':
+                self.macro_def = Macro(body)
+            else:
+                self._record_const(self.key_sym, body)
+                self.out_handle.write(self.key_sym + body)
             self.acc = []
             self.key_sym = None
+            return
+
+        # If key_sym names is a macro, expand it.
+        macro = self.macros.get(self.key_sym.lower())
+        if macro is not None:
+            where = '{}:{}'.format(self.in_path, self.line_number)
+            self.out_handle.write('#' + self.key_sym + ''.join(self.acc))
+            lines = macro.expand(''.join(self.acc), where)
+            self.acc = []
+            self.key_sym = None
+            line_number = self.line_number
+            for line in lines:
+                self.line_number = line_number - 1
+                self.take_line(line)
+            self.line_number = line_number
             return
 
         insn = self._insn_for_keysym()
@@ -1070,6 +1227,11 @@ class Transformer:
         if line and line[-1] != '\n':
             line = line + '\n'
 
+        # If we are in the middle of a macro definition, just record the line.
+        if self.macro_def is not None:
+            self._take_macro_line(line)
+            return
+
         # Finish up any block comment
         if self.in_comment:
             # Strings can't contain nested comments
@@ -1125,6 +1287,9 @@ class Transformer:
             raise RuntimeError('Reached EOF while still in a comment.')
         if self.in_string:
             raise RuntimeError('Reached EOF while still in a string.')
+        if self.macro_def is not None:
+            raise RuntimeError('Reached EOF while still defining macro {!r} '
+                               '(missing .endm?).'.format(self.macro_def.name))
 
 
 def transform_input(out_handle: TextIO, in_path: str, in_handle: TextIO,

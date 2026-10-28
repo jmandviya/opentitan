@@ -21,10 +21,6 @@ module entropy_src_core import entropy_src_pkg::*; #(
   input  entropy_src_reg_pkg::entropy_src_reg2hw_t reg2hw,
   output entropy_src_reg_pkg::entropy_src_hw2reg_t hw2reg,
 
-  // Efuse Interface
-  input prim_mubi_pkg::mubi8_t otp_en_entropy_src_fw_read_i,
-  input prim_mubi_pkg::mubi8_t otp_en_entropy_src_fw_over_i,
-
   // RNG Interface
   output logic rng_fips_o,
 
@@ -266,6 +262,16 @@ module entropy_src_core import entropy_src_pkg::*; #(
   logic                     adaptp_hi_alert_cntr_err;
   logic                     adaptp_lo_alert_cntr_err;
 
+  logic   [HalfRegWidth-1:0] adaptps_threshold;
+  logic   [HalfRegWidth-1:0] adaptps_threshold_oneway;
+  logic                      adaptps_threshold_wr;
+  logic   [HalfRegWidth-1:0] adaptps_event_cnt;
+  logic   [FullRegWidth-1:0] adaptps_total_fails;
+  logic [EighthRegWidth-1:0] adaptps_fail_count;
+  logic                      adaptps_fail_pulse;
+  logic                      adaptps_fails_cntr_err;
+  logic                      adaptps_alert_cntr_err;
+
   logic [HalfRegWidth-1:0] bucket_threshold;
   logic [HalfRegWidth-1:0] bucket_threshold_oneway;
   logic                    bucket_threshold_wr;
@@ -417,14 +423,13 @@ module entropy_src_core import entropy_src_pkg::*; #(
   logic                    repcnt_cntr_err;
   logic                    repcnts_cntr_err;
   logic                    adaptp_cntr_err;
+  logic                    adaptps_cntr_err;
   logic [NumBucketHtInst-1:0] bucket_cntr_err;
   logic                    markov_cntr_err;
   logic                    es_cntr_err;
   logic                    es_cntr_err_sum;
   logic                    sha3_state_error_sum;
   logic                    sha3_rst_storage_err_sum;
-  logic                    efuse_es_sw_reg_en;
-  logic                    efuse_es_sw_ov_en;
 
   logic                    sha3_state_error;
   logic                    sha3_count_error;
@@ -447,9 +452,6 @@ module entropy_src_core import entropy_src_pkg::*; #(
   logic                    unused_fw_ov_rd_data;
   logic                    unused_sfifo_esrng_not_full;
   logic                    unused_sfifo_esfinal_not_full;
-
-  prim_mubi_pkg::mubi8_t en_entropy_src_fw_read;
-  prim_mubi_pkg::mubi8_t en_entropy_src_fw_over;
 
   mubi4_t mubi_es_enable;
   mubi4_t mubi_module_en_pulse;
@@ -771,28 +773,12 @@ module entropy_src_core import entropy_src_pkg::*; #(
   );
 
   // firmware override controls
-  assign fw_ov_mode = efuse_es_sw_ov_en && fw_ov_mode_pfe;
+  assign fw_ov_mode = fw_ov_mode_pfe;
   assign fw_ov_mode_entropy_insert = fw_ov_mode && fw_ov_entropy_insert_pfe;
   assign fw_ov_fifo_rd_pulse = reg2hw.fw_ov_rd_data.re;
   assign hw2reg.fw_ov_rd_data.d = sfifo_observe_rdata;
   assign fw_ov_fifo_wr_pulse = reg2hw.fw_ov_wr_data.qe;
   assign fw_ov_wr_data = reg2hw.fw_ov_wr_data.q;
-
-  assign efuse_es_sw_ov_en = prim_mubi_pkg::mubi8_test_true_strict(en_entropy_src_fw_over);
-
-  prim_mubi8_sync #(
-    .NumCopies(1),
-    .AsyncOn(1) // must be set to one, see note below
-  ) u_prim_mubi8_sync_es_fw_over (
-    .clk_i,
-    .rst_ni,
-    .mubi_i(otp_en_entropy_src_fw_over_i),
-    .mubi_o({en_entropy_src_fw_over})
-  );
-
-  // note: the input to the above sync module is from the OTP block.
-  //       It is assumed that the source is in a different time domain,
-  //       and requires the AsyncOn parameter to be set.
 
   // rng_enable is being used in other clock domains. Need to latch the
   // signal.
@@ -1208,6 +1194,27 @@ module entropy_src_core import entropy_src_pkg::*; #(
   );
 
   //------------------------------
+  // adaptps one-way thresholds
+  //------------------------------
+  assign adaptps_threshold = reg2hw.adaptps_threshold.q;
+  assign adaptps_threshold_wr = reg2hw.adaptps_threshold.qe;
+  assign hw2reg.adaptps_threshold.d = adaptps_threshold_oneway;
+
+  entropy_src_watermark_reg #(
+    .RegWidth(HalfRegWidth),
+    .ResVal({HalfRegWidth{1'b1}})
+  ) u_entropy_src_watermark_reg_adaptps_thresh (
+    .clk_i               (clk_i),
+    .rst_ni              (rst_ni),
+    .high_i              (1'b0),
+    .clear_i             (1'b0),
+    .oneway_i            (threshold_oneway_pfe),
+    .event_i             (adaptps_threshold_wr),
+    .value_i             (adaptps_threshold),
+    .value_o             (adaptps_threshold_oneway)
+  );
+
+  //------------------------------
   // bucket one-way threshold
   //------------------------------
   assign bucket_threshold = reg2hw.bucket_threshold.q;
@@ -1442,6 +1449,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
           repcnt_cntr_err ||
           repcnts_cntr_err ||
           adaptp_cntr_err ||
+          adaptps_cntr_err ||
           (|bucket_cntr_err) ||
           markov_cntr_err ||
           repcnt_fails_cntr_err ||
@@ -1452,6 +1460,8 @@ module entropy_src_core import entropy_src_pkg::*; #(
           adaptp_lo_fails_cntr_err ||
           adaptp_hi_alert_cntr_err ||
           adaptp_lo_alert_cntr_err ||
+          adaptps_fails_cntr_err ||
+          adaptps_alert_cntr_err ||
           bucket_fails_cntr_err ||
           bucket_alert_cntr_err ||
           markov_hi_fails_cntr_err ||
@@ -1467,7 +1477,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
           sha3_count_error);
 
   //--------------------------------------------
-  // repetitive count test
+  // Repetition Count Test
   //--------------------------------------------
 
   // SEC_CM: RNG.BKGN_CHK
@@ -1506,7 +1516,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
   assign hw2reg.repcnt_total_fails.d = repcnt_total_fails;
 
   //--------------------------------------------
-  // repetitive count symbol test
+  // Repetition Count Symbol Test
   //--------------------------------------------
 
   // SEC_CM: RNG.BKGN_CHK
@@ -1599,6 +1609,42 @@ module entropy_src_core import entropy_src_pkg::*; #(
   );
 
   assign hw2reg.adaptp_lo_total_fails.d = adaptp_lo_total_fails;
+
+  //--------------------------------------------
+  // Adaptive Proportion Symbol Test
+  //--------------------------------------------
+
+  // SEC_CM: RNG.BKGN_CHK
+  entropy_src_adaptps_ht #(
+    .RegWidth(HalfRegWidth),
+    .RngBusWidth(RngBusWidth)
+  ) u_entropy_src_adaptps_ht (
+    .clk_i              (clk_i),
+    .rst_ni             (rst_ni),
+    .entropy_bit_i      (health_test_esbus),
+    .entropy_bit_vld_i  (health_test_esbus_vld),
+    .clear_i            (health_test_clr),
+    .thresh_i           (adaptps_threshold_oneway),
+    .window_wrap_pulse_i(health_test_done_pulse),
+    .test_cnt_o         (adaptps_event_cnt),
+    .test_fail_pulse_o  (adaptps_fail_pulse),
+    .count_err_o        (adaptps_cntr_err)
+  );
+
+  // SEC_CM: CTR.REDUN
+  entropy_src_cntr_reg #(
+    .RegWidth(FullRegWidth)
+  ) u_entropy_src_cntr_reg_adaptps (
+    .clk_i  (clk_i),
+    .rst_ni (rst_ni),
+    .clear_i(health_test_clr),
+    .event_i(adaptps_fail_pulse),
+    .step_i (FullRegWidth'(1)),
+    .value_o(adaptps_total_fails),
+    .err_o  (adaptps_fails_cntr_err)
+  );
+
+  assign hw2reg.adaptps_total_fails.d = adaptps_total_fails;
 
   //--------------------------------------------
   // bucket test
@@ -1790,6 +1836,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
       REPCNTS_HI,
       ADAPTP_HI,
       ADAPTP_LO,
+      ADAPTPS_HI,
       BUCKET_HI,
       MARKOV_HI,
       MARKOV_LO,
@@ -1832,6 +1879,11 @@ module entropy_src_core import entropy_src_pkg::*; #(
         ht_watermark_high      = 1'b0;
         ht_watermark_event_pre = health_test_done_pulse;
         ht_watermark_cnt       = adaptp_lo_event_cnt;
+      end
+      ADAPTPS_HI: begin
+        ht_watermark_high      = 1'b1;
+        ht_watermark_event_pre = health_test_done_pulse;
+        ht_watermark_cnt       = adaptps_event_cnt;
       end
       BUCKET_HI: begin
         ht_watermark_high      = 1'b1;
@@ -1914,6 +1966,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
          repcnt_fail_pulse ||
          repcnts_fail_pulse ||
          adaptp_hi_fail_pulse || adaptp_lo_fail_pulse ||
+         adaptps_fail_pulse ||
          (|bucket_fail_pulse) ||
          markov_hi_fail_pulse || markov_lo_fail_pulse ||
          extht_hi_fail_pulse || extht_lo_fail_pulse;
@@ -1972,6 +2025,7 @@ module entropy_src_core import entropy_src_pkg::*; #(
          entropy_data_reg_en_pfa ||
          threshold_scope_pfa ||
          rng_bit_enable_pfa ||
+         threshold_oneway_pfa ||
          fw_ov_mode_pfa ||
          fw_ov_entropy_insert_pfa ||
          fw_ov_sha3_start_pfa ||
@@ -2061,6 +2115,22 @@ module entropy_src_core import entropy_src_pkg::*; #(
   );
 
   assign hw2reg.alert_fail_counts.adaptp_lo_fail_count.d = adaptp_lo_fail_count;
+
+  // adaptps fail counter
+  // SEC_CM: CTR.REDUN
+  entropy_src_cntr_reg #(
+    .RegWidth(EighthRegWidth)
+  ) u_entropy_src_cntr_reg_adaptps_alert_fails (
+    .clk_i               (clk_i),
+    .rst_ni              (rst_ni),
+    .clear_i             (alert_cntrs_clr),
+    .event_i             (adaptps_fail_pulse),
+    .step_i              (EighthRegWidth'(1)),
+    .value_o             (adaptps_fail_count),
+    .err_o               (adaptps_alert_cntr_err)
+  );
+
+  assign hw2reg.alert_fail_counts.adaptps_fail_count.d = adaptps_fail_count;
 
   // bucket fail counter
   // SEC_CM: CTR.REDUN
@@ -2607,6 +2677,11 @@ module entropy_src_core import entropy_src_pkg::*; #(
     .run_i      (1'b0             ), // For software application
     .done_i     (sha3_done        ),
 
+    .stop_i       (1'b0),
+    .continue_i   (1'b0),
+    .stopped_o    (),
+    .stop_error_o (),
+
     // LC escalation
     .lc_escalate_en_i (lc_ctrl_pkg::Off),
 
@@ -2619,6 +2694,12 @@ module entropy_src_core import entropy_src_pkg::*; #(
 
     .state_valid_o (sha3_state_vld),
     .state_o       (sha3_state),
+
+    // State write - not used, no context save and restore support
+    .state_we_i          ('0),
+    .state_waddr_i       ('0),
+    .state_wdata_i       ('0),
+    .state_clear_i       (prim_mubi_pkg::MuBi4False),
 
     // REQ/ACK interface to avoid power spikes
     .run_req_o(sha3_block_busy),
@@ -2867,20 +2948,8 @@ module entropy_src_core import entropy_src_pkg::*; #(
   // software es read path via ENTROPY_DATA register
   //----------------------------------------------------
 
-  // Sync and evaluate the OTP input.
-  prim_mubi8_sync #(
-    .NumCopies(1),
-    .AsyncOn(1)
-  ) u_prim_mubi8_sync_es_fw_read (
-    .clk_i,
-    .rst_ni,
-    .mubi_i(otp_en_entropy_src_fw_read_i),
-    .mubi_o({en_entropy_src_fw_read})
-  );
-  assign efuse_es_sw_reg_en = prim_mubi_pkg::mubi8_test_true_strict(en_entropy_src_fw_read);
-
   // Is the ENTROPY_DATA register readable?
-  assign es_data_reg_rd_en = es_enable_fo[17] && efuse_es_sw_reg_en && entropy_data_reg_en_pfe;
+  assign es_data_reg_rd_en = es_enable_fo[17] && entropy_data_reg_en_pfe;
 
   // Interface the esfinal FIFO and cut its 384-bit output into 32-bit chunks for software.
   // We're done after the last read.
@@ -2910,8 +2979,8 @@ module entropy_src_core import entropy_src_pkg::*; #(
       esfinal_data[swread_idx_q * FullRegWidth +: FullRegWidth] : '0;
 
   // This primitive is used to place a size-only constraint on the buffers to act as a synthesis
-  // optimization barrier. This ensures ES_ROUTE and ENTROPY_DATA_REG_ENABLE together with the OTP
-  // input are taken into account in separately.
+  // optimization barrier. This ensures ES_ROUTE and ENTROPY_DATA_REG_ENABLE are taken into account
+  // in separately.
   prim_buf #(
     .Width(FullRegWidth)
   ) u_prim_buf_swread_data (

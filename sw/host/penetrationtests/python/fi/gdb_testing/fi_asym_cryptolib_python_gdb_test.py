@@ -45,6 +45,12 @@ parser.add_argument("--bitstream", type=str)
 parser.add_argument("--rom", type=str)
 parser.add_argument("--otp", type=str)
 parser.add_argument("--bootstrap", type=str)
+parser.add_argument(
+    "--force-trace",
+    action="store_true",
+    help="Force re-running PC tracing even if trace log exists",
+)
+utils.add_test_selection_args(parser)
 
 args, config_args = parser.parse_known_args()
 
@@ -72,36 +78,52 @@ def read_testos_output():
 
 
 def reset_gdb(gdb):
-    gdb.close_gdb()
-    gdb = GDBController(
+    if gdb and getattr(gdb, "gdb_process", None) and gdb.gdb_process.poll() is None:
+        try:
+            gdb.cleanup_skip()
+            ping = gdb.send_command("p 1", timeout=1.0)
+            if ping and ("= 1" in ping):
+                return gdb
+        except Exception:
+            pass
+    if gdb:
+        try:
+            gdb.close_gdb()
+        except Exception:
+            pass
+    return GDBController(
         gdb_path=GDB_PATH,
         gdb_port=GDB_PORT,
         elf_file=elf_path,
     )
-    return gdb
 
 
 def reset_target_and_gdb(gdb):
-    gdb.close_gdb()
+    if gdb:
+        try:
+            gdb.close_gdb()
+        except Exception:
+            pass
     target.reset_target()
-    target.start_openocd(startup_delay=0.2, print_output=False)
+    time.sleep(0.05)
+    target.start_openocd(startup_delay=0.3, print_output=False)
     target.dump_all()
     trigger_testos_init(print_output=False)
-    gdb = GDBController(
+    return GDBController(
         gdb_path=GDB_PATH,
         gdb_port=GDB_PORT,
         elf_file=elf_path,
     )
-    return gdb
 
 
 def re_initialize(gdb, print_output=False):
-    gdb.close_gdb()
+    # Tier 3: Full FPGA re-initialization (only on unrecoverable lockup)
+    if gdb:
+        gdb.close_gdb()
     target.initialize_target(print_output=print_output)
     trigger_testos_init(print_output=print_output)
     target.dump_all()
-    gdb = GDBController(gdb_path=GDB_PATH, gdb_port=GDB_PORT, elf_file=elf_path)
-    return gdb
+    return GDBController(gdb_path=GDB_PATH, gdb_port=GDB_PORT, elf_file=elf_path)
 
 
 class AsymCryptolibFiSim(unittest.TestCase):
@@ -127,7 +149,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
         # Taken from the regular test
         cfg = 0
-        trigger = 0
+        trigger = 1
 
         # Directory for the trace log files
         pc_trace_file = os.path.join(log_dir, "p384_sign_pc_trace.log")
@@ -141,7 +163,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
         gdb = None
         started = False
-        with open(campaign_file, "w") as campaign:
+        with open(campaign_file, "w", buffering=1) as campaign:
             print(f"Switching terminal output to {campaign_file}", flush=True)
             sys.stdout = campaign
             try:
@@ -152,17 +174,13 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 trigger_testos_init()
 
                 # Connect to GDB
-                gdb = GDBController(
-                    gdb_path=GDB_PATH, gdb_port=GDB_PORT, elf_file=elf_path
-                )
+                gdb = GDBController(gdb_path=GDB_PATH, gdb_port=GDB_PORT, elf_file=elf_path)
 
                 # We provide the name of the unique marker in the pentest framework
                 function_name = "PENTEST_MARKER_P384_SIGN"
                 # Gives back an array of hits where the function is called
                 trace_address = parser.get_marker_addresses(function_name)
-                print(
-                    "Start and stop addresses of ", function_name, ": ", trace_address
-                )
+                print("Start and stop addresses of ", function_name, ": ", trace_address)
 
                 crash_observation_address = parser.get_function_start_address(
                     "ottf_exception_handler"
@@ -176,11 +194,11 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
                 gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
                 gdb.send_command("c", check_response=False)
+                time.sleep(0.1)
+                target.dump_all()
 
                 # Trigger the p384 sign from the testOS (we do not read its output)
-                asymfi.handle_p384_sign(
-                    scalar, pubx[0], puby, message_digest, cfg, trigger
-                )
+                asymfi.handle_p384_sign(scalar, pubx[0], puby, message_digest, cfg, trigger)
 
                 start_time = time.time()
                 initial_timeout_stopped = False
@@ -189,11 +207,35 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 # Run the tracing to get the trace log
                 while time.time() - start_time < initial_timeout:
                     output = gdb.read_output()
-                    if "breakpoint 1, " in output:
+                    if "breakpoint 1, " in output or "Breakpoint 1" in output:
                         initial_timeout_stopped = True
                         break
                 if not initial_timeout_stopped:
-                    print("No initial break point found, can be a misfire, try again")
+                    print(
+                        "Initial break point not hit on first attempt, retrying with reset...",
+                        flush=True,
+                    )
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    gdb = reset_target_and_gdb(gdb)
+                    gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
+                    gdb.send_command("c", check_response=False)
+                    time.sleep(0.1)
+                    target.dump_all()
+                    # Trigger the p384 sign from the testOS (we do not read its output)
+                    asymfi.handle_p384_sign(scalar, pubx[0], puby, message_digest, cfg, trigger)
+                    start_time = time.time()
+                    while time.time() - start_time < initial_timeout:
+                        output = gdb.read_output()
+                        if "breakpoint 1, " in output or "Breakpoint 1" in output:
+                            initial_timeout_stopped = True
+                            break
+                if not initial_timeout_stopped:
+                    print("No initial break point found, can be a misfire, try again", flush=True)
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    if gdb:
+                        gdb.interrupt(timeout=1.0)
+                        print("GDB PC:", gdb.get_program_counter(), flush=True)
+                        print("GDB Backtrace:", gdb.send_command("bt"), flush=True)
                     sys.exit(1)
                 while time.time() - start_time < total_timeout:
                     output = gdb.read_output()
@@ -267,12 +309,8 @@ class AsymCryptolibFiSim(unittest.TestCase):
                                         print("Crash detected, resetting", flush=True)
                                         gdb = reset_target_and_gdb(gdb)
                                     else:
-                                        testos_response_json = json.loads(
-                                            testos_response
-                                        )
-                                        print(
-                                            "Output:", testos_response_json, flush=True
-                                        )
+                                        testos_response_json = json.loads(testos_response)
+                                        print("Output:", testos_response_json, flush=True)
                                         if testos_response_json["status"] == 0:
                                             # Record the 'r' value from the signature
                                             sign_output[i] = testos_response_json["r"]
@@ -282,7 +320,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
                                                 sign_output[0],
                                                 sign_output[1],
                                                 match_threshold_ratio=0.75,
-                                                valid_len=48
+                                                valid_len=48,
                                             ) or utils.is_majority_zeros(
                                                 sign_output[i], total_length=48
                                             ):
@@ -302,11 +340,14 @@ class AsymCryptolibFiSim(unittest.TestCase):
                                         gdb = reset_gdb(gdb)
                                         # We do not need to reset the target since it gave an output
                                 else:
-                                    print(
-                                        "No break point found, something went wrong",
-                                        flush=True,
-                                    )
-                                    gdb = reset_target_and_gdb(gdb)
+                                    # Breakpoint not reached (e.g. untaken branch)
+                                    if not testos_response:
+                                        print(
+                                            "Target did not respond, resetting target", flush=True
+                                        )
+                                        gdb = reset_target_and_gdb(gdb)
+                                    else:
+                                        gdb = reset_gdb(gdb)
 
                             except json.JSONDecodeError:
                                 print(
@@ -328,9 +369,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
             finally:
                 print("-" * 80)
-                print(
-                    f"Total attacks {total_attacks}, successful attacks {successful_faults}"
-                )
+                print(f"Total attacks {total_attacks}, successful attacks {successful_faults}")
                 # Close the OpenOCD and GDB connection at the end
                 if gdb:
                     gdb.close_gdb()
@@ -370,7 +409,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
         gdb = None
         started = False
-        with open(campaign_file, "w") as campaign:
+        with open(campaign_file, "w", buffering=1) as campaign:
             print(f"Switching terminal output to {campaign_file}", flush=True)
             sys.stdout = campaign
             try:
@@ -401,6 +440,8 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
                 gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
                 gdb.send_command("c", check_response=False)
+                time.sleep(0.1)
+                target.dump_all()
 
                 # Trigger the p384 verify from the testOS (we do not read its output)
                 asymfi.handle_p384_verify(
@@ -414,11 +455,37 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 # Run the tracing to get the trace log
                 while time.time() - start_time < initial_timeout:
                     output = gdb.read_output()
-                    if "breakpoint 1, " in output:
+                    if "breakpoint 1, " in output or "Breakpoint 1" in output:
                         initial_timeout_stopped = True
                         break
                 if not initial_timeout_stopped:
-                    print("No initial break point found, can be a misfire, try again")
+                    print(
+                        "Initial break point not hit on first attempt, retrying with reset...",
+                        flush=True,
+                    )
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    gdb = reset_target_and_gdb(gdb)
+                    gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
+                    gdb.send_command("c", check_response=False)
+                    time.sleep(0.1)
+                    target.dump_all()
+                    # Trigger the p384 verify from the testOS (we do not read its output)
+                    asymfi.handle_p384_verify(
+                        pubx, puby, r_bytes, s_bytes, message_digest, cfg, trigger
+                    )
+                    start_time = time.time()
+                    while time.time() - start_time < initial_timeout:
+                        output = gdb.read_output()
+                        if "breakpoint 1, " in output or "Breakpoint 1" in output:
+                            initial_timeout_stopped = True
+                            break
+                if not initial_timeout_stopped:
+                    print("No initial break point found, can be a misfire, try again", flush=True)
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    if gdb:
+                        gdb.interrupt(timeout=1.0)
+                        print("GDB PC:", gdb.get_program_counter(), flush=True)
+                        print("GDB Backtrace:", gdb.send_command("bt"), flush=True)
                     sys.exit(1)
                 while time.time() - start_time < total_timeout:
                     output = gdb.read_output()
@@ -495,8 +562,12 @@ class AsymCryptolibFiSim(unittest.TestCase):
                                     gdb = reset_gdb(gdb)
                                     # We do not need to reset the target since it gave an output
                             else:
-                                print("No break point found, something went wrong", flush=True)
-                                gdb = reset_target_and_gdb(gdb)
+                                # Breakpoint not reached (e.g. untaken branch)
+                                if not testos_response:
+                                    print("Target did not respond, resetting target", flush=True)
+                                    gdb = reset_target_and_gdb(gdb)
+                                else:
+                                    gdb = reset_gdb(gdb)
 
                         except json.JSONDecodeError:
                             print(
@@ -554,7 +625,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
         gdb = None
         started = False
-        with open(campaign_file, "w") as campaign:
+        with open(campaign_file, "w", buffering=1) as campaign:
             print(f"Switching terminal output to {campaign_file}", flush=True)
             sys.stdout = campaign
             try:
@@ -585,6 +656,8 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
                 gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
                 gdb.send_command("c", check_response=False)
+                time.sleep(0.1)
+                target.dump_all()
 
                 # Trigger the p384 verify from the testOS (we do not read its output)
                 asymfi.handle_p384_ecdh(private_key_array[0], public_x, public_y, cfg, trigger)
@@ -596,11 +669,35 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 # Run the tracing to get the trace log
                 while time.time() - start_time < initial_timeout:
                     output = gdb.read_output()
-                    if "breakpoint 1, " in output:
+                    if "breakpoint 1, " in output or "Breakpoint 1" in output:
                         initial_timeout_stopped = True
                         break
                 if not initial_timeout_stopped:
-                    print("No initial break point found, can be a misfire, try again")
+                    print(
+                        "Initial break point not hit on first attempt, retrying with reset...",
+                        flush=True,
+                    )
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    gdb = reset_target_and_gdb(gdb)
+                    gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
+                    gdb.send_command("c", check_response=False)
+                    time.sleep(0.1)
+                    target.dump_all()
+                    # Trigger the p384 verify from the testOS (we do not read its output)
+                    asymfi.handle_p384_ecdh(private_key_array[0], public_x, public_y, cfg, trigger)
+                    start_time = time.time()
+                    while time.time() - start_time < initial_timeout:
+                        output = gdb.read_output()
+                        if "breakpoint 1, " in output or "Breakpoint 1" in output:
+                            initial_timeout_stopped = True
+                            break
+                if not initial_timeout_stopped:
+                    print("No initial break point found, can be a misfire, try again", flush=True)
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    if gdb:
+                        gdb.interrupt(timeout=1.0)
+                        print("GDB PC:", gdb.get_program_counter(), flush=True)
+                        print("GDB Backtrace:", gdb.send_command("bt"), flush=True)
                     sys.exit(1)
                 while time.time() - start_time < total_timeout:
                     output = gdb.read_output()
@@ -628,6 +725,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 started = True
                 for pc, count in pc_count_dict.items():
                     for i_count in range(min(MAX_SKIPS_PER_LOOP, count)):
+                        ecdh_output = [None, None]
                         # Search for collisions in outputs between the ecdh instances
                         for i in range(2):
                             print("-" * 80)
@@ -667,16 +765,12 @@ class AsymCryptolibFiSim(unittest.TestCase):
                                         testos_response_json = json.loads(testos_response)
                                         print("Output:", testos_response_json, flush=True)
                                         if testos_response_json["status"] == 0:
-                                            ecdh_output[i] = testos_response_json[
-                                                "shared_key"
-                                            ]
+                                            ecdh_output[i] = testos_response_json["shared_key"]
                                             if utils.is_partial_collision(
                                                 ecdh_output[0],
                                                 ecdh_output[1],
                                                 match_threshold_ratio=0.75,
-                                            ) or utils.is_majority_zeros(
-                                                ecdh_output[i]
-                                            ):
+                                            ) or utils.is_majority_zeros(ecdh_output[i]):
                                                 successful_faults += 1
                                                 print("-" * 80)
                                                 print("Successful FI attack!")
@@ -688,8 +782,14 @@ class AsymCryptolibFiSim(unittest.TestCase):
                                         gdb = reset_gdb(gdb)
                                         # We do not need to reset the target since it gave an output
                                 else:
-                                    print("No break point found, something went wrong", flush=True)
-                                    gdb = reset_target_and_gdb(gdb)
+                                    # Breakpoint not reached (e.g. untaken branch)
+                                    if not testos_response:
+                                        print(
+                                            "Target did not respond, resetting target", flush=True
+                                        )
+                                        gdb = reset_target_and_gdb(gdb)
+                                    else:
+                                        gdb = reset_gdb(gdb)
 
                             except json.JSONDecodeError:
                                 print(
@@ -751,7 +851,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
         gdb = None
         started = False
-        with open(campaign_file, "w") as campaign:
+        with open(campaign_file, "w", buffering=1) as campaign:
             print(f"Switching terminal output to {campaign_file}", flush=True)
             sys.stdout = campaign
             try:
@@ -782,6 +882,8 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
                 gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
                 gdb.send_command("c", check_response=False)
+                time.sleep(0.1)
+                target.dump_all()
 
                 # Trigger the p256 verify from the testOS (we do not read its output)
                 asymfi.handle_p256_verify(
@@ -795,11 +897,37 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 # Run the tracing to get the trace log
                 while time.time() - start_time < initial_timeout:
                     output = gdb.read_output()
-                    if "breakpoint 1, " in output:
+                    if "breakpoint 1, " in output or "Breakpoint 1" in output:
                         initial_timeout_stopped = True
                         break
                 if not initial_timeout_stopped:
-                    print("No initial break point found, can be a misfire, try again")
+                    print(
+                        "Initial break point not hit on first attempt, retrying with reset...",
+                        flush=True,
+                    )
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    gdb = reset_target_and_gdb(gdb)
+                    gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
+                    gdb.send_command("c", check_response=False)
+                    time.sleep(0.1)
+                    target.dump_all()
+                    # Trigger the p256 verify from the testOS (we do not read its output)
+                    asymfi.handle_p256_verify(
+                        pubx, puby, r_bytes, s_bytes, message_digest, cfg, trigger
+                    )
+                    start_time = time.time()
+                    while time.time() - start_time < initial_timeout:
+                        output = gdb.read_output()
+                        if "breakpoint 1, " in output or "Breakpoint 1" in output:
+                            initial_timeout_stopped = True
+                            break
+                if not initial_timeout_stopped:
+                    print("No initial break point found, can be a misfire, try again", flush=True)
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    if gdb:
+                        gdb.interrupt(timeout=1.0)
+                        print("GDB PC:", gdb.get_program_counter(), flush=True)
+                        print("GDB Backtrace:", gdb.send_command("bt"), flush=True)
                     sys.exit(1)
                 while time.time() - start_time < total_timeout:
                     output = gdb.read_output()
@@ -876,8 +1004,12 @@ class AsymCryptolibFiSim(unittest.TestCase):
                                     gdb = reset_gdb(gdb)
                                     # We do not need to reset the target since it gave an output
                             else:
-                                print("No break point found, something went wrong", flush=True)
-                                gdb = reset_target_and_gdb(gdb)
+                                # Breakpoint not reached (e.g. untaken branch)
+                                if not testos_response:
+                                    print("Target did not respond, resetting target", flush=True)
+                                    gdb = reset_target_and_gdb(gdb)
+                                else:
+                                    gdb = reset_gdb(gdb)
 
                         except json.JSONDecodeError:
                             print(
@@ -935,7 +1067,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
         gdb = None
         started = False
-        with open(campaign_file, "w") as campaign:
+        with open(campaign_file, "w", buffering=1) as campaign:
             print(f"Switching terminal output to {campaign_file}", flush=True)
             sys.stdout = campaign
             try:
@@ -966,6 +1098,8 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
                 gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
                 gdb.send_command("c", check_response=False)
+                time.sleep(0.1)
+                target.dump_all()
 
                 # Trigger the p256 verify from the testOS (we do not read its output)
                 asymfi.handle_p256_ecdh(private_key_array[0], public_x, public_y, cfg, trigger)
@@ -977,11 +1111,35 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 # Run the tracing to get the trace log
                 while time.time() - start_time < initial_timeout:
                     output = gdb.read_output()
-                    if "breakpoint 1, " in output:
+                    if "breakpoint 1, " in output or "Breakpoint 1" in output:
                         initial_timeout_stopped = True
                         break
                 if not initial_timeout_stopped:
-                    print("No initial break point found, can be a misfire, try again")
+                    print(
+                        "Initial break point not hit on first attempt, retrying with reset...",
+                        flush=True,
+                    )
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    gdb = reset_target_and_gdb(gdb)
+                    gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
+                    gdb.send_command("c", check_response=False)
+                    time.sleep(0.1)
+                    target.dump_all()
+                    # Trigger the p256 verify from the testOS (we do not read its output)
+                    asymfi.handle_p256_ecdh(private_key_array[0], public_x, public_y, cfg, trigger)
+                    start_time = time.time()
+                    while time.time() - start_time < initial_timeout:
+                        output = gdb.read_output()
+                        if "breakpoint 1, " in output or "Breakpoint 1" in output:
+                            initial_timeout_stopped = True
+                            break
+                if not initial_timeout_stopped:
+                    print("No initial break point found, can be a misfire, try again", flush=True)
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    if gdb:
+                        gdb.interrupt(timeout=1.0)
+                        print("GDB PC:", gdb.get_program_counter(), flush=True)
+                        print("GDB Backtrace:", gdb.send_command("bt"), flush=True)
                     sys.exit(1)
                 while time.time() - start_time < total_timeout:
                     output = gdb.read_output()
@@ -1009,6 +1167,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 started = True
                 for pc, count in pc_count_dict.items():
                     for i_count in range(min(MAX_SKIPS_PER_LOOP, count)):
+                        ecdh_output = [None, None]
                         # Search for collisions in outputs between the ecdh instances
                         for i in range(2):
                             print("-" * 80)
@@ -1048,16 +1207,12 @@ class AsymCryptolibFiSim(unittest.TestCase):
                                         testos_response_json = json.loads(testos_response)
                                         print("Output:", testos_response_json, flush=True)
                                         if testos_response_json["status"] == 0:
-                                            ecdh_output[i] = testos_response_json[
-                                                "shared_key"
-                                            ]
+                                            ecdh_output[i] = testos_response_json["shared_key"]
                                             if utils.is_partial_collision(
                                                 ecdh_output[0],
                                                 ecdh_output[1],
                                                 match_threshold_ratio=0.75,
-                                            ) or utils.is_majority_zeros(
-                                                ecdh_output[i]
-                                            ):
+                                            ) or utils.is_majority_zeros(ecdh_output[i]):
                                                 successful_faults += 1
                                                 print("-" * 80)
                                                 print("Successful FI attack!")
@@ -1069,8 +1224,14 @@ class AsymCryptolibFiSim(unittest.TestCase):
                                         gdb = reset_gdb(gdb)
                                         # We do not need to reset the target since it gave an output
                                 else:
-                                    print("No break point found, something went wrong", flush=True)
-                                    gdb = reset_target_and_gdb(gdb)
+                                    # Breakpoint not reached (e.g. untaken branch)
+                                    if not testos_response:
+                                        print(
+                                            "Target did not respond, resetting target", flush=True
+                                        )
+                                        gdb = reset_target_and_gdb(gdb)
+                                    else:
+                                        gdb = reset_gdb(gdb)
 
                             except json.JSONDecodeError:
                                 print(
@@ -1134,7 +1295,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
         gdb = None
         started = False
-        with open(campaign_file, "w") as campaign:
+        with open(campaign_file, "w", buffering=1) as campaign:
             print(f"Switching terminal output to {campaign_file}", flush=True)
             sys.stdout = campaign
             try:
@@ -1165,6 +1326,8 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
                 gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
                 gdb.send_command("c", check_response=False)
+                time.sleep(0.1)
+                target.dump_all()
 
                 # Trigger the rsa verify from the testOS (we do not read its output)
                 asymfi.handle_rsa_verify(
@@ -1186,15 +1349,49 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 total_timeout_stopped = False
 
                 # Run the tracing to get the trace log
-                # Sometimes the tracing fails due to race conditions,
-                # we have a quick initial timeout to catch this
                 while time.time() - start_time < initial_timeout:
                     output = gdb.read_output()
-                    if "breakpoint 1, " in output:
+                    if "breakpoint 1, " in output or "Breakpoint 1" in output:
                         initial_timeout_stopped = True
                         break
                 if not initial_timeout_stopped:
-                    print("No initial break point found, can be a misfire, try again")
+                    print(
+                        "Initial break point not hit on first attempt, retrying with reset...",
+                        flush=True,
+                    )
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    gdb = reset_target_and_gdb(gdb)
+                    gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
+                    gdb.send_command("c", check_response=False)
+                    time.sleep(0.1)
+                    target.dump_all()
+                    # Trigger the rsa verify from the testOS (we do not read its output)
+                    asymfi.handle_rsa_verify(
+                        data,
+                        data_len,
+                        public_exponent,
+                        n,
+                        n_len,
+                        sig,
+                        sig_len,
+                        padding,
+                        hashing,
+                        cfg,
+                        trigger,
+                    )
+                    start_time = time.time()
+                    while time.time() - start_time < initial_timeout:
+                        output = gdb.read_output()
+                        if "breakpoint 1, " in output or "Breakpoint 1" in output:
+                            initial_timeout_stopped = True
+                            break
+                if not initial_timeout_stopped:
+                    print("No initial break point found, can be a misfire, try again", flush=True)
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    if gdb:
+                        gdb.interrupt(timeout=1.0)
+                        print("GDB PC:", gdb.get_program_counter(), flush=True)
+                        print("GDB Backtrace:", gdb.send_command("bt"), flush=True)
                     sys.exit(1)
                 while time.time() - start_time < total_timeout:
                     output = gdb.read_output()
@@ -1281,8 +1478,12 @@ class AsymCryptolibFiSim(unittest.TestCase):
                                     gdb = reset_gdb(gdb)
                                     # We do not need to reset the target since it returned an output
                             else:
-                                print("No break point found, something went wrong", flush=True)
-                                gdb = reset_target_and_gdb(gdb)
+                                # Breakpoint not reached (e.g. untaken branch)
+                                if not testos_response:
+                                    print("Target did not respond, resetting target", flush=True)
+                                    gdb = reset_target_and_gdb(gdb)
+                                else:
+                                    gdb = reset_gdb(gdb)
 
                         except json.JSONDecodeError:
                             print(
@@ -1347,7 +1548,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
         gdb = None
         started = False
-        with open(campaign_file, "w") as campaign:
+        with open(campaign_file, "w", buffering=1) as campaign:
             print(f"Switching terminal output to {campaign_file}", flush=True)
             sys.stdout = campaign
             try:
@@ -1378,6 +1579,8 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
                 gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
                 gdb.send_command("c", check_response=False)
+                time.sleep(0.1)
+                target.dump_all()
 
                 # Trigger the rsa verify from the testOS (we do not read its output)
                 asymfi.handle_rsa_verify(
@@ -1399,15 +1602,49 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 total_timeout_stopped = False
 
                 # Run the tracing to get the trace log
-                # Sometimes the tracing fails due to race conditions,
-                # we have a quick initial timeout to catch this
                 while time.time() - start_time < initial_timeout:
                     output = gdb.read_output()
-                    if "breakpoint 1, " in output:
+                    if "breakpoint 1, " in output or "Breakpoint 1" in output:
                         initial_timeout_stopped = True
                         break
                 if not initial_timeout_stopped:
-                    print("No initial break point found, can be a misfire, try again")
+                    print(
+                        "Initial break point not hit on first attempt, retrying with reset...",
+                        flush=True,
+                    )
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    gdb = reset_target_and_gdb(gdb)
+                    gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
+                    gdb.send_command("c", check_response=False)
+                    time.sleep(0.1)
+                    target.dump_all()
+                    # Trigger the rsa verify from the testOS (we do not read its output)
+                    asymfi.handle_rsa_verify(
+                        data,
+                        data_len,
+                        public_exponent,
+                        n,
+                        n_len,
+                        sig,
+                        sig_len,
+                        padding,
+                        hashing,
+                        cfg,
+                        trigger,
+                    )
+                    start_time = time.time()
+                    while time.time() - start_time < initial_timeout:
+                        output = gdb.read_output()
+                        if "breakpoint 1, " in output or "Breakpoint 1" in output:
+                            initial_timeout_stopped = True
+                            break
+                if not initial_timeout_stopped:
+                    print("No initial break point found, can be a misfire, try again", flush=True)
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    if gdb:
+                        gdb.interrupt(timeout=1.0)
+                        print("GDB PC:", gdb.get_program_counter(), flush=True)
+                        print("GDB Backtrace:", gdb.send_command("bt"), flush=True)
                     sys.exit(1)
                 while time.time() - start_time < total_timeout:
                     output = gdb.read_output()
@@ -1494,8 +1731,12 @@ class AsymCryptolibFiSim(unittest.TestCase):
                                     gdb = reset_gdb(gdb)
                                     # We do not need to reset the target since it returned an output
                             else:
-                                print("No break point found, something went wrong", flush=True)
-                                gdb = reset_target_and_gdb(gdb)
+                                # Breakpoint not reached (e.g. untaken branch)
+                                if not testos_response:
+                                    print("Target did not respond, resetting target", flush=True)
+                                    gdb = reset_target_and_gdb(gdb)
+                                else:
+                                    gdb = reset_gdb(gdb)
 
                         except json.JSONDecodeError:
                             print(
@@ -1537,12 +1778,11 @@ class AsymCryptolibFiSim(unittest.TestCase):
         n_len = 256
         d = [x for x in (key.d).to_bytes(256, "little")]
 
-        # Create a second set of inputs with a single bit flipped to check for collisions
-        data1 = [i for i in range(16)]
-        data2 = data1.copy()
-        data2[0] ^= 1
+        # We prepare two data inputs and check for collisions between them
+        data_len = 16
+        data1 = [i for i in range(data_len)]
+        data2 = [data_len - i for i in range(data_len)]
         data_inputs = [data1, data2]
-        data_len = len(data1)
 
         cfg = 0
         trigger = 0x4
@@ -1561,7 +1801,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
         gdb = None
         started = False
-        with open(campaign_file, "w") as campaign:
+        with open(campaign_file, "w", buffering=1) as campaign:
             print(f"Switching terminal output to {campaign_file}", flush=True)
             sys.stdout = campaign
             try:
@@ -1591,6 +1831,8 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
                 gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
                 gdb.send_command("c", check_response=False)
+                time.sleep(0.1)
+                target.dump_all()
 
                 # Trigger the rsa sign from the testOS (we do not read its output)
                 asymfi.handle_rsa_sign(
@@ -1613,11 +1855,46 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 # Run the tracing to get the trace log
                 while time.time() - start_time < initial_timeout:
                     output = gdb.read_output()
-                    if "breakpoint 1, " in output:
+                    if "breakpoint 1, " in output or "Breakpoint 1" in output:
                         initial_timeout_stopped = True
                         break
                 if not initial_timeout_stopped:
-                    print("No initial break point found, can be a misfire, try again")
+                    print(
+                        "Initial break point not hit on first attempt, retrying with reset...",
+                        flush=True,
+                    )
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    gdb = reset_target_and_gdb(gdb)
+                    gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
+                    gdb.send_command("c", check_response=False)
+                    time.sleep(0.1)
+                    target.dump_all()
+                    # Trigger the rsa sign from the testOS (we do not read its output)
+                    asymfi.handle_rsa_sign(
+                        data_inputs[0],
+                        data_len,
+                        public_exponent,
+                        n,
+                        n_len,
+                        d,
+                        padding,
+                        hashing,
+                        cfg,
+                        trigger,
+                    )
+                    start_time = time.time()
+                    while time.time() - start_time < initial_timeout:
+                        output = gdb.read_output()
+                        if "breakpoint 1, " in output or "Breakpoint 1" in output:
+                            initial_timeout_stopped = True
+                            break
+                if not initial_timeout_stopped:
+                    print("No initial break point found, can be a misfire, try again", flush=True)
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    if gdb:
+                        gdb.interrupt(timeout=1.0)
+                        print("GDB PC:", gdb.get_program_counter(), flush=True)
+                        print("GDB Backtrace:", gdb.send_command("bt"), flush=True)
                     sys.exit(1)
                 while time.time() - start_time < total_timeout:
                     output = gdb.read_output()
@@ -1645,6 +1922,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 started = True
                 for pc, count in pc_count_dict.items():
                     for i_count in range(min(MAX_SKIPS_PER_LOOP, count)):
+                        sign_output = [None, None]
                         # Search for collisions in outputs between the sign instances
                         for i in range(2):
                             print("-" * 80)
@@ -1715,6 +1993,15 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
                                         # Reset GDB by closing and opening again
                                         gdb = reset_gdb(gdb)
+                                else:
+                                    # Breakpoint not reached (e.g. untaken branch)
+                                    if not testos_response:
+                                        print(
+                                            "Target did not respond, resetting target", flush=True
+                                        )
+                                        gdb = reset_target_and_gdb(gdb)
+                                    else:
+                                        gdb = reset_gdb(gdb)
                             except json.JSONDecodeError:
                                 print(
                                     "Error: JSON decoding failed. Invalid response format",
@@ -1778,7 +2065,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
         gdb = None
         started = False
-        with open(campaign_file, "w") as campaign:
+        with open(campaign_file, "w", buffering=1) as campaign:
             print(f"Switching terminal output to {campaign_file}", flush=True)
             sys.stdout = campaign
             try:
@@ -1789,17 +2076,13 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 trigger_testos_init()
 
                 # Connect to GDB
-                gdb = GDBController(
-                    gdb_path=GDB_PATH, gdb_port=GDB_PORT, elf_file=elf_path
-                )
+                gdb = GDBController(gdb_path=GDB_PATH, gdb_port=GDB_PORT, elf_file=elf_path)
 
                 # We provide the name of the unique marker in the pentest framework
                 function_name = "PENTEST_MARKER_X25519"
                 # Gives back an array of hits where the function is called
                 trace_address = parser.get_marker_addresses(function_name)
-                print(
-                    "Start and stop addresses of ", function_name, ": ", trace_address
-                )
+                print("Start and stop addresses of ", function_name, ": ", trace_address)
 
                 crash_observation_address = parser.get_function_start_address(
                     "ottf_exception_handler"
@@ -1811,11 +2094,11 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
                 gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
                 gdb.send_command("c", check_response=False)
+                time.sleep(0.1)
+                target.dump_all()
 
                 # Trigger the x25519 ecdh from the testOS (we do not read its output)
-                asymfi.handle_x25519_ecdh(
-                    private_key_array[0], public_x, public_y, cfg, trigger
-                )
+                asymfi.handle_x25519_ecdh(private_key_array[0], public_x, public_y, cfg, trigger)
 
                 start_time = time.time()
                 initial_timeout_stopped = False
@@ -1824,11 +2107,37 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 # Run the tracing to get the trace log
                 while time.time() - start_time < initial_timeout:
                     output = gdb.read_output()
-                    if "breakpoint 1, " in output:
+                    if "breakpoint 1, " in output or "Breakpoint 1" in output:
                         initial_timeout_stopped = True
                         break
                 if not initial_timeout_stopped:
-                    print("No initial break point found, can be a misfire, try again")
+                    print(
+                        "Initial break point not hit on first attempt, retrying with reset...",
+                        flush=True,
+                    )
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    gdb = reset_target_and_gdb(gdb)
+                    gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
+                    gdb.send_command("c", check_response=False)
+                    time.sleep(0.1)
+                    target.dump_all()
+                    # Trigger the x25519 ecdh from the testOS (we do not read its output)
+                    asymfi.handle_x25519_ecdh(
+                        private_key_array[0], public_x, public_y, cfg, trigger
+                    )
+                    start_time = time.time()
+                    while time.time() - start_time < initial_timeout:
+                        output = gdb.read_output()
+                        if "breakpoint 1, " in output or "Breakpoint 1" in output:
+                            initial_timeout_stopped = True
+                            break
+                if not initial_timeout_stopped:
+                    print("No initial break point found, can be a misfire, try again", flush=True)
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    if gdb:
+                        gdb.interrupt(timeout=1.0)
+                        print("GDB PC:", gdb.get_program_counter(), flush=True)
+                        print("GDB Backtrace:", gdb.send_command("bt"), flush=True)
                     sys.exit(1)
                 while time.time() - start_time < total_timeout:
                     output = gdb.read_output()
@@ -1861,6 +2170,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 started = True
                 for pc, count in pc_count_dict.items():
                     for i_count in range(min(MAX_SKIPS_PER_LOOP, count)):
+                        ecdh_output = [None, None]
                         # Search for collisions in outputs between the ecdh instances
                         for i in range(2):
                             print("-" * 80)
@@ -1905,23 +2215,15 @@ class AsymCryptolibFiSim(unittest.TestCase):
                                         print("Crash detected, resetting", flush=True)
                                         gdb = reset_target_and_gdb(gdb)
                                     else:
-                                        testos_response_json = json.loads(
-                                            testos_response
-                                        )
-                                        print(
-                                            "Output:", testos_response_json, flush=True
-                                        )
+                                        testos_response_json = json.loads(testos_response)
+                                        print("Output:", testos_response_json, flush=True)
                                         if testos_response_json["status"] == 0:
-                                            ecdh_output[i] = testos_response_json[
-                                                "shared_key"
-                                            ]
+                                            ecdh_output[i] = testos_response_json["shared_key"]
                                             if utils.is_partial_collision(
                                                 ecdh_output[0],
                                                 ecdh_output[1],
                                                 match_threshold_ratio=0.75,
-                                            ) or utils.is_majority_zeros(
-                                                ecdh_output[i]
-                                            ):
+                                            ) or utils.is_majority_zeros(ecdh_output[i]):
                                                 successful_faults += 1
                                                 print("-" * 80)
                                                 print("Successful FI attack!")
@@ -1935,6 +2237,15 @@ class AsymCryptolibFiSim(unittest.TestCase):
                                                 print("Response:", testos_response_json)
                                                 print("-" * 80)
                                         # Reset GDB by closing and opening again
+                                        gdb = reset_gdb(gdb)
+                                else:
+                                    # Breakpoint not reached (e.g. untaken branch)
+                                    if not testos_response:
+                                        print(
+                                            "Target did not respond, resetting target", flush=True
+                                        )
+                                        gdb = reset_target_and_gdb(gdb)
+                                    else:
                                         gdb = reset_gdb(gdb)
                             except json.JSONDecodeError:
                                 print(
@@ -1956,9 +2267,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
             finally:
                 print("-" * 80)
-                print(
-                    f"Total attacks {total_attacks}, successful attacks {successful_faults}"
-                )
+                print(f"Total attacks {total_attacks}, successful attacks {successful_faults}")
                 if gdb:
                     gdb.close_gdb()
                 target.close_openocd()
@@ -1970,23 +2279,336 @@ class AsymCryptolibFiSim(unittest.TestCase):
         print("Starting the ed25519 verify test")
 
         # Prepare inputs representing an invalid signature.
-        pubx = [149, 147, 40, 32, 52, 171, 254, 225, 244, 49, 56, 85, 102, 168, 58, 149, 215,
-                1, 178, 34, 239, 134, 228, 59, 25, 25, 166, 4, 20, 252, 106, 127]
-        puby = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0]
-        r = [179, 233, 109, 11, 158, 166, 221, 245, 31, 170, 150, 231, 193, 167, 36, 93, 15,
-             224, 39, 117, 62, 182, 19, 173, 252, 159, 107, 165, 211, 94, 217, 145, 0, 0, 0,
-             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-             0, 0]
-        s = [130, 235, 236, 78, 193, 33, 148, 169, 18, 146, 45, 70, 195, 43, 187, 205, 121, 185,
-             91, 162, 203, 178, 76, 62, 53, 180, 33, 146, 45, 128, 191, 3, 0, 0, 0, 0, 0, 0, 0,
-             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        message_padded = [81, 67, 237, 157, 177, 57, 129, 5, 154, 9, 80, 122, 120, 229, 232, 245,
-                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        pubx = [
+            149,
+            147,
+            40,
+            32,
+            52,
+            171,
+            254,
+            225,
+            244,
+            49,
+            56,
+            85,
+            102,
+            168,
+            58,
+            149,
+            215,
+            1,
+            178,
+            34,
+            239,
+            134,
+            228,
+            59,
+            25,
+            25,
+            166,
+            4,
+            20,
+            252,
+            106,
+            127,
+        ]
+        puby = [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+        r = [
+            179,
+            233,
+            109,
+            11,
+            158,
+            166,
+            221,
+            245,
+            31,
+            170,
+            150,
+            231,
+            193,
+            167,
+            36,
+            93,
+            15,
+            224,
+            39,
+            117,
+            62,
+            182,
+            19,
+            173,
+            252,
+            159,
+            107,
+            165,
+            211,
+            94,
+            217,
+            145,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+        s = [
+            130,
+            235,
+            236,
+            78,
+            193,
+            33,
+            148,
+            169,
+            18,
+            146,
+            45,
+            70,
+            195,
+            43,
+            187,
+            205,
+            121,
+            185,
+            91,
+            162,
+            203,
+            178,
+            76,
+            62,
+            53,
+            180,
+            33,
+            146,
+            45,
+            128,
+            191,
+            3,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+        message_padded = [
+            81,
+            67,
+            237,
+            157,
+            177,
+            57,
+            129,
+            5,
+            154,
+            9,
+            80,
+            122,
+            120,
+            229,
+            232,
+            245,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
         message_len = 16
 
         cfg = 0
@@ -2002,22 +2624,18 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
         gdb = None
         started = False
-        with open(campaign_file, "w") as campaign:
+        with open(campaign_file, "w", buffering=1) as campaign:
             print(f"Switching terminal output to {campaign_file}", flush=True)
             sys.stdout = campaign
             try:
                 target.initialize_target()
                 trigger_testos_init()
 
-                gdb = GDBController(
-                    gdb_path=GDB_PATH, gdb_port=GDB_PORT, elf_file=elf_path
-                )
+                gdb = GDBController(gdb_path=GDB_PATH, gdb_port=GDB_PORT, elf_file=elf_path)
 
                 function_name = "PENTEST_MARKER_ED25519_VERIFY"
                 trace_address = parser.get_marker_addresses(function_name)
-                print(
-                    "Start and stop addresses of ", function_name, ": ", trace_address
-                )
+                print("Start and stop addresses of ", function_name, ": ", trace_address)
 
                 crash_observation_address = parser.get_function_start_address(
                     "ottf_exception_handler"
@@ -2028,6 +2646,8 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
                 gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
                 gdb.send_command("c", check_response=False)
+                time.sleep(0.1)
+                target.dump_all()
 
                 asymfi.handle_ed25519_verify(
                     pubx, puby, r, s, message_padded, message_len, cfg, trigger
@@ -2037,13 +2657,39 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 initial_timeout_stopped = False
                 total_timeout_stopped = False
 
+                # Run the tracing to get the trace log
                 while time.time() - start_time < initial_timeout:
                     output = gdb.read_output()
-                    if "breakpoint 1, " in output:
+                    if "breakpoint 1, " in output or "Breakpoint 1" in output:
                         initial_timeout_stopped = True
                         break
                 if not initial_timeout_stopped:
-                    print("No initial break point found, can be a misfire, try again")
+                    print(
+                        "Initial break point not hit on first attempt, retrying with reset...",
+                        flush=True,
+                    )
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    gdb = reset_target_and_gdb(gdb)
+                    gdb.setup_pc_trace(pc_trace_file, trace_address[0], trace_address[1])
+                    gdb.send_command("c", check_response=False)
+                    time.sleep(0.1)
+                    target.dump_all()
+                    asymfi.handle_ed25519_verify(
+                        pubx, puby, r, s, message_padded, message_len, cfg, trigger
+                    )
+                    start_time = time.time()
+                    while time.time() - start_time < initial_timeout:
+                        output = gdb.read_output()
+                        if "breakpoint 1, " in output or "Breakpoint 1" in output:
+                            initial_timeout_stopped = True
+                            break
+                if not initial_timeout_stopped:
+                    print("No initial break point found, can be a misfire, try again", flush=True)
+                    print("Target UART:", repr(target.read_all()), flush=True)
+                    if gdb:
+                        gdb.interrupt(timeout=1.0)
+                        print("GDB PC:", gdb.get_program_counter(), flush=True)
+                        print("GDB Backtrace:", gdb.send_command("bt"), flush=True)
                     sys.exit(1)
                 while time.time() - start_time < total_timeout:
                     output = gdb.read_output()
@@ -2074,9 +2720,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
                 for pc, count in pc_count_dict.items():
                     for i_count in range(min(MAX_SKIPS_PER_LOOP, count)):
                         print("-" * 80)
-                        print(
-                            "Applying instruction skip in ", pc, "occurrence", i_count
-                        )
+                        print("Applying instruction skip in ", pc, "occurrence", i_count)
                         print("-" * 80)
 
                         crash_observation = "crash detected"
@@ -2118,9 +2762,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
                                     verification_status = testos_response_json["status"]
 
                                     # Verification passing on invalid payload implies successful FI
-                                    if verification_result and (
-                                        verification_status == 0
-                                    ):
+                                    if verification_result and (verification_status == 0):
                                         successful_faults += 1
                                         print("-" * 80)
                                         print("Successful FI attack!")
@@ -2128,7 +2770,14 @@ class AsymCryptolibFiSim(unittest.TestCase):
                                         print(gdb_response)
                                         print("Response:", testos_response_json)
                                         print("-" * 80)
-                                gdb = reset_gdb(gdb)
+                                    gdb = reset_gdb(gdb)
+                            else:
+                                # Breakpoint not reached (e.g. untaken branch)
+                                if not testos_response:
+                                    print("Target did not respond, resetting target", flush=True)
+                                    gdb = reset_target_and_gdb(gdb)
+                                else:
+                                    gdb = reset_gdb(gdb)
                         except json.JSONDecodeError:
                             print(
                                 "Error: JSON decoding failed. Invalid response format",
@@ -2149,9 +2798,7 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
             finally:
                 print("-" * 80)
-                print(
-                    f"Total attacks {total_attacks}, successful attacks {successful_faults}"
-                )
+                print(f"Total attacks {total_attacks}, successful attacks {successful_faults}")
                 if gdb:
                     gdb.close_gdb()
                 target.close_openocd()
@@ -2161,6 +2808,13 @@ class AsymCryptolibFiSim(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    unittest_argv = utils.get_selected_test_argv(
+        AsymCryptolibFiSim,
+        requested_name=args.test,
+        config_args=config_args,
+        list_tests=args.list_tests,
+    )
+
     r = Runfiles.Create()
     # Get the openocd path.
     openocd_path = r.Rlocation("lowrisc_opentitan/third_party/openocd/build_openocd/bin/openocd")
@@ -2186,7 +2840,7 @@ if __name__ == "__main__":
     if OTP_VMEM:
         otp_path = r.Rlocation("lowrisc_opentitan/" + OTP_VMEM)
     # Get the test result path
-    log_dir = os.environ.get("TEST_UNDECLARED_OUTPUTS_DIR")
+    log_dir = os.environ.get("TEST_UNDECLARED_OUTPUTS_DIR") or "/tmp"
     # Get the firmware path.
     firmware_path = r.Rlocation("lowrisc_opentitan/" + BOOTSTRAP)
     # Get the disassembly path.
@@ -2219,4 +2873,4 @@ if __name__ == "__main__":
 
     print("Disassembly is found in ", dis_path, flush=True)
 
-    unittest.main(argv=[sys.argv[0]])
+    unittest.main(argv=unittest_argv)

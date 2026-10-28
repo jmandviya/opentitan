@@ -26,7 +26,7 @@ module otp_ctrl_core_reg_top (
 
   import otp_ctrl_reg_pkg::* ;
 
-  localparam int AW = 12;
+  localparam int AW = 13;
   localparam int DW = 32;
   localparam int DBW = DW/8;                    // Byte Width
 
@@ -128,7 +128,7 @@ module otp_ctrl_core_reg_top (
   // Create steering logic
   always_comb begin
     reg_steer =
-        tl_i.a_address[AW-1:0] inside {[2048:4095]} ? 1'd0 :
+        tl_i.a_address[AW-1:0] inside {[4096:8191]} ? 1'd0 :
         // Default set to register
         1'd1;
 
@@ -189,6 +189,8 @@ module otp_ctrl_core_reg_top (
   logic alert_test_fatal_bus_integ_error_wd;
   logic alert_test_fatal_prim_otp_alert_wd;
   logic alert_test_recov_prim_otp_alert_wd;
+  logic alert_test_regwen_qs;
+  logic alert_test_regwen_wd;
   logic status_re;
   logic status_partition_error_qs;
   logic status_dai_error_qs;
@@ -248,8 +250,8 @@ module otp_ctrl_core_reg_top (
   logic direct_access_cmd_digest_wd;
   logic direct_access_cmd_zeroize_wd;
   logic direct_access_address_we;
-  logic [10:0] direct_access_address_qs;
-  logic [10:0] direct_access_address_wd;
+  logic [11:0] direct_access_address_qs;
+  logic [11:0] direct_access_address_wd;
   logic direct_access_wdata_0_we;
   logic [31:0] direct_access_wdata_0_qs;
   logic [31:0] direct_access_wdata_0_wd;
@@ -345,6 +347,7 @@ module otp_ctrl_core_reg_top (
   ) u_intr_state_otp_operation_done (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_state_we),
@@ -372,6 +375,7 @@ module otp_ctrl_core_reg_top (
   ) u_intr_state_otp_error (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_state_we),
@@ -401,6 +405,7 @@ module otp_ctrl_core_reg_top (
   ) u_intr_enable_otp_operation_done (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_enable_we),
@@ -428,6 +433,7 @@ module otp_ctrl_core_reg_top (
   ) u_intr_enable_otp_error (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_enable_we),
@@ -486,14 +492,17 @@ module otp_ctrl_core_reg_top (
 
   // R[alert_test]: V(True)
   logic alert_test_qe;
-  logic [4:0] alert_test_flds_we;
+  logic [5:0] alert_test_flds_we;
   assign alert_test_qe = &alert_test_flds_we;
+  // Create REGWEN-gated WE signal
+  logic alert_test_gated_we;
+  assign alert_test_gated_we = alert_test_we && alert_test_regwen_qs;
   //   F[fatal_macro_error]: 0:0
   prim_subreg_ext #(
     .DW    (1)
   ) u_alert_test_fatal_macro_error (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_fatal_macro_error_wd),
     .d      ('0),
     .qre    (),
@@ -509,7 +518,7 @@ module otp_ctrl_core_reg_top (
     .DW    (1)
   ) u_alert_test_fatal_check_error (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_fatal_check_error_wd),
     .d      ('0),
     .qre    (),
@@ -525,7 +534,7 @@ module otp_ctrl_core_reg_top (
     .DW    (1)
   ) u_alert_test_fatal_bus_integ_error (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_fatal_bus_integ_error_wd),
     .d      ('0),
     .qre    (),
@@ -541,7 +550,7 @@ module otp_ctrl_core_reg_top (
     .DW    (1)
   ) u_alert_test_fatal_prim_otp_alert (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_fatal_prim_otp_alert_wd),
     .d      ('0),
     .qre    (),
@@ -557,7 +566,7 @@ module otp_ctrl_core_reg_top (
     .DW    (1)
   ) u_alert_test_recov_prim_otp_alert (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_recov_prim_otp_alert_wd),
     .d      ('0),
     .qre    (),
@@ -567,6 +576,34 @@ module otp_ctrl_core_reg_top (
     .qs     ()
   );
   assign reg2hw.alert_test.recov_prim_otp_alert.qe = alert_test_qe;
+
+  //   F[regwen]: 31:31
+  prim_subreg #(
+    .DW      (1),
+    .SwAccess(prim_subreg_pkg::SwAccessW0C),
+    .RESVAL  (1'h1),
+    .Mubi    (1'b0)
+  ) u_alert_test_regwen (
+    .clk_i   (clk_i),
+    .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
+
+    // from register interface
+    .we     (alert_test_we),
+    .wd     (alert_test_regwen_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0),
+
+    // to internal hardware
+    .qe     (alert_test_flds_we[5]),
+    .q      (),
+    .ds     (),
+
+    // to register interface (read)
+    .qs     (alert_test_regwen_qs)
+  );
 
 
   // R[status]: V(True)
@@ -1206,13 +1243,14 @@ module otp_ctrl_core_reg_top (
   logic direct_access_address_gated_we;
   assign direct_access_address_gated_we = direct_access_address_we & direct_access_regwen_qs;
   prim_subreg #(
-    .DW      (11),
+    .DW      (12),
     .SwAccess(prim_subreg_pkg::SwAccessRW),
-    .RESVAL  (11'h0),
+    .RESVAL  (12'h0),
     .Mubi    (1'b0)
   ) u_direct_access_address (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (direct_access_address_gated_we),
@@ -1245,6 +1283,7 @@ module otp_ctrl_core_reg_top (
   ) u_direct_access_wdata_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (direct_access_wdata_0_gated_we),
@@ -1277,6 +1316,7 @@ module otp_ctrl_core_reg_top (
   ) u_direct_access_wdata_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (direct_access_wdata_1_gated_we),
@@ -1339,6 +1379,7 @@ module otp_ctrl_core_reg_top (
   ) u_check_trigger_regwen (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (check_trigger_regwen_we),
@@ -1407,6 +1448,7 @@ module otp_ctrl_core_reg_top (
   ) u_check_regwen (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (check_regwen_we),
@@ -1438,6 +1480,7 @@ module otp_ctrl_core_reg_top (
   ) u_check_timeout (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (check_timeout_gated_we),
@@ -1469,6 +1512,7 @@ module otp_ctrl_core_reg_top (
   ) u_integrity_check_period (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (integrity_check_period_gated_we),
@@ -1500,6 +1544,7 @@ module otp_ctrl_core_reg_top (
   ) u_consistency_check_period (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (consistency_check_period_gated_we),
@@ -1531,6 +1576,7 @@ module otp_ctrl_core_reg_top (
   ) u_vendor_test_read_lock (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (vendor_test_read_lock_gated_we),
@@ -1562,6 +1608,7 @@ module otp_ctrl_core_reg_top (
   ) u_creator_sw_cfg_read_lock (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (creator_sw_cfg_read_lock_gated_we),
@@ -1593,6 +1640,7 @@ module otp_ctrl_core_reg_top (
   ) u_owner_sw_cfg_read_lock (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (owner_sw_cfg_read_lock_gated_we),
@@ -1625,6 +1673,7 @@ module otp_ctrl_core_reg_top (
   ) u_rot_creator_auth_codesign_read_lock (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (rot_creator_auth_codesign_read_lock_gated_we),
@@ -1657,6 +1706,7 @@ module otp_ctrl_core_reg_top (
   ) u_rot_creator_auth_state_read_lock (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (rot_creator_auth_state_read_lock_gated_we),
@@ -2169,6 +2219,8 @@ module otp_ctrl_core_reg_top (
   assign alert_test_fatal_prim_otp_alert_wd = reg_wdata[3];
 
   assign alert_test_recov_prim_otp_alert_wd = reg_wdata[4];
+
+  assign alert_test_regwen_wd = reg_wdata[31];
   assign status_re = addr_hit[4] & reg_re & !reg_error;
   assign partition_status_0_re = addr_hit[5] & reg_re & !reg_error;
   assign err_code_0_re = addr_hit[6] & reg_re & !reg_error;
@@ -2199,7 +2251,7 @@ module otp_ctrl_core_reg_top (
   assign direct_access_cmd_zeroize_wd = reg_wdata[3];
   assign direct_access_address_we = addr_hit[21] & reg_we & !reg_error;
 
-  assign direct_access_address_wd = reg_wdata[10:0];
+  assign direct_access_address_wd = reg_wdata[11:0];
   assign direct_access_wdata_0_we = addr_hit[22] & reg_we & !reg_error;
 
   assign direct_access_wdata_0_wd = reg_wdata[31:0];
@@ -2350,6 +2402,7 @@ module otp_ctrl_core_reg_top (
         reg_rdata_next[2] = '0;
         reg_rdata_next[3] = '0;
         reg_rdata_next[4] = '0;
+        reg_rdata_next[31] = alert_test_regwen_qs;
       end
 
       addr_hit[4]: begin
@@ -2443,7 +2496,7 @@ module otp_ctrl_core_reg_top (
       end
 
       addr_hit[21]: begin
-        reg_rdata_next[10:0] = direct_access_address_qs;
+        reg_rdata_next[11:0] = direct_access_address_qs;
       end
 
       addr_hit[22]: begin

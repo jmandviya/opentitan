@@ -2,8 +2,8 @@
 <!-- BEGIN CMDGEN util/mdbook_regression_links.py --hjson hw/ip/aes/data/aes.hjson --top earlgrey -->
 | Regression | Version | [Stages](https://opentitan.org/book/doc/project_governance/development_stages.html) | Results |
 |-|-|-|-|
- [`aes_masked`](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/dashboard.html) | 1.1.0 | D2S, V2S | ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/aes_masked/test.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/aes_masked/passing.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/aes_masked/functional.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/aes_masked/code.svg) |
- [`aes_unmasked`](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/dashboard.html) | 1.1.0 | D2S, V2S | ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/aes_unmasked/test.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/aes_unmasked/passing.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/aes_unmasked/functional.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/aes_unmasked/code.svg) |
+ [`aes_masked`](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/dashboard.html) | 1.2.0 | D2S, V2S | ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/aes_masked/test.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/aes_masked/passing.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/aes_masked/functional.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/aes_masked/code.svg) |
+ [`aes_unmasked`](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/dashboard.html) | 1.2.0 | D2S, V2S | ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/aes_unmasked/test.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/aes_unmasked/passing.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/aes_unmasked/functional.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/aes_unmasked/code.svg) |
 
 This IP has been taped out in Earl Grey 1.0.0. The corresponding documentation and regression results can be found [here](https://opentitan.org/earlgrey_1.0.0/book/hw/ip/aes/index.html).
 
@@ -60,4 +60,4 @@ Other cipher modes might be added in future versions.
 The AES unit is attached to the chip interconnect bus as a peripheral module.
 Communication with the processor happens through a set of control and status registers (CSRs).
 This includes input/output data and key, as well as status and control information.
-In addition, the AES unit includes a separate interface through which [Key Manager](../keymgr/README.md) can provide the key without exposing it to the processor or other hosts attached to the chip interconnect bus.
+In addition, the AES unit includes a separate interface through which [Key Manager](../keymgr_dpe/README.md) can provide the key without exposing it to the processor or other hosts attached to the chip interconnect bus.

@@ -126,6 +126,8 @@ module rstmgr_reg_top (
   logic alert_test_we;
   logic alert_test_fatal_fault_wd;
   logic alert_test_fatal_cnsty_fault_wd;
+  logic alert_test_regwen_qs;
+  logic alert_test_regwen_wd;
   logic reset_req_we;
   logic [3:0] reset_req_qs;
   logic [3:0] reset_req_wd;
@@ -189,14 +191,17 @@ module rstmgr_reg_top (
   // Register instances
   // R[alert_test]: V(True)
   logic alert_test_qe;
-  logic [1:0] alert_test_flds_we;
+  logic [2:0] alert_test_flds_we;
   assign alert_test_qe = &alert_test_flds_we;
+  // Create REGWEN-gated WE signal
+  logic alert_test_gated_we;
+  assign alert_test_gated_we = alert_test_we && alert_test_regwen_qs;
   //   F[fatal_fault]: 0:0
   prim_subreg_ext #(
     .DW    (1)
   ) u_alert_test_fatal_fault (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_fatal_fault_wd),
     .d      ('0),
     .qre    (),
@@ -212,7 +217,7 @@ module rstmgr_reg_top (
     .DW    (1)
   ) u_alert_test_fatal_cnsty_fault (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_fatal_cnsty_fault_wd),
     .d      ('0),
     .qre    (),
@@ -222,6 +227,34 @@ module rstmgr_reg_top (
     .qs     ()
   );
   assign reg2hw.alert_test.fatal_cnsty_fault.qe = alert_test_qe;
+
+  //   F[regwen]: 31:31
+  prim_subreg #(
+    .DW      (1),
+    .SwAccess(prim_subreg_pkg::SwAccessW0C),
+    .RESVAL  (1'h1),
+    .Mubi    (1'b0)
+  ) u_alert_test_regwen (
+    .clk_i   (clk_i),
+    .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
+
+    // from register interface
+    .we     (alert_test_we),
+    .wd     (alert_test_regwen_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0),
+
+    // to internal hardware
+    .qe     (alert_test_flds_we[2]),
+    .q      (),
+    .ds     (),
+
+    // to register interface (read)
+    .qs     (alert_test_regwen_qs)
+  );
 
 
   // R[reset_req]: V(False)
@@ -233,6 +266,7 @@ module rstmgr_reg_top (
   ) u_reset_req (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (reset_req_we),
@@ -263,6 +297,7 @@ module rstmgr_reg_top (
     // sync clock and reset required for this register
     .clk_i   (clk_por_i),
     .rst_ni  (rst_por_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (reset_info_we),
@@ -291,6 +326,7 @@ module rstmgr_reg_top (
     // sync clock and reset required for this register
     .clk_i   (clk_por_i),
     .rst_ni  (rst_por_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (reset_info_we),
@@ -319,6 +355,7 @@ module rstmgr_reg_top (
     // sync clock and reset required for this register
     .clk_i   (clk_por_i),
     .rst_ni  (rst_por_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (reset_info_we),
@@ -347,6 +384,7 @@ module rstmgr_reg_top (
     // sync clock and reset required for this register
     .clk_i   (clk_por_i),
     .rst_ni  (rst_por_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (reset_info_we),
@@ -375,6 +413,7 @@ module rstmgr_reg_top (
   ) u_alert_regwen (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (alert_regwen_we),
@@ -408,6 +447,7 @@ module rstmgr_reg_top (
     // sync clock and reset required for this register
     .clk_i   (clk_por_i),
     .rst_ni  (rst_por_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (alert_info_ctrl_gated_we),
@@ -436,6 +476,7 @@ module rstmgr_reg_top (
     // sync clock and reset required for this register
     .clk_i   (clk_por_i),
     .rst_ni  (rst_por_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (alert_info_ctrl_gated_we),
@@ -496,6 +537,7 @@ module rstmgr_reg_top (
   ) u_cpu_regwen (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (cpu_regwen_we),
@@ -529,6 +571,7 @@ module rstmgr_reg_top (
     // sync clock and reset required for this register
     .clk_i   (clk_por_i),
     .rst_ni  (rst_por_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (cpu_info_ctrl_gated_we),
@@ -557,6 +600,7 @@ module rstmgr_reg_top (
     // sync clock and reset required for this register
     .clk_i   (clk_por_i),
     .rst_ni  (rst_por_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (cpu_info_ctrl_gated_we),
@@ -618,6 +662,7 @@ module rstmgr_reg_top (
   ) u_sw_rst_regwen_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (sw_rst_regwen_0_we),
@@ -647,6 +692,7 @@ module rstmgr_reg_top (
   ) u_sw_rst_regwen_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (sw_rst_regwen_1_we),
@@ -676,6 +722,7 @@ module rstmgr_reg_top (
   ) u_sw_rst_regwen_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (sw_rst_regwen_2_we),
@@ -708,6 +755,7 @@ module rstmgr_reg_top (
   ) u_sw_rst_ctrl_n_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (sw_rst_ctrl_n_0_gated_we),
@@ -740,6 +788,7 @@ module rstmgr_reg_top (
   ) u_sw_rst_ctrl_n_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (sw_rst_ctrl_n_1_gated_we),
@@ -772,6 +821,7 @@ module rstmgr_reg_top (
   ) u_sw_rst_ctrl_n_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (sw_rst_ctrl_n_2_gated_we),
@@ -801,6 +851,7 @@ module rstmgr_reg_top (
   ) u_err_code_reg_intg_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -828,6 +879,7 @@ module rstmgr_reg_top (
   ) u_err_code_reset_consistency_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -855,6 +907,7 @@ module rstmgr_reg_top (
   ) u_err_code_fsm_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -928,6 +981,8 @@ module rstmgr_reg_top (
   assign alert_test_fatal_fault_wd = reg_wdata[0];
 
   assign alert_test_fatal_cnsty_fault_wd = reg_wdata[1];
+
+  assign alert_test_regwen_wd = reg_wdata[31];
   assign reset_req_we = addr_hit[1] & reg_we & !reg_error;
 
   assign reset_req_wd = reg_wdata[3:0];
@@ -1008,6 +1063,7 @@ module rstmgr_reg_top (
       addr_hit[0]: begin
         reg_rdata_next[0] = '0;
         reg_rdata_next[1] = '0;
+        reg_rdata_next[31] = alert_test_regwen_qs;
       end
 
       addr_hit[1]: begin

@@ -17,7 +17,7 @@ module tb;
   wire clk, rst_n, rst_shadowed_n;
   wire [NUM_MAX_INTERRUPTS-1:0] interrupts;
   // keymgr/kmac sideload wires
-  keymgr_pkg::hw_key_req_t kmac_sideload_key;
+  keymgr_dpe_pkg::hw_key_req_t kmac_sideload_key;
   // kmac_app interfaces
   kmac_pkg::app_req_t [NUM_APP_INTF-1:0] app_req;
   kmac_pkg::app_rsp_t [NUM_APP_INTF-1:0] app_rsp;
@@ -98,6 +98,7 @@ module tb;
 
   kmac #(
     .EnMasking(`EN_MASKING),
+    .EnFullKmac(`EN_FULL_KMAC),
     .SwKeyMasked(`SW_KEY_MASKED),
     .NumAppIntf(NUM_APP_INTF)
   ) dut (

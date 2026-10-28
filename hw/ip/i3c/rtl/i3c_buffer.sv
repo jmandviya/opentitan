@@ -24,10 +24,13 @@ module i3c_buffer
 #(
   parameter int unsigned BufAddrW = 9,
   parameter int unsigned DataWidth = 32,
-  parameter int unsigned NumFifos = 7,
+  parameter int unsigned NumFifos = 19,
   // Indicates, for each FIFO in turn, whether the FIFO is used to transmit data over the I3C.
   // - Tx FIFOs shall prioritize read prefetching over software writes into the FIFO.
-  parameter bit [NumFifos-1:0] DirTx = 0
+  parameter bit [NumFifos-1:0] DirTx = 0,
+  // The default FIFO configuration; when reset each FIFO shall be empty, with both its write
+  // pointer and its read pointer set to the configured minimum address.
+  parameter logic [BufAddrW-1:0] DefMin[NumFifos] = '{default: '0}
 ) (
   input                     clk_i,
   input                     rst_ni,
@@ -65,8 +68,8 @@ module i3c_buffer
     logic   [DataWidth-1:0] wdata;
     logic [DataWidth/8-1:0] wmask;
     // FIFO configuration used in address updating.
-    logic    [BufAddrW-1:0] min;
-    logic    [BufAddrW-1:0] max;
+    logic    [BufAddrW-1:0] min_addr;
+    logic    [BufAddrW-1:0] max_addr;
   } arb_data_t;
   localparam int unsigned ArbDataWidth = $bits(arb_data_t);
 
@@ -89,13 +92,13 @@ module i3c_buffer
   // - this may be useful diagnostically or for supporting a lower-level protocol; the parent
   //   logic may strip out this access path by tying the inputs low.
   always_comb begin
-    req[NumFifos]       = sw_buf_req_i;
-    arb[NumFifos].write = sw_buf_we_i;
-    arb[NumFifos].min   = '0;
-    arb[NumFifos].max   = '1;
-    arb[NumFifos].addr  = sw_buf_addr_i;
-    arb[NumFifos].wdata = sw_buf_wdata_i;
-    arb[NumFifos].wmask = sw_buf_wmask_i;
+    req[NumFifos]          = sw_buf_req_i;
+    arb[NumFifos].write    = sw_buf_we_i;
+    arb[NumFifos].min_addr = '0;
+    arb[NumFifos].max_addr = '1;
+    arb[NumFifos].addr     = sw_buf_addr_i;
+    arb[NumFifos].wdata    = sw_buf_wdata_i;
+    arb[NumFifos].wmask    = sw_buf_wmask_i;
   end
   assign sw_buf_gnt_o    = gnt[NumFifos];
   assign sw_buf_rvalid_o = mem_rvalid & (IdxW'(NumFifos) == mem_ridx);
@@ -132,14 +135,14 @@ module i3c_buffer
     //   of the logical FIFO and avoid confusion. Even though - physically - it would be possible
     //   to store 'depth + 1' words of data now, this would not conform to the HCI specification.
     wire [BufAddrW:0] ptr_diff = wptr - rptr;
-    wire [BufAddrW:0] neg_diff = ~ptr_diff + 'b1;
+    wire [BufAddrW:0] neg_diff = -ptr_diff;
     wire [BufAddrW:0] left     = cfg_i[f].size + (ptr_diff[BufAddrW] ? ptr_diff : neg_diff);
     wire [BufAddrW:0] used     = (ptr_diff[BufAddrW] | full) ? left : ptr_diff;
     wire [BufAddrW:0] avail    = (ptr_diff[BufAddrW] | full) ? neg_diff : left;
 
     // Generate status information for all clients at all times, and then when a request is received
     // we arbitrate amongst those which actually CAN proceed.
-    wire prefetching = mem_rvalid & (IdxW'(f) == mem_ridx);
+    wire prefetching = mem_rvalid & (IdxW'($unsigned(f)) == mem_ridx);
     always_comb begin
       // Response to FIFO write requests.
       out_o[f].wready = wgnt;
@@ -166,7 +169,7 @@ module i3c_buffer
     // Prefetched read data, presenting a FIFO interface where the assertion of `rready` consumes
     // the data rather than starting a read operation.
     wire consume_rdata = out_o[f].rvalid & in_i[f].rready;
-    wire capt_rdata = &{mem_rvalid, (IdxW'(f) == mem_ridx), !in_i[f].rready};
+    wire capt_rdata = &{mem_rvalid, (IdxW'($unsigned(f)) == mem_ridx), !in_i[f].rready};
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
         pre_rvalid  <= 1'b0;
@@ -185,20 +188,20 @@ module i3c_buffer
 
     // Read pointer advancement.
     logic [BufAddrW-1:0] next_rptr;
-    assign next_rptr = (rptr == cfg_i[f].max) ? cfg_i[f].min : (rptr + 'b1);
+    assign next_rptr = (rptr == cfg_i[f].max_addr) ? cfg_i[f].min_addr : (rptr + 'b1);
 
     // FIFO state.
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
-        wptr <= '0;
-        pptr <= '0;
-        rptr <= '0;
+        wptr <= DefMin[f];
+        pptr <= DefMin[f];
+        rptr <= DefMin[f];
         full <= 1'b0;
       end else if (sw_reset_i[f]) begin
         // Empty the FIFO.
-        wptr <= cfg_i[f].min;
-        pptr <= cfg_i[f].min;
-        rptr <= cfg_i[f].min;
+        wptr <= cfg_i[f].min_addr;
+        pptr <= cfg_i[f].min_addr;
+        rptr <= cfg_i[f].min_addr;
         full <= 1'b0;
       end else begin
         // Updating of write pointer and prefetching pointer.
@@ -222,14 +225,18 @@ module i3c_buffer
       preq = pe & (!we |  DirTx[f]);
       wreq = we & (!pe | !DirTx[f]);
       // Request to memory.
-      req[f]       = we | pe;
-      arb[f].write = wreq;
-      arb[f].min   = cfg_i[f].min;
-      arb[f].max   = cfg_i[f].max;
-      arb[f].addr  = wreq ? wptr : pptr;
-      arb[f].wdata = in_i[f].wdata;
+      //
+      // Note: we suppress a read/write request that occurs at the end of a software reset because
+      // otherwise we would capture the returned data for a read; suppressing the request as
+      // opposed to the response is both less expensive and permits another request to proceed.
+      req[f]          = (we | pe) & !sw_reset_i[f];
+      arb[f].write    = wreq;
+      arb[f].min_addr = cfg_i[f].min_addr;
+      arb[f].max_addr = cfg_i[f].max_addr;
+      arb[f].addr     = wreq ? wptr : pptr;
+      arb[f].wdata    = in_i[f].wdata;
       // Only full word transfers are required, set all write enables.
-      arb[f].wmask = '1;
+      arb[f].wmask    = '1;
     end
     // Only one operation may be granted per clock cycle.
     assign wgnt = gnt[f] & wreq;
@@ -263,14 +270,14 @@ module i3c_buffer
 
   // Address advancement.
   // - these two addresses are valid during the cycle in which the memory read/write is initiated.
-  assign next_addr = (mem_data.addr == mem_data.max) ? mem_data.min : (mem_data.addr + 'b1);
+  assign next_addr = (mem_data.addr == mem_data.max_addr) ? mem_data.min_addr
+                                                          : (mem_data.addr + 'b1);
 
   // Return the read data.
   always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      mem_ridx    <= '0;
-    end else begin
-      if (mem_req & ~mem_data.write) mem_ridx <= idx;  // Assumes single-cycle latency to read data.
+    if (!rst_ni) mem_ridx <= '0;
+    else if (mem_req & !mem_data.write) begin
+      mem_ridx <= idx;  // Assumes single-cycle latency to read data.
     end
   end
 

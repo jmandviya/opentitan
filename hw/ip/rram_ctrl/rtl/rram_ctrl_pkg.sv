@@ -13,21 +13,31 @@ package rram_ctrl_pkg;
 
   parameter int unsigned TotalBytes      = 2*1024*1024; // 2 MiB
   parameter int unsigned TotalInfoBytes  = 4*1024; // 4 KiB
-  parameter int unsigned TotalOtpBytes   = 2*1024 + 512; // (2 KiB + 0.5 KiB integrity)
+  parameter int unsigned TotalOtpBytes   = 2*1024 + 512 + 512; // (2.5 KiB data + 0.5 KiB integrity)
   parameter int unsigned DataWidth       = 128; // 1 RRAM word in bits
   parameter int unsigned WordsPerPage    = 32; // Number of RRAM words per page
   parameter int unsigned TotalDataPages  = TotalBytes / (DataWidth / 8) / WordsPerPage; // 4096
   parameter int unsigned TotalInfoPages  = TotalInfoBytes / (DataWidth / 8) / WordsPerPage; // 8
   parameter int unsigned MaxWrWords      = 32; // max. number of words that can be written at once
-  parameter int unsigned OtpPages        = TotalOtpBytes / (DataWidth / 8) / WordsPerPage; // 5
-  parameter int unsigned OtpStartPage    = TotalDataPages - OtpPages; // 4091
+  parameter int unsigned OtpPages        = TotalOtpBytes / (DataWidth / 8) / WordsPerPage; // 6
+  parameter int unsigned OtpStartPage    = TotalDataPages - OtpPages; // 4090
 
   parameter int unsigned BusWidth        = top_pkg::TL_DW;
   parameter int unsigned BusIntgWidth    = tlul_pkg::DataIntgWidth;
   parameter int unsigned BusFullWidth    = BusWidth + BusIntgWidth;
 
-  parameter int unsigned MpRegions       = 10;  // controller protection regions
-  parameter int unsigned TotalMpRegions  = MpRegions + 2; // + default region and init region
+  parameter int unsigned MpRegions                   = 10; // controller protection regions
+  parameter int unsigned EmulInfoRegions             = 2;  // emulated info page windows
+  parameter int unsigned EmulInfoSubregions          = 24; // total number of subregions
+  parameter int unsigned EmulInfoSubregionsPerRegion = EmulInfoSubregions / EmulInfoRegions;
+  // Adds the default region, the OTP exclusion region, the emulated info subregions, one
+  // window-deny entry per emulated info region, and the configurable regions.
+  parameter int unsigned TotalMpRegions = MpRegions + EmulInfoSubregions + EmulInfoRegions + 2;
+  // Host requests always deny a whole emulated info region, regardless of subregion
+  // configuration.
+  // The host-facing priority array only needs the OTP exclusion, one no-access entry per
+  // emulated info region, the configurable regions, and the default region.
+  parameter int unsigned HostMpRegions = MpRegions + EmulInfoRegions + 2;
 
   // RRAM phy parameters
   parameter int unsigned DataByteWidth   = prim_util_pkg::vbits(DataWidth / 8);
@@ -70,6 +80,13 @@ package rram_ctrl_pkg;
     RramDisableLast
   } rram_disable_pos_e;
 
+  // RRAM software access disable usage (from the start of the RMA wipe until reset)
+  typedef enum logic [1:0] {
+    SwDisMpIdx,
+    SwDisArbIdx,
+    RramSwDisableLast
+  } rram_sw_disable_pos_e;
+
   // RRAM Operations Supported
   typedef enum logic [1:0] {
     RramOpRead    = 2'h0,
@@ -91,7 +108,8 @@ package rram_ctrl_pkg;
     SwSel,
     HwOtpSel,
     HwLcMgrSel,
-    HwLoopBack
+    HwLoopBack,
+    SwErrSel
   } rram_sel_e;
 
   // RRAM partition type
@@ -115,7 +133,8 @@ package rram_ctrl_pkg;
     RdFull,
     RdLvl,
     OpDone,
-    CorrErr,
+    Corr1Err,
+    Corr2Err,
     LastIntrIdx
   } rram_ctrl_intr_e;
 
@@ -138,17 +157,9 @@ package rram_ctrl_pkg;
   typedef logic [TotalSeedWidth-1:0] all_seeds_t;
   typedef logic [KeyWidth-1:0]       rram_key_t;
 
-  // rram_ctrl to keymgr
-  typedef struct packed {
-    logic [NumSeeds-1:0][SeedWidth-1:0] seeds;
-  } keymgr_rram_t;
-
-  parameter keymgr_rram_t KEYMGR_RRAM_DEFAULT = '{
-    seeds:'{
-      256'h16c60598_e7d9c867_1aa74d45_6b10dfb4_309ee153_a448b2bb_438ff7ec_d09d21eb,
-      256'h9a90bd5d_b04641d6_4f18fc47_b6db3da0_cad2e288_01fec9f5_78f64a12_2f776685
-    }
-  };
+  // Seed index of the creator and owner seed provided to the key manager
+  parameter int unsigned CreatorSeedIdx = 0;
+  parameter int unsigned OwnerSeedIdx   = 1;
 
   // These LFSR parameters have been generated with
   // $ ./util/design/gen-lfsr-seed.py --width 64 --seed 1294753918 --prefix ""
@@ -187,11 +198,17 @@ package rram_ctrl_pkg;
     logic                 ecc_en;
   } rram_macro_req_t;
 
+  // ecc_err encoding (one-hot0):
+  //   000: no error
+  //   001: single-bit error, corrected
+  //   010: double-bit error, corrected
+  //   100: multi-bit error, uncorrectable (fatal)
+  // All other combinations are illegal.
   typedef struct packed {
     logic                 ack;
     logic                 done;
     logic                 err;
-    logic                 ecc_err;
+    logic [2:0]           ecc_err;
     logic [DataWidth-1:0] rd_data;
     logic                 init_done;
     logic                 fatal_err;
@@ -206,11 +223,21 @@ package rram_ctrl_pkg;
   import rram_ctrl_reg_pkg::rram_ctrl_reg2hw_mp_region_cfg_mreg_t;
   import rram_ctrl_reg_pkg::rram_ctrl_reg2hw_default_region_reg_t;
   import rram_ctrl_reg_pkg::rram_ctrl_reg2hw_info_page_cfg_mreg_t;
+  import rram_ctrl_reg_pkg::rram_ctrl_reg2hw_emul_info_regwen_mreg_t;
+  import rram_ctrl_reg_pkg::rram_ctrl_reg2hw_emul_info_region_mreg_t;
+  import rram_ctrl_reg_pkg::rram_ctrl_reg2hw_emul_info_subregion_regwen_mreg_t;
+  import rram_ctrl_reg_pkg::rram_ctrl_reg2hw_emul_info_subregion_mreg_t;
+  import rram_ctrl_reg_pkg::rram_ctrl_reg2hw_emul_info_subregion_cfg_mreg_t;
 
   typedef rram_ctrl_reg2hw_mp_region_mreg_t sw_region_t;
   typedef rram_ctrl_reg2hw_mp_region_cfg_mreg_t sw_region_cfg_t;
   typedef rram_ctrl_reg2hw_default_region_reg_t sw_default_cfg_t;
   typedef rram_ctrl_reg2hw_info_page_cfg_mreg_t sw_info_cfg_t;
+  typedef rram_ctrl_reg2hw_emul_info_regwen_mreg_t sw_emul_info_regwen_t;
+  typedef rram_ctrl_reg2hw_emul_info_region_mreg_t sw_emul_info_region_t;
+  typedef rram_ctrl_reg2hw_emul_info_subregion_regwen_mreg_t sw_emul_info_subregion_regwen_t;
+  typedef rram_ctrl_reg2hw_emul_info_subregion_mreg_t sw_emul_info_subregion_t;
+  typedef rram_ctrl_reg2hw_emul_info_subregion_cfg_mreg_t sw_emul_info_subregion_cfg_t;
 
   import prim_mubi_pkg::mubi4_t;
   import prim_mubi_pkg::MuBi4True;
@@ -367,6 +394,7 @@ package rram_ctrl_pkg;
   };
 
   // which page of which info type of which bank for seed selection
+  // (ordered by CreatorSeedIdx and OwnerSeedIdx)
   parameter logic [InfoPageW-1:0] SeedInfoPageSel [NumSeeds] = '{
     CreatorInfoPage,
     OwnerInfoPage

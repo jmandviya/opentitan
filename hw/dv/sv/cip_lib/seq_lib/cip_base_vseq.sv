@@ -285,7 +285,7 @@ class cip_base_vseq #(
   //  alert_name    The name of the alert to test
   //
   //  alert_cfg     A config object for the alert agent
-  extern local task check_not_fatal_alert(string alert_name, alert_esc_agent_cfg alert_cfg);
+  extern local task check_not_fatal_alert(string alert_name, alert_agent_cfg alert_cfg);
 
   // Watch the interface for each alert and check that none fire as a fatal alert (using the
   // check_not_fatal_alert() task)
@@ -297,7 +297,7 @@ class cip_base_vseq #(
   extern local task run_alert_test_vseq(int num_times = 1);
 
   // Blocks if there's a ping in-flight
-  extern local task wait_until_ping_is_finished(alert_esc_agent_cfg alert_agent_cfg);
+  extern local task wait_until_ping_is_finished(alert_agent_cfg alert_agent_cfg);
 
   // Wait for the named alert to be triggered
   //
@@ -890,7 +890,7 @@ task cip_base_vseq::clear_all_interrupts();
   end
 endtask
 
-task cip_base_vseq::check_not_fatal_alert(string alert_name, alert_esc_agent_cfg alert_cfg);
+task cip_base_vseq::check_not_fatal_alert(string alert_name, alert_agent_cfg alert_cfg);
   // The maximum number of cycles that an alert handshake should take.
   // - 20 cycles includes ack response and ack stable time.
   // - 10 is the max difference between alert clock and dut clock.
@@ -960,16 +960,55 @@ endtask
 task cip_base_vseq::run_alert_test_vseq(int num_times = 1);
   int num_alerts = cfg.list_of_alerts.size();
   dv_base_reg alert_test_csr = ral.get_dv_base_reg_by_name("alert_test");
+  // Ensure we write the regwen bit of the alert_test register to not disable write access
+  uvm_reg_field alert_test_regwen_fld = alert_test_csr.get_field_by_name("regwen");
+  bit [BUS_DW-1:0] regwen_mask =
+      (alert_test_regwen_fld != null) ? (BUS_DW'(1) << alert_test_regwen_fld.get_lsb_pos()) : '0;
   `DV_CHECK_FATAL(num_alerts > 0, "Please declare `list_of_alerts` under cfg!")
 
   for (int trans = 1; trans <= num_times; trans++) begin
     `uvm_info(`gfn, $sformatf("Running alert test iteration %0d/%0d", trans, num_times), UVM_LOW)
 
     repeat ($urandom_range(num_alerts, num_alerts * 10)) begin
-      bit [BUS_DW-1:0] alert_req = $urandom_range(0, (1'b1 << num_alerts) - 1);
-      // Write random value to alert_test register.
-      csr_wr(.ptr(alert_test_csr), .value(alert_req));
+      bit [BUS_DW-1:0] alert_req     = $urandom_range(0, (1'b1 << num_alerts) - 1);
+      bit regwen_val_before          = 1'b1;
+      bit regwen_wr_val              = 1'b1;
+      bit [BUS_DW-1:0] regwen_wr_bit = regwen_mask;
+
+      // Read the current regwen value as it might already be 0. While
+      // still 1, randomly, 10%, write 0 to it to exercise the in-register lock.
+      if (alert_test_regwen_fld != null) begin
+        bit [BUS_DW-1:0] regwen_rd_val;
+        csr_rd(.ptr(alert_test_csr), .value(regwen_rd_val));
+        regwen_val_before = regwen_rd_val[alert_test_regwen_fld.get_lsb_pos()];
+        regwen_wr_val = (regwen_val_before && $urandom_range(1, 10) == 1) ? 1'b0 : regwen_val_before;
+        regwen_wr_bit = BUS_DW'(regwen_wr_val) << alert_test_regwen_fld.get_lsb_pos();
+      end
+
+      // Write random value to alert_test register
+      csr_wr(.ptr(alert_test_csr), .value(alert_req | regwen_wr_bit));
       `uvm_info(`gfn, $sformatf("Write alert_test with val %0h", alert_req), UVM_HIGH)
+
+      // Check the value written to regwen by reading the CSR back.
+      if (alert_test_regwen_fld != null) begin
+        bit [BUS_DW-1:0] regwen_rd_val;
+        csr_rd(.ptr(alert_test_csr), .value(regwen_rd_val));
+        `DV_CHECK_EQ(regwen_rd_val[alert_test_regwen_fld.get_lsb_pos()], regwen_wr_val,
+                     "alert_test regwen readback does not match the value written")
+      end
+
+      if (!regwen_val_before) begin
+        // regwen was already locked entering this write: the write-enable gate used that
+        // already-registered value, so this write could not have set any alert field.
+        cfg.clk_rst_vif.wait_clks($urandom_range(0, 3));
+        foreach (cfg.list_of_alerts[i]) begin
+          `DV_CHECK_EQ(cfg.m_alert_agent_cfgs[cfg.list_of_alerts[i]].vif.get_alert(), 0,
+                       $sformatf("expect no alert_test alert:%0s while regwen is locked",
+                                 cfg.list_of_alerts[i]))
+        end
+        continue;
+      end
+
       for (int i = 0; i < num_alerts; i++) begin
         string alert_name = cfg.list_of_alerts[i];
 
@@ -983,7 +1022,7 @@ task cip_base_vseq::run_alert_test_vseq(int num_times = 1);
 
           // write alert_test during alert handshake will be ignored
           if ($urandom_range(1, 10) == 10) begin
-            csr_wr(.ptr(alert_test_csr), .value(1'b1 << i));
+            csr_wr(.ptr(alert_test_csr), .value((1'b1 << i) | regwen_mask));
             `uvm_info(`gfn, "Write alert_test again during alert handshake", UVM_HIGH)
           end
 
@@ -997,12 +1036,13 @@ task cip_base_vseq::run_alert_test_vseq(int num_times = 1);
          `DV_CHECK_EQ(cfg.m_alert_agent_cfgs[alert_name].vif.get_alert(), 0,
                       $sformatf("alert_test did not set alert:%0s", alert_name))
 
-          // write alert_test field when there is ongoing alert handshake
-          if ($urandom_range(1, 10) == 10) begin
+          // write alert_test field when there is ongoing alert handshake. Skip if the write
+          // above just locked regwen.
+          if (regwen_wr_val && $urandom_range(1, 10) == 10) begin
             `uvm_info(`gfn,
                       $sformatf("Write alert_test with val %0h during alert_handshake",
                       1'b1 << i), UVM_HIGH)
-            csr_wr(.ptr(alert_test_csr), .value(1'b1 << i));
+            csr_wr(.ptr(alert_test_csr), .value((1'b1 << i) | regwen_mask));
             `DV_SPINWAIT_EXIT(while (!cfg.m_alert_agent_cfgs[alert_name].vif.get_alert())
                               cfg.clk_rst_vif.wait_clks(1);,
                               cfg.clk_rst_vif.wait_clks(2);,
@@ -1022,7 +1062,7 @@ task cip_base_vseq::run_alert_test_vseq(int num_times = 1);
   end
 endtask
 
-task cip_base_vseq::wait_until_ping_is_finished(alert_esc_agent_cfg alert_agent_cfg);
+task cip_base_vseq::wait_until_ping_is_finished(alert_agent_cfg alert_agent_cfg);
 
   if (alert_agent_cfg.vif.in_ping_st()) begin
     // There's a 2-cycle sampling delay in the monitor, so if the VIF has already seen the ping then
@@ -1037,8 +1077,8 @@ endtask
 task cip_base_vseq::wait_alert_trigger(string alert_name,
                                        int    max_wait_cycle = 7,
                                        bit    wait_complete = 0);
-  alert_esc_agent_cfg agent_cfg = cfg.m_alert_agent_cfgs[alert_name];
-  virtual alert_esc_if alert_vif = agent_cfg.vif;
+  alert_agent_cfg agent_cfg = cfg.m_alert_agent_cfgs[alert_name];
+  virtual alert_if alert_vif = agent_cfg.vif;
 
   // In case there is a ping in flight when we arrive, wait for the ping to clear.
   wait_until_ping_is_finished(agent_cfg);
@@ -1096,7 +1136,7 @@ task cip_base_vseq::drive_alert_rsp_and_check_handshake(string alert_name, int a
   alert_receiver_alert_rsp_seq ack_seq =
       alert_receiver_alert_rsp_seq::type_id::create("ack_seq");
   `DV_CHECK_RANDOMIZE_FATAL(ack_seq);
-  ack_seq.start(p_sequencer.alert_esc_sequencer_h[alert_name]);
+  ack_seq.start(p_sequencer.m_alert_sequencers[alert_name]);
 
   `DV_SPINWAIT(cfg.m_alert_agent_cfgs[alert_name].vif.wait_ack_complete();,
                $sformatf("timeout wait for alert_%0d handshake:%0s", alert_index, alert_name))
@@ -1376,7 +1416,7 @@ task cip_base_vseq::check_fatal_alert_nonblocking(string alert_name);
         forever begin
           // 1 extra cycle to make sure no race condition
           // Plus 2 extra cycles due to alert sampling delay of 2 cycles at the VIF
-          for (int i = 0; i <  (alert_esc_agent_pkg::ALERT_B2B_DELAY + 1 + 2); i++) begin
+          for (int i = 0; i <  (alert_agent_pkg::ALERT_B2B_DELAY + 1 + 2); i++) begin
             if (cfg.m_alert_agent_cfgs[alert_name].active_ping) begin
               wait (cfg.m_alert_agent_cfgs[alert_name].active_ping==0);
               i = 0; // restart the delay, since alert may take longer now ping is happening

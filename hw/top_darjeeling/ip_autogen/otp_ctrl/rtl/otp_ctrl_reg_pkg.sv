@@ -79,25 +79,27 @@ package otp_ctrl_reg_pkg;
   parameter int CreatorSwCfgRngAdaptpHiThresholdsSize = 4;
   parameter int CreatorSwCfgRngAdaptpLoThresholdsOffset = 320;
   parameter int CreatorSwCfgRngAdaptpLoThresholdsSize = 4;
-  parameter int CreatorSwCfgRngBucketThresholdsOffset = 324;
+  parameter int CreatorSwCfgRngAdaptpsThresholdsOffset = 324;
+  parameter int CreatorSwCfgRngAdaptpsThresholdsSize = 4;
+  parameter int CreatorSwCfgRngBucketThresholdsOffset = 328;
   parameter int CreatorSwCfgRngBucketThresholdsSize = 4;
-  parameter int CreatorSwCfgRngMarkovHiThresholdsOffset = 328;
+  parameter int CreatorSwCfgRngMarkovHiThresholdsOffset = 332;
   parameter int CreatorSwCfgRngMarkovHiThresholdsSize = 4;
-  parameter int CreatorSwCfgRngMarkovLoThresholdsOffset = 332;
+  parameter int CreatorSwCfgRngMarkovLoThresholdsOffset = 336;
   parameter int CreatorSwCfgRngMarkovLoThresholdsSize = 4;
-  parameter int CreatorSwCfgRngExthtHiThresholdsOffset = 336;
+  parameter int CreatorSwCfgRngExthtHiThresholdsOffset = 340;
   parameter int CreatorSwCfgRngExthtHiThresholdsSize = 4;
-  parameter int CreatorSwCfgRngExthtLoThresholdsOffset = 340;
+  parameter int CreatorSwCfgRngExthtLoThresholdsOffset = 344;
   parameter int CreatorSwCfgRngExthtLoThresholdsSize = 4;
-  parameter int CreatorSwCfgRngBootAlertThresholdOffset = 344;
+  parameter int CreatorSwCfgRngBootAlertThresholdOffset = 348;
   parameter int CreatorSwCfgRngBootAlertThresholdSize = 4;
-  parameter int CreatorSwCfgRngFipsAlertThresholdOffset = 348;
+  parameter int CreatorSwCfgRngFipsAlertThresholdOffset = 352;
   parameter int CreatorSwCfgRngFipsAlertThresholdSize = 4;
-  parameter int CreatorSwCfgRngBootConfigDigestOffset = 352;
+  parameter int CreatorSwCfgRngBootConfigDigestOffset = 356;
   parameter int CreatorSwCfgRngBootConfigDigestSize = 4;
-  parameter int CreatorSwCfgRngFipsConfigDigestOffset = 356;
+  parameter int CreatorSwCfgRngFipsConfigDigestOffset = 360;
   parameter int CreatorSwCfgRngFipsConfigDigestSize = 4;
-  parameter int CreatorSwCfgSramKeyRenewAndInitEnOffset = 360;
+  parameter int CreatorSwCfgSramKeyRenewAndInitEnOffset = 364;
   parameter int CreatorSwCfgSramKeyRenewAndInitEnSize = 4;
   parameter int CreatorSwCfgDigestOffset = 368;
   parameter int CreatorSwCfgDigestSize = 8;
@@ -249,9 +251,7 @@ package otp_ctrl_reg_pkg;
   parameter int HwCfg1Size = 16;
   parameter int SocDbgStateOffset = 16024;
   parameter int SocDbgStateSize = 4;
-  parameter int EnCsrngSwAppReadOffset = 16028;
-  parameter int EnCsrngSwAppReadSize = 1;
-  parameter int EnSramIfetchOffset = 16029;
+  parameter int EnSramIfetchOffset = 16028;
   parameter int EnSramIfetchSize = 1;
   parameter int HwCfg1DigestOffset = 16032;
   parameter int HwCfg1DigestSize = 8;
@@ -860,12 +860,13 @@ package otp_ctrl_reg_pkg;
   parameter logic [1:0] OTP_CTRL_INTR_TEST_RESVAL = 2'h 0;
   parameter logic [0:0] OTP_CTRL_INTR_TEST_OTP_OPERATION_DONE_RESVAL = 1'h 0;
   parameter logic [0:0] OTP_CTRL_INTR_TEST_OTP_ERROR_RESVAL = 1'h 0;
-  parameter logic [4:0] OTP_CTRL_ALERT_TEST_RESVAL = 5'h 0;
+  parameter logic [31:0] OTP_CTRL_ALERT_TEST_RESVAL = 32'h 80000000;
   parameter logic [0:0] OTP_CTRL_ALERT_TEST_FATAL_MACRO_ERROR_RESVAL = 1'h 0;
   parameter logic [0:0] OTP_CTRL_ALERT_TEST_FATAL_CHECK_ERROR_RESVAL = 1'h 0;
   parameter logic [0:0] OTP_CTRL_ALERT_TEST_FATAL_BUS_INTEG_ERROR_RESVAL = 1'h 0;
   parameter logic [0:0] OTP_CTRL_ALERT_TEST_FATAL_PRIM_OTP_ALERT_RESVAL = 1'h 0;
   parameter logic [0:0] OTP_CTRL_ALERT_TEST_RECOV_PRIM_OTP_ALERT_RESVAL = 1'h 0;
+  parameter logic [0:0] OTP_CTRL_ALERT_TEST_REGWEN_RESVAL = 1'h 1;
   parameter logic [9:0] OTP_CTRL_STATUS_RESVAL = 10'h 0;
   parameter logic [0:0] OTP_CTRL_STATUS_PARTITION_ERROR_RESVAL = 1'h 0;
   parameter logic [0:0] OTP_CTRL_STATUS_DAI_ERROR_RESVAL = 1'h 0;
@@ -1185,7 +1186,7 @@ package otp_ctrl_reg_pkg;
     4'b 0001, // index[ 0] OTP_CTRL_INTR_STATE
     4'b 0001, // index[ 1] OTP_CTRL_INTR_ENABLE
     4'b 0001, // index[ 2] OTP_CTRL_INTR_TEST
-    4'b 0001, // index[ 3] OTP_CTRL_ALERT_TEST
+    4'b 1111, // index[ 3] OTP_CTRL_ALERT_TEST
     4'b 0011, // index[ 4] OTP_CTRL_STATUS
     4'b 0111, // index[ 5] OTP_CTRL_PARTITION_STATUS_0
     4'b 0001, // index[ 6] OTP_CTRL_ERR_CODE_0

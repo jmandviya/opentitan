@@ -39,7 +39,7 @@ package otp_ctrl_env_pkg;
   parameter uint NUM_EDN             = 1;
 
   parameter uint DIGEST_SIZE         = 8;
-  parameter uint SW_WINDOW_BASE_ADDR = 'h800;
+  parameter uint SW_WINDOW_BASE_ADDR = 'h1000;
   parameter uint SW_WINDOW_SIZE      = NumSwCfgWindowWords * 4;
 
   parameter uint TL_SIZE = (TL_DW / 8);
@@ -109,9 +109,9 @@ package otp_ctrl_env_pkg;
     -1, // This partition has no zeroized field.
     -1, // This partition has no zeroized field.
     -1, // This partition has no zeroized field.
-    -1, // This partition has no zeroized field.
-    -1, // This partition has no zeroized field.
-    -1 // This partition has no zeroized field.
+    Secret0ZerOffset >> 2,
+    Secret1ZerOffset >> 2,
+    Secret2ZerOffset >> 2
   };
 
   // types
@@ -246,12 +246,14 @@ package otp_ctrl_env_pkg;
     return is_digest_for(addr, get_part_index(addr));
   endfunction
 
-  // Return true if this is the address of the Zeroize marker for a partition with zeroization
-  function automatic bit is_zeroize_marker(bit [TL_DW-1:0] addr);
+  // Return true if a DAI read or write at addr touches the Zeroize marker of a zeroizable
+  // partition. The marker is the last 64 bits of the partition. For a read or write whose address
+  // falls in those 64 bits, the RTL uses the address rounded down to 8 bytes (p_size_sel in
+  // otp_ctrl_dai.sv), so compare the addresses without their bottom three bits.
+  function automatic bit touches_zeroize_marker(bit [TL_DW-1:0] addr);
     int unsigned part_idx = get_part_index(addr);
-
-    // If the partition is zeroizable, its Zeroize status is in the last 64 bits of the partition.
-    return (PartInfo[part_idx].zeroizable && (addr == last_64_addr(part_idx)));
+    return (PartInfo[part_idx].zeroizable &&
+            ((addr >> 3) == (last_64_addr(part_idx) >> 3)));
   endfunction
 
   function automatic bit is_sw_part(bit [TL_DW-1:0] addr);

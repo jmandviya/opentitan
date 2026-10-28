@@ -1082,7 +1082,7 @@
                    PMPRstMsecCfg: "ibex_pmp_reset_pkg::PmpMseccfgRst",
                    RV32E: "0",
                    RV32M: "ibex_pkg::RV32MSingleCycle",
-                   RV32B: "ibex_pkg::RV32BOTEarlGrey",
+                   RV32B: "ibex_pkg::RV32BFull",
                    RV32ZC: "ibex_pkg::RV32ZcaZcbZcmp",
                    RegFile: "ibex_pkg::RegFileFF",
                    BranchTargetALU: "1",
@@ -1226,7 +1226,7 @@
       // OTBN OTP scramble key
       'otp_ctrl.otbn_otp_key' : ['otbn.otbn_otp_key'],
 
-      // KeyMgr Sideload & KDF function
+      // KeyMgr DPE Sideload & KDF function
       'otp_ctrl.keymgr_creator_root_key'  : ['keymgr_dpe.creator_root_key'],
       'otp_ctrl.keymgr_creator_seed'      : ['keymgr_dpe.creator_seed'],
       'otp_ctrl.keymgr_owner_seed'        : ['keymgr_dpe.owner_seed'],
@@ -1364,7 +1364,6 @@
         // TODO(#6713): The actual struct breakout and mapping currently needs to
         // be performed by hand in the toplevel template.
         'otp_ctrl.otp_broadcast',
-        'csrng.otp_en_csrng_sw_app_read',
         'soc_dbg_ctrl.soc_dbg_state',
         'lc_ctrl.otp_device_id',
         'lc_ctrl.otp_manuf_state',
@@ -1454,7 +1453,6 @@
         'rstmgr.por_n'                         : 'por_n',
         'rstmgr.resets'                        : '',
         'rstmgr.rst_en'                        : '',
-        'rv_core_ibex.fpga_info'               : 'fpga_info',
         'soc_proxy.misc_tl_h2d'                : 'ctn_misc_tl_h2d',
         'soc_proxy.misc_tl_d2h'                : 'ctn_misc_tl_d2h',
         'soc_proxy.soc_wkup_async'             : 'soc_wkup_async',
@@ -1789,7 +1787,6 @@
       // Chip level changes
       chiplevel: {
         port_overrides: {
-          'rv_core_ibex.fpga_info'               : { unused:      true             },
           'rv_dm.next_dm_addr'                   : { unused:      true             },
           'soc_proxy.integrator_id'              : { unused:      true             },
           'soc_proxy.soc_lsio_trigger'           : { unused:      true             },
@@ -1914,7 +1911,6 @@
       // is an inout pad on the asic and therefore left open here.
       chiplevel: {
         port_overrides: {
-          'rv_core_ibex.fpga_info'               : { unused:      true             },
           'rv_dm.next_dm_addr'                   : { unused:      true             },
           'soc_proxy.integrator_id'              : { unused:      true             },
           'soc_proxy.soc_lsio_trigger'           : { unused:      true             },

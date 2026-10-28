@@ -62,7 +62,7 @@
 | otp_ctrl.[`SECRET1_DIGEST_1`](#secret1_digest)                                         | 0xd8     |        4 | Integrity digest for the SECRET1 partition.                                                                                                |
 | otp_ctrl.[`SECRET2_DIGEST_0`](#secret2_digest)                                         | 0xdc     |        4 | Integrity digest for the SECRET2 partition.                                                                                                |
 | otp_ctrl.[`SECRET2_DIGEST_1`](#secret2_digest)                                         | 0xe0     |        4 | Integrity digest for the SECRET2 partition.                                                                                                |
-| otp_ctrl.[`SW_CFG_WINDOW`](#sw_cfg_window)                                             | 0x800    |     2048 | Any read to this window directly maps to the corresponding offset in the creator and owner software                                        |
+| otp_ctrl.[`SW_CFG_WINDOW`](#sw_cfg_window)                                             | 0x1000   |     4096 | Any read to this window directly maps to the corresponding offset in the creator and owner software                                        |
 
 ## INTR_STATE
 Interrupt State Register
@@ -121,23 +121,24 @@ Interrupt Test Register
 ## ALERT_TEST
 Alert Test Register
 - Offset: `0xc`
-- Reset default: `0x0`
-- Reset mask: `0x1f`
+- Reset default: `0x80000000`
+- Reset mask: `0x8000001f`
 
 ### Fields
 
 ```wavejson
-{"reg": [{"name": "fatal_macro_error", "bits": 1, "attr": ["wo"], "rotate": -90}, {"name": "fatal_check_error", "bits": 1, "attr": ["wo"], "rotate": -90}, {"name": "fatal_bus_integ_error", "bits": 1, "attr": ["wo"], "rotate": -90}, {"name": "fatal_prim_otp_alert", "bits": 1, "attr": ["wo"], "rotate": -90}, {"name": "recov_prim_otp_alert", "bits": 1, "attr": ["wo"], "rotate": -90}, {"bits": 27}], "config": {"lanes": 1, "fontsize": 10, "vspace": 230}}
+{"reg": [{"name": "fatal_macro_error", "bits": 1, "attr": ["wo"], "rotate": -90}, {"name": "fatal_check_error", "bits": 1, "attr": ["wo"], "rotate": -90}, {"name": "fatal_bus_integ_error", "bits": 1, "attr": ["wo"], "rotate": -90}, {"name": "fatal_prim_otp_alert", "bits": 1, "attr": ["wo"], "rotate": -90}, {"name": "recov_prim_otp_alert", "bits": 1, "attr": ["wo"], "rotate": -90}, {"bits": 26}, {"name": "regwen", "bits": 1, "attr": ["rw0c"], "rotate": -90}], "config": {"lanes": 1, "fontsize": 10, "vspace": 230}}
 ```
 
-|  Bits  |  Type  |  Reset  | Name                  | Description                                      |
-|:------:|:------:|:-------:|:----------------------|:-------------------------------------------------|
-|  31:5  |        |         |                       | Reserved                                         |
-|   4    |   wo   |   0x0   | recov_prim_otp_alert  | Write 1 to trigger one alert event of this kind. |
-|   3    |   wo   |   0x0   | fatal_prim_otp_alert  | Write 1 to trigger one alert event of this kind. |
-|   2    |   wo   |   0x0   | fatal_bus_integ_error | Write 1 to trigger one alert event of this kind. |
-|   1    |   wo   |   0x0   | fatal_check_error     | Write 1 to trigger one alert event of this kind. |
-|   0    |   wo   |   0x0   | fatal_macro_error     | Write 1 to trigger one alert event of this kind. |
+|  Bits  |  Type  |  Reset  | Name                  | Description                                            |
+|:------:|:------:|:-------:|:----------------------|:-------------------------------------------------------|
+|   31   |  rw0c  |   0x1   | regwen                | Write 0 to disable alert testing until the next reset. |
+|  30:5  |        |         |                       | Reserved                                               |
+|   4    |   wo   |   0x0   | recov_prim_otp_alert  | Write 1 to trigger one alert event of this kind.       |
+|   3    |   wo   |   0x0   | fatal_prim_otp_alert  | Write 1 to trigger one alert event of this kind.       |
+|   2    |   wo   |   0x0   | fatal_bus_integ_error | Write 1 to trigger one alert event of this kind.       |
+|   1    |   wo   |   0x0   | fatal_check_error     | Write 1 to trigger one alert event of this kind.       |
+|   0    |   wo   |   0x0   | fatal_macro_error     | Write 1 to trigger one alert event of this kind.       |
 
 ## STATUS
 OTP status register.
@@ -297,19 +298,19 @@ Command register for direct accesses.
 Address register for direct accesses.
 - Offset: `0x54`
 - Reset default: `0x0`
-- Reset mask: `0x7ff`
+- Reset mask: `0xfff`
 - Register enable: [`DIRECT_ACCESS_REGWEN`](#direct_access_regwen)
 
 ### Fields
 
 ```wavejson
-{"reg": [{"name": "DIRECT_ACCESS_ADDRESS", "bits": 11, "attr": ["rw"], "rotate": -90}, {"bits": 21}], "config": {"lanes": 1, "fontsize": 10, "vspace": 230}}
+{"reg": [{"name": "DIRECT_ACCESS_ADDRESS", "bits": 12, "attr": ["rw"], "rotate": 0}, {"bits": 20}], "config": {"lanes": 1, "fontsize": 10, "vspace": 80}}
 ```
 
 |  Bits  |  Type  |  Reset  | Name                                                                   |
 |:------:|:------:|:-------:|:-----------------------------------------------------------------------|
-| 31:11  |        |         | Reserved                                                               |
-|  10:0  |   rw   |   0x0   | [DIRECT_ACCESS_ADDRESS](#direct_access_address--direct_access_address) |
+| 31:12  |        |         | Reserved                                                               |
+|  11:0  |   rw   |   0x0   | [DIRECT_ACCESS_ADDRESS](#direct_access_address--direct_access_address) |
 
 ### DIRECT_ACCESS_ADDRESS . DIRECT_ACCESS_ADDRESS
 This is the address for the OTP word to be read or written through
@@ -866,8 +867,8 @@ Any read to this window directly maps to the corresponding offset in the creator
 config partitions, and triggers an OTP readout of the bytes requested. Note that the transaction
 will block until OTP readout has completed.
 
-- Word Aligned Offset Range: `0x800`to`0xffc`
-- Size (words): `512`
+- Word Aligned Offset Range: `0x1000`to`0x1ffc`
+- Size (words): `1024`
 - Access: `ro`
 - Byte writes are *not* supported.
 

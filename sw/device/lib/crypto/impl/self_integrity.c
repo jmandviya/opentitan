@@ -2,28 +2,50 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "sw/device/lib/base/hardened_memory.h"
 #include "sw/device/lib/base/macros.h"
+#include "sw/device/lib/crypto/drivers/hmac.h"
+#include "sw/device/lib/crypto/impl/cmvp.h"
+#include "sw/device/lib/crypto/impl/state.h"
 #include "sw/device/lib/crypto/impl/status.h"
 #include "sw/device/lib/crypto/include/integrity.h"
-#include "sw/device/lib/crypto/include/sha2.h"
 
-#ifdef HASH_SELF_CHECK_ENABLE
+#ifdef FIPS_MODE
 
+#ifdef OTCRYPTO_BINARY_BLOB
 extern const uint8_t _libotcrypto_start_[];
 extern const uint8_t _libotcrypto_end_[];
+#endif  // OTCRYPTO_BINARY_BLOB
 
 otcrypto_status_t otcrypto_integrity_check(void) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_INTEGRITY_CHECK);
+  crypto_state_t state;
+  HARDENED_TRY(read_state(&state));
+
+  if (launder32(state.locked_state) != kHardenedByteBoolFalse) {
+    otcrypto_cmvp_end_service();
+    return OTCRYPTO_FATAL_ERR;
+  }
+
+  // Ensure the SHA-2 KAT has executed before running the self-integrity check.
+  OTCRYPTO_HEALTH_CHECK(kTestHashSha512Bit);
+
+  // Re-read the state after running the SHA-2 KAT so we preserve kat_state.
+  HARDENED_TRY(read_state(&state));
+
+#ifdef OTCRYPTO_BINARY_BLOB
+  // COVERAGE (MISSING) The binary-blob hash check is not covered because
+  // coverage builds link statically (type_flag="static") to relocate LLVM
+  // coverage counters in SRAM.
   const size_t lib_len = (size_t)(_libotcrypto_end_ - _libotcrypto_start_);
 
   uint32_t digest_content[12] = {0};
-  otcrypto_sha2_context_t ctx;
-  otcrypto_hash_digest_t digest = {
-      .mode = kOtcryptoHashModeSha384,
-      .len = ARRAYSIZE(digest_content),
-      .data = digest_content,
-  };
+  hmac_ctx_t ctx;
+  otcrypto_word32_buf_t digest = OTCRYPTO_MAKE_BUF(
+      otcrypto_word32_buf_t, digest_content, ARRAYSIZE(digest_content));
 
-  HARDENED_TRY(otcrypto_sha2_init(kOtcryptoHashModeSha384, &ctx));
+  // Initialize the HMAC driver in SHA384 mode.
+  hmac_hash_sha384_init(&ctx);
 
   size_t acc_len = 0;
   const size_t kMaxChunkSize = 2048;
@@ -38,11 +60,11 @@ otcrypto_status_t otcrypto_integrity_check(void) {
         otcrypto_const_byte_buf_t,
         (const uint8_t *)(_libotcrypto_start_ + acc_len), len);
 
-    HARDENED_TRY(otcrypto_sha2_update(&ctx, &buf));
+    HARDENED_TRY(hmac_update(&ctx, &buf));
     acc_len += len;
   }
 
-  HARDENED_TRY(otcrypto_sha2_final(&ctx, &digest));
+  HARDENED_TRY(hmac_final(&ctx, &digest));
   extern const uint8_t _libotcrypto_hash_[];
   const uint8_t *hash_ptr = _libotcrypto_hash_;
 
@@ -51,15 +73,30 @@ otcrypto_status_t otcrypto_integrity_check(void) {
     diff |= ((uint8_t *)digest.data)[i] ^ hash_ptr[i];
   }
 
+  HARDENED_TRY(hardened_memshred(digest.data, digest.len));
+
   if (diff != 0) {
+    // Lock the cryptolib if the self-integrity check failed
+    state.locked_state = kHardenedByteBoolTrue;
+    HARDENED_TRY(store_state(&state));
+    otcrypto_cmvp_end_service();
     return OTCRYPTO_FATAL_ERR;
   }
+#endif  // OTCRYPTO_BINARY_BLOB
 
+  // Set the stateful word that the self-integrity check is done
+  state.self_check_state = kHardenedByteBoolTrue;
+  HARDENED_TRY(store_state(&state));
+  otcrypto_cmvp_end_service();
   return OTCRYPTO_OK;
 }
 
 #else
 
-otcrypto_status_t otcrypto_integrity_check(void) { return OTCRYPTO_OK; }
+otcrypto_status_t otcrypto_integrity_check(void) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_INTEGRITY_CHECK);
+  otcrypto_cmvp_end_service();
+  return OTCRYPTO_OK;
+}
 
 #endif

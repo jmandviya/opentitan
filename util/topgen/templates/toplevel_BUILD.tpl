@@ -18,9 +18,13 @@ cc_library(
     ],
     hdrs = [
         "${top_name}.h",
-        "${top_name}_memory.h",
+        "top_memory.h",
     ],
     defines = ["OPENTITAN_IS_${top["name"].upper()}"],
+    # To make the memory header top agnostic, remap it into the hw/top
+    # include namespace so that targets can include `hw/top/top_memory`.
+    include_prefix = "hw/top",
+    strip_include_prefix = "/hw/${top_name}/sw/autogen",
     target_compatible_with = opentitan_require_top("${top["name"]}"),
 )
 

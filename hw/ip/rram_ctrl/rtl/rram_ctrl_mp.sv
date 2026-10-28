@@ -20,10 +20,20 @@ module rram_ctrl_mp
   input logic rst_ni,
 
   input mubi4_t                   rram_disable_i,
+  // Disables host reads only. Software controller operations are disabled in rram_ctrl_arb.
+  input mubi4_t                   sw_disable_i,
   // Interface selection
   input rram_sel_e                if_sel_i,
   // Configuration from sw
+  // region_cfgs_i already has the OTP exclusion, the emulated info subregions and their
+  // per-window deny entries, the configurable regions, and the default region, in that
+  // priority order.
+  // This is entirely register-value based, so no patching is needed here.
   input mp_region_cfg_t           region_cfgs_i[TotalMpRegions],
+  // Host requests always deny a whole emulated info region, regardless of subregion
+  // configuration.
+  // A much shorter priority chain than region_cfgs_i.
+  input mp_region_cfg_t           host_region_cfgs_i[HostMpRegions],
   input mp_info_cfg_t             info_page_cfgs_i[TotalInfoPages],
   // Hardware interface override
   input  mubi4_t                  hw_info_scr_dis_i,
@@ -67,6 +77,7 @@ module rram_ctrl_mp
 );
 
   import prim_mubi_pkg::mubi4_test_true_strict;
+  import prim_mubi_pkg::mubi4_test_true_loose;
 
   // Page address
   logic [PageW-1:0] page_addr;
@@ -112,6 +123,9 @@ module rram_ctrl_mp
   assign otp_req   = ctrl_req & (if_sel_i == HwOtpSel);
   assign lcmgr_req = ctrl_req & (if_sel_i == HwLcMgrSel);
 
+  // region_cfgs_i holds the OTP exclusion, the emulated info subregions and their per-window
+  // deny entries, the configurable regions, and the default region, in that priority order.
+  // See rram_ctrl_region_cfg.
   rram_ctrl_mp_region_sel #(
     .Regions(TotalMpRegions)
   ) u_mp_sw_sel (
@@ -258,7 +272,7 @@ module rram_ctrl_mp
   logic txn_wr_err_d, txn_wr_err_q;
   logic no_allowed_txn;
   // If rram_disable is true, transaction is always invalid
-  assign no_allowed_txn = ((prim_mubi_pkg::mubi4_test_true_loose(rram_disable_i)) ||
+  assign no_allowed_txn = ((mubi4_test_true_loose(rram_disable_i)) ||
                            (addr_invalid | invalid_data_txn | invalid_info_txn));
 
   // return done and error the next cycle
@@ -304,12 +318,12 @@ module rram_ctrl_mp
   assign host_page_addr = host_addr_i[BusAddrW-1 -: PageW];
 
   rram_ctrl_mp_region_sel #(
-    .Regions(TotalMpRegions)
+    .Regions(HostMpRegions)
   ) u_mp_host_sel (
     .req_i       (host_req_i),
     .phase_i     (PhaseInvalid),
     .addr_i      (host_page_addr),
-    .region_cfg_i(region_cfgs_i),
+    .region_cfg_i(host_region_cfgs_i),
     .page_cfg_o  (host_sel_cfg)
   );
 
@@ -317,13 +331,17 @@ module rram_ctrl_mp
   logic unused_host_mp;
   assign unused_host_mp = ^{host_sel_cfg.wr_en, host_sel_cfg.addr_xor_en, host_addr_i[PageW-1:0]};
 
-  assign host_data_en     = mubi4_test_true_strict(host_sel_cfg.en);
+  // If sw_disable is true, host reads are invalid.
+  logic sw_dis;
+  assign sw_dis = mubi4_test_true_loose(sw_disable_i);
+
+  assign host_data_en     = mubi4_test_true_strict(host_sel_cfg.en) & ~sw_dis;
   assign host_data_rd_en  = host_data_en & mubi4_test_true_strict(host_sel_cfg.rd_en);
   assign host_data_scr_en = host_data_en & mubi4_test_true_strict(host_sel_cfg.scramble_en);
   assign host_data_ecc_en = host_data_en & mubi4_test_true_strict(host_sel_cfg.ecc_en);
 
   assign invalid_host_txn = host_req_i & ((host_data_rd_en == 1'b0) ||
-                                          prim_mubi_pkg::mubi4_test_true_loose(rram_disable_i));
+                                          mubi4_test_true_loose(rram_disable_i));
 
   logic [BusFullWidth-1:0] inv_data;
   tlul_data_integ_enc u_bus_intg (
@@ -377,5 +395,9 @@ module rram_ctrl_mp
 
   // The phy cannot handle back pressure
   `ASSERT(IllegalBackPressure_A, (host_rd_done_i & forward_err) == 1'b0)
+
+  // If software access is disabled, host reads are not forwarded to the phy, but answered with an
+  // error.
+  `ASSERT(SwDisHostBlocked_A, sw_dis && host_req_i |-> !host_req_o && invalid_host_txn)
 
   endmodule

@@ -29,18 +29,20 @@ The OpenTitan Earl Grey 2 architecture supports the following key features:
     <td>
       <ul>
         <li><b>Ibex 32-bit RISC-V CPU core</b><br/>
-          (RV32{I,CHERIoT}MCB_Zicntr_Zicsr_Zifencei_<br/>Zihpm_Zcb_Zcmp_Zbc_Zbkb_Zbkx_<br/>Smepmp):
+          (RV32{I,CHERIoT}MCB_Zicntr_Zicsr_Zifencei_<br/>Zihpm_Zcb_Zcmp_Zbc_Zbkb_Zbkc_Zbkx_<br/>Smepmp):
           <ul>
             <li>3-stage pipeline: instruction fetch, decode and execute, writeback</li>
             <li>RV32I base ISA: version 2.1, active after reset</li>
             <li>CHERIoT base ISA: version v1.0, can be switched to once (i.e., no way back to RV32I until reset)</li>
+            <li>CHERIoT background revocation engine: sweeps the Main SRAM, the Secondary SRAM and the RRAM and clears the tag of every revoked capability</li>
             <li>M (integer multiplication and division) extension: version 2.0, single-cycle multiplier</li>
             <li>C (compressed instructions) extension: version 2.0</li>
             <li>ZcbZcmp (code size reduction) extensions: version 1.0.0</li>
             <li>Bit manipulation extensions:
               <ul>
                 <li>version 1.0.0 of Zba_Zbb_Zbs (B)</li>
-                <li>version 1.0.0 of Zbc_Zbkb_Zbkc_Zbkx</li>
+                <li>version 1.0.0 of Zbc</li>
+                <li>version 1.0.1 of Zbkb_Zbkc_Zbkx</li>
               </ul>
             </li>
             <li>Smepmp: enhanced physical memory protection (ePMP) version 1.0, 16 entries, 4 byte minimum granularity</li>
@@ -102,7 +104,7 @@ The OpenTitan Earl Grey 2 architecture supports the following key features:
                 <li>vendor-implemented ECC</li>
                 <li>scrambling of address and data with XEX tweakable block cipher</li>
                 <li>OTP emulation</li>
-                <li>CHERIoT support: full address range usable to store CHERIoT capabilities that cannot be revoked</li>
+                <li>CHERIoT support: full address range usable to store CHERIoT capabilities that cannot be revoked; a capability store sets the tag of a capability the RRAM already holds</li>
                 <li>CHERIoT implementation: tag bits (32 KiB) stored in the CHERIoT meta SRAM</li>
               </ul>
             </li>
@@ -213,7 +215,7 @@ The OpenTitan Earl Grey 2 architecture supports the following key features:
           <ul>
             <li>2x I3C Controller + Target (on muxed pins, restricted pin sets, tightly controlled timing)
               <ul>
-                <li>Signaling modes: HDR-DDR (24 Mbps), SDR (12 Mbps)</li>
+                <li>Signaling modes: HDR-DDR (24 Mbps signaling, 19.2 Mbps data), SDR (12 Mbps signaling, 10.6 Mbps data)</li>
                 <li>Programmed I/O (PIO) mode implementation of Host Controller Interface (HCI)</li>
                 <li>Transfer Command Response Interface (TCRI)</li>
                 <li>In-band interrupts (IBI)</li>

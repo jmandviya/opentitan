@@ -2,7 +2,10 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["cryptolib_warnings"],
+)
 
 load("//rules/opentitan:defs.bzl", "OPENTITAN_CPU")
 
@@ -51,6 +54,7 @@ cc_library(
     deps = [
         ":rsa_datatypes",
         "//sw/device/lib/base:hardened_memory",
+        "//sw/device/lib/crypto/drivers:entropy",
         "//sw/device/lib/crypto/drivers:otbn",
         "//sw/otbn/crypto:run_rsa",
     ],
@@ -68,9 +72,8 @@ cc_library(
         "//sw/device/lib/base:memory",
         "//sw/device/lib/base:random_order",
         "//sw/device/lib/crypto/drivers:entropy",
-        "//sw/device/lib/crypto/drivers:hmac",
-        "//sw/device/lib/crypto/drivers:kmac",
         "//sw/device/lib/crypto/drivers:rv_core_ibex",
+        "//sw/device/lib/crypto/impl:hash",
         "//sw/device/lib/crypto/impl:integrity",
         "//sw/device/lib/crypto/impl:status",
     ],
@@ -91,5 +94,6 @@ cc_library(
         "//sw/device/lib/base:memory",
         "//sw/device/lib/crypto/drivers:entropy",
         "//sw/device/lib/crypto/drivers:rv_core_ibex",
+        "//sw/device/lib/crypto/impl:hash",
     ],
 )

@@ -4,9 +4,12 @@
 
 #include "sw/device/lib/crypto/include/kmac.h"
 
+#include "sw/device/lib/base/hardened.h"
 #include "sw/device/lib/base/hardened_memory.h"
 #include "sw/device/lib/crypto/drivers/kmac.h"
+#include "sw/device/lib/crypto/impl/cmvp.h"
 #include "sw/device/lib/crypto/impl/keyblob.h"
+#include "sw/device/lib/crypto/impl/state.h"
 #include "sw/device/lib/crypto/impl/status.h"
 #include "sw/device/lib/crypto/include/config.h"
 #include "sw/device/lib/crypto/include/integrity.h"
@@ -33,9 +36,17 @@ enum {
 };
 
 /**
+ * KMAC FIFO flush cleanup guard.
+ */
+OT_USED static void kmac_fifo_flush_guard(uint32_t *dummy) {
+  (void)dummy;
+  (void)kmac_fifo_flush();
+}
+
+/**
  * Sideload cleanup guard.
  */
-static void sideload_wipe_guard(hardened_bool_t *is_sideloaded) {
+OT_USED static void sideload_wipe_guard(hardened_bool_t *is_sideloaded) {
   if (*is_sideloaded == kHardenedBoolTrue) {
     (void)keymgr_dpe_sideload_clear_kmac();
   }
@@ -107,6 +118,8 @@ otcrypto_status_t otcrypto_kmac(
     otcrypto_blinded_key_t *key, const otcrypto_const_byte_buf_t *input_message,
     const otcrypto_const_byte_buf_t *customization_string,
     size_t required_output_len, otcrypto_word32_buf_t *tag) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_KMAC);
+  OTCRYPTO_HEALTH_CHECK(kTestKmac256Bit);
   // TODO (#16410) Revisit/complete error checks
 
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
@@ -133,37 +146,36 @@ otcrypto_status_t otcrypto_kmac(
   if (key->config.hw_backed == kHardenedBoolTrue) {
     is_sideloaded = kHardenedBoolTrue;
   }
+  uint32_t hw_cleanup_guard __attribute__((cleanup(kmac_fifo_flush_guard))) = 1;
+  barrier32(hw_cleanup_guard);
 
   // Ensure that tag buffer length and `required_output_len` match each other.
   if (required_output_len > SIZE_MAX - (sizeof(uint32_t) - 1)) {
+    // COVERAGE (MISSING) Overflowing required_output_len is not covered.
     return OTCRYPTO_BAD_ARGS;
   }
   size_t required_output_words =
       (required_output_len + sizeof(uint32_t) - 1) / sizeof(uint32_t);
 
-  if (tag->len != required_output_words || required_output_len == 0) {
+  // Per NIST SP 800-185, KMAC tag length must be at least 32 bits (4 bytes).
+  if (tag->len != required_output_words || required_output_len < 4) {
     return OTCRYPTO_BAD_ARGS;
   }
 
   kmac_blinded_key_t kmac_key;
   HARDENED_TRY(kmac_key_construct(key, &kmac_key));
 
+  status_t (*kmac_fn)(kmac_blinded_key_t *, hardened_bool_t,
+                      const otcrypto_const_byte_buf_t *, const unsigned char *,
+                      size_t, uint32_t *, size_t) = NULL;
   otcrypto_key_mode_t key_mode_used = launder32(0);
   switch (launder32(key->config.key_mode)) {
     case kOtcryptoKeyModeKmac128:
-      HARDENED_TRY(kmac_kmac_128(&kmac_key,
-                                 /*masked_digest=*/kHardenedBoolFalse,
-                                 input_message, customization_string->data,
-                                 customization_string->len, tag->data,
-                                 required_output_len));
+      kmac_fn = kmac_kmac_128;
       key_mode_used = launder32(key_mode_used) | kOtcryptoKeyModeKmac128;
       break;
     case kOtcryptoKeyModeKmac256:
-      HARDENED_TRY(kmac_kmac_256(&kmac_key,
-                                 /*masked_digest=*/kHardenedBoolFalse,
-                                 input_message, customization_string->data,
-                                 customization_string->len, tag->data,
-                                 required_output_len));
+      kmac_fn = kmac_kmac_256;
       key_mode_used = launder32(key_mode_used) | kOtcryptoKeyModeKmac256;
       break;
     default:
@@ -172,6 +184,40 @@ otcrypto_status_t otcrypto_kmac(
   // Check if we landed in the correct case statement. Use ORs for this to
   // avoid that multiple cases were executed.
   HARDENED_CHECK_EQ(launder32(key_mode_used), key->config.key_mode);
+
+  // Preload the tag with randomness.
+  HARDENED_TRY(hardened_memshred(tag->data, tag->len));
+
+  if (launder32(key->config.security_level) == kOtcryptoKeySecurityLevelLow) {
+    // No protection against FI.
+    HARDENED_CHECK_EQ(key->config.security_level, kOtcryptoKeySecurityLevelLow);
+    HARDENED_TRY(kmac_fn(&kmac_key, /*masked_digest=*/kHardenedBoolFalse,
+                         input_message, customization_string->data,
+                         customization_string->len, tag->data,
+                         required_output_len));
+  } else {
+    // Call the KMAC core twice and compare both tags. This serves as a FI
+    // countermeasure.
+    HARDENED_CHECK_NE(key->config.security_level, kOtcryptoKeySecurityLevelLow);
+    // First KMAC computation using the KMAC core.
+    HARDENED_TRY(kmac_fn(&kmac_key, /*masked_digest=*/kHardenedBoolFalse,
+                         input_message, customization_string->data,
+                         customization_string->len, tag->data,
+                         required_output_len));
+    // Second KMAC computation using the KMAC core.
+    uint32_t tag_redundant_data[required_output_words];
+    HARDENED_TRY(hardened_memshred(tag_redundant_data, required_output_words));
+    kmac_blinded_key_t kmac_key_redundant;
+    HARDENED_TRY(kmac_key_construct(key, &kmac_key_redundant));
+    HARDENED_TRY(kmac_fn(&kmac_key_redundant,
+                         /*masked_digest=*/kHardenedBoolFalse, input_message,
+                         customization_string->data, customization_string->len,
+                         tag_redundant_data, required_output_len));
+    // Comparison of both tags.
+    HARDENED_CHECK_EQ(
+        hardened_memeq(&tag->data[0], &tag_redundant_data[0], tag->len),
+        kHardenedBoolTrue);
+  }
 
   // Verify the input buffer
   HARDENED_CHECK_EQ(kHardenedBoolTrue,

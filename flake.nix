@@ -35,7 +35,15 @@
     };
 
     # Provides mkEdaShell (the EDA devshell builder)
-    lowrisc-nix.url = "github:lowRISC/lowrisc-nix";
+    lowrisc-nix.url = "github:lowRISC/lowrisc-nix/ded9720f4960e3da2ffcb7d88dfa5fd51cbe4021";
+
+    # Yosys 0.69 with slang, cached on cache.nixos.org (do not override).
+    nixpkgs-yosys.url = "github:nixos/nixpkgs/8edc0c72e3a38faf5434e40d1f19431125fe4b30";
+
+    ihp-pdk = {
+      url = "github:IHP-GmbH/IHP-Open-PDK/dev";
+      flake = false;
+    };
   };
 
   nixConfig = {
@@ -50,6 +58,8 @@
     uv2nix,
     pyproject-build-systems,
     lowrisc-nix,
+    nixpkgs-yosys,
+    ihp-pdk,
     ...
   }:
     flake-utils.lib.eachDefaultSystem (system: let
@@ -96,46 +106,49 @@
       # make, autotools, curl, ncurses, ...). extraPkgs adds the OpenTitan tools
       # on top, including everything the lint `bazel` category needs to build
       # host tools such as opentitantool from source.
-      eda = lowrisc-nix.lib.mkEdaShell {
+      # Packages shared by both devshells.
+      edaPkgs = with pkgs; [
+        # Pinned via lowrisc-nix rather than nixpkgs directly, so a future
+        # nixpkgs bump can't silently drift the devshell's tool versions.
+        lowrisc-nix.packages.${system}.verilator_5_048
+        lowrisc-nix.packages.${system}.verible_0_0_4080
+        lowrisc-nix.packages.${system}.sv-lang_11
+        # Bazel pinned to match .bazelversion (8.7.0). With this on PATH,
+        # ./bazelisk.sh uses it directly instead of downloading Bazel over the
+        # network, so the build is hermetic and reproducible. Keep this version
+        # in sync with .bazelversion (bazelisk falls back to downloading if
+        # they ever diverge).
+        lowrisc-nix.packages.${system}.bazel_8_7_0
+        # OpenSSL headers + libcrypto for the AES DPI model (hw/ip/aes/model:
+        # crypto.c includes <openssl/*.h> and links -lcrypto).
+        pkgs.openssl
+        # srec_cat, invoked by rules/opentitan/transform.bzl to convert build
+        # artifacts (e.g. SW images -> SREC/VMEM).
+        pkgs.srecord
+        # xxd, invoked by rules/opentitan/cc.bzl (`... | xxd -r -p`) during the
+        # SW image build.
+        pkgs.unixtools.xxd
+        # lcov/genhtml, used by util/coverage to collect and render SW (C/C++)
+        # coverage.
+        pkgs.lcov
+        # Hardware-interaction libs/tools used by opentitantool and
+        # FPGA/chip bring-up (JTAG, USB, smartcard, serial xmodem/zmodem).
+        pkgs.libftdi1
+        pkgs.libusb1
+        pkgs.pcsclite
+        pkgs.dfu-util
+        pkgs.lrzsz
+        # check-lock-files regenerates python-requirements.txt via `uv pip compile`.
+        uv
+        pkgs.iproute2
+        nixpkgs-yosys.legacyPackages.${system}.yosys
+      ];
+
+      # Shell args shared by both devshells.
+      edaShellArgs = {
         inherit pkgs;
-        name = "opentitan-eda";
         tools = builtins.fromJSON (builtins.readFile ./tool_data.json);
-        # OpenTitan Python env: fusesoc, dvsim, topgen, reggen, ruff, mypy, ...
         extraDeps = [pythonEnv];
-        extraPkgs = with pkgs; [
-          # Pinned via lowrisc-nix rather than nixpkgs directly, so a future
-          # nixpkgs bump can't silently drift the devshell's tool versions.
-          lowrisc-nix.packages.${system}.verilator_5_048
-          lowrisc-nix.packages.${system}.verible_0_0_4080
-          # Bazel pinned to match .bazelversion (8.7.0). With this on PATH,
-          # ./bazelisk.sh uses it directly instead of downloading Bazel over the
-          # network, so the build is hermetic and reproducible. Keep this version
-          # in sync with .bazelversion (bazelisk falls back to downloading if
-          # they ever diverge).
-          lowrisc-nix.packages.${system}.bazel_8_7_0
-          # OpenSSL headers + libcrypto for the AES DPI model (hw/ip/aes/model:
-          # crypto.c includes <openssl/*.h> and links -lcrypto).
-          pkgs.openssl
-          # srec_cat, invoked by rules/opentitan/transform.bzl to convert build
-          # artifacts (e.g. SW images -> SREC/VMEM).
-          pkgs.srecord
-          # xxd, invoked by rules/opentitan/cc.bzl (`... | xxd -r -p`) during the
-          # SW image build.
-          pkgs.unixtools.xxd
-          # lcov/genhtml, used by util/coverage to collect and render SW (C/C++)
-          # coverage.
-          pkgs.lcov
-          # Hardware-interaction libs/tools used by opentitantool and
-          # FPGA/chip bring-up (JTAG, USB, smartcard, serial xmodem/zmodem).
-          pkgs.libftdi1
-          pkgs.libusb1
-          pkgs.pcsclite
-          pkgs.dfu-util
-          pkgs.lrzsz
-          # check-lock-files regenerates python-requirements.txt via `uv pip compile`.
-          uv
-          pkgs.iproute2
-        ];
         # Point the Bazel bindgen toolchain at a nixpkgs libclang (see
         # third_party/rust/extensions.bzl): the LLVM release Bazel would download
         # cannot be dlopen'd under the Nix loader. Set in the FHS profile so
@@ -144,11 +157,24 @@
           export OT_BINDGEN_LLVM=${lrPkgs.libclang_21}
         '';
       };
+
+      eda = lowrisc-nix.lib.mkEdaShell (edaShellArgs // {
+        name = "opentitan-eda";
+        extraPkgs = edaPkgs;
+      });
+
+      elab = lowrisc-nix.lib.mkEdaShell (edaShellArgs // {
+        name = "opentitan-elab";
+        extraPkgs = edaPkgs;
+        profile = edaShellArgs.profile + ''
+          export IHP_PDK_ROOT=${ihp-pdk}/ihp-sg13cmos5l
+        '';
+      });
     in {
       packages.pythonEnv = pythonEnv;
 
       devShells = {
-        inherit eda;
+        inherit eda elab;
         default = eda;
       };
 
@@ -158,6 +184,7 @@
       # a shell snippet). mkEdaShell exposes the flake-app payload as `eda.app`.
       apps = {
         eda = eda.app;
+        elab = elab.app;
         default = eda.app;
 
         # Lint: run the categorized lint flow (ci/lint/run.sh) in the *same*

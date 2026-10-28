@@ -57,9 +57,9 @@ module rv_core_ibex_cfg_reg_top (
 
   // also check for spurious write enables
   logic reg_we_err;
-  logic [28:0] reg_we_check;
+  logic [27:0] reg_we_check;
   prim_reg_we_check #(
-    .OneHotWidth(29)
+    .OneHotWidth(28)
   ) u_prim_reg_we_check (
     .clk_i(clk_i),
     .rst_ni(rst_ni),
@@ -175,6 +175,8 @@ module rv_core_ibex_cfg_reg_top (
   logic alert_test_recov_sw_err_wd;
   logic alert_test_fatal_hw_err_wd;
   logic alert_test_recov_hw_err_wd;
+  logic alert_test_regwen_qs;
+  logic alert_test_regwen_wd;
   logic sw_recov_err_we;
   logic [3:0] sw_recov_err_qs;
   logic [3:0] sw_recov_err_wd;
@@ -258,8 +260,6 @@ module rv_core_ibex_cfg_reg_top (
   logic [3:0] cheriot_ena_wd;
   logic cheriot_lock_we;
   logic [3:0] cheriot_lock_wd;
-  logic fpga_info_re;
-  logic [31:0] fpga_info_qs;
   logic mcounteren_writable_regwen_we;
   logic mcounteren_writable_regwen_qs;
   logic mcounteren_writable_regwen_wd;
@@ -270,14 +270,17 @@ module rv_core_ibex_cfg_reg_top (
   // Register instances
   // R[alert_test]: V(True)
   logic alert_test_qe;
-  logic [3:0] alert_test_flds_we;
+  logic [4:0] alert_test_flds_we;
   assign alert_test_qe = &alert_test_flds_we;
+  // Create REGWEN-gated WE signal
+  logic alert_test_gated_we;
+  assign alert_test_gated_we = alert_test_we && alert_test_regwen_qs;
   //   F[fatal_sw_err]: 0:0
   prim_subreg_ext #(
     .DW    (1)
   ) u_alert_test_fatal_sw_err (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_fatal_sw_err_wd),
     .d      ('0),
     .qre    (),
@@ -293,7 +296,7 @@ module rv_core_ibex_cfg_reg_top (
     .DW    (1)
   ) u_alert_test_recov_sw_err (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_recov_sw_err_wd),
     .d      ('0),
     .qre    (),
@@ -309,7 +312,7 @@ module rv_core_ibex_cfg_reg_top (
     .DW    (1)
   ) u_alert_test_fatal_hw_err (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_fatal_hw_err_wd),
     .d      ('0),
     .qre    (),
@@ -325,7 +328,7 @@ module rv_core_ibex_cfg_reg_top (
     .DW    (1)
   ) u_alert_test_recov_hw_err (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_recov_hw_err_wd),
     .d      ('0),
     .qre    (),
@@ -335,6 +338,34 @@ module rv_core_ibex_cfg_reg_top (
     .qs     ()
   );
   assign reg2hw.alert_test.recov_hw_err.qe = alert_test_qe;
+
+  //   F[regwen]: 31:31
+  prim_subreg #(
+    .DW      (1),
+    .SwAccess(prim_subreg_pkg::SwAccessW0C),
+    .RESVAL  (1'h1),
+    .Mubi    (1'b0)
+  ) u_alert_test_regwen (
+    .clk_i   (clk_i),
+    .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
+
+    // from register interface
+    .we     (alert_test_we),
+    .wd     (alert_test_regwen_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0),
+
+    // to internal hardware
+    .qe     (alert_test_flds_we[4]),
+    .q      (),
+    .ds     (),
+
+    // to register interface (read)
+    .qs     (alert_test_regwen_qs)
+  );
 
 
   // R[sw_recov_err]: V(False)
@@ -346,6 +377,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_sw_recov_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (sw_recov_err_we),
@@ -374,6 +406,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_sw_fatal_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (sw_fatal_err_we),
@@ -403,6 +436,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_ibus_regwen_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ibus_regwen_0_we),
@@ -432,6 +466,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_ibus_regwen_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ibus_regwen_1_we),
@@ -475,6 +510,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_ibus_addr_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ibus_addr_en_0_gated_we),
@@ -519,6 +555,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_ibus_addr_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ibus_addr_en_1_gated_we),
@@ -563,6 +600,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_ibus_addr_matching_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ibus_addr_matching_0_gated_we),
@@ -607,6 +645,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_ibus_addr_matching_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ibus_addr_matching_1_gated_we),
@@ -651,6 +690,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_ibus_remap_addr_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ibus_remap_addr_0_gated_we),
@@ -695,6 +735,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_ibus_remap_addr_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ibus_remap_addr_1_gated_we),
@@ -725,6 +766,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_dbus_regwen_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (dbus_regwen_0_we),
@@ -754,6 +796,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_dbus_regwen_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (dbus_regwen_1_we),
@@ -797,6 +840,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_dbus_addr_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (dbus_addr_en_0_gated_we),
@@ -841,6 +885,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_dbus_addr_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (dbus_addr_en_1_gated_we),
@@ -885,6 +930,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_dbus_addr_matching_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (dbus_addr_matching_0_gated_we),
@@ -929,6 +975,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_dbus_addr_matching_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (dbus_addr_matching_1_gated_we),
@@ -973,6 +1020,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_dbus_remap_addr_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (dbus_remap_addr_0_gated_we),
@@ -1017,6 +1065,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_dbus_remap_addr_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (dbus_remap_addr_1_gated_we),
@@ -1047,6 +1096,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_nmi_enable_alert_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (nmi_enable_we),
@@ -1074,6 +1124,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_nmi_enable_wdog_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (nmi_enable_we),
@@ -1103,6 +1154,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_nmi_state_alert (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (nmi_state_we),
@@ -1130,6 +1182,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_nmi_state_wdog (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (nmi_state_we),
@@ -1159,6 +1212,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_err_status_reg_intg_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (err_status_we),
@@ -1186,6 +1240,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_err_status_fatal_intg_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (err_status_we),
@@ -1213,6 +1268,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_err_status_fatal_core_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (err_status_we),
@@ -1240,6 +1296,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_err_status_recov_core_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (err_status_we),
@@ -1316,6 +1373,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_cheriot_ena (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (cheriot_ena_we),
@@ -1355,22 +1413,6 @@ module rv_core_ibex_cfg_reg_top (
   assign reg2hw.cheriot_lock.qe = cheriot_lock_qe;
 
 
-  // R[fpga_info]: V(True)
-  prim_subreg_ext #(
-    .DW    (32)
-  ) u_fpga_info (
-    .re     (fpga_info_re),
-    .we     (1'b0),
-    .wd     ('0),
-    .d      (hw2reg.fpga_info.d),
-    .qre    (),
-    .qe     (),
-    .q      (),
-    .ds     (),
-    .qs     (fpga_info_qs)
-  );
-
-
   // R[mcounteren_writable_regwen]: V(False)
   prim_subreg #(
     .DW      (1),
@@ -1380,6 +1422,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_mcounteren_writable_regwen (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mcounteren_writable_regwen_we),
@@ -1411,6 +1454,7 @@ module rv_core_ibex_cfg_reg_top (
   ) u_mcounteren_writable (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mcounteren_writable_gated_we),
@@ -1431,7 +1475,7 @@ module rv_core_ibex_cfg_reg_top (
 
 
 
-  logic [28:0] addr_hit;
+  logic [27:0] addr_hit;
   always_comb begin
     addr_hit[ 0] = (reg_addr == RV_CORE_IBEX_ALERT_TEST_OFFSET);
     addr_hit[ 1] = (reg_addr == RV_CORE_IBEX_SW_RECOV_ERR_OFFSET);
@@ -1459,9 +1503,8 @@ module rv_core_ibex_cfg_reg_top (
     addr_hit[23] = (reg_addr == RV_CORE_IBEX_RND_STATUS_OFFSET);
     addr_hit[24] = (reg_addr == RV_CORE_IBEX_CHERIOT_ENA_OFFSET);
     addr_hit[25] = (reg_addr == RV_CORE_IBEX_CHERIOT_LOCK_OFFSET);
-    addr_hit[26] = (reg_addr == RV_CORE_IBEX_FPGA_INFO_OFFSET);
-    addr_hit[27] = (reg_addr == RV_CORE_IBEX_MCOUNTEREN_WRITABLE_REGWEN_OFFSET);
-    addr_hit[28] = (reg_addr == RV_CORE_IBEX_MCOUNTEREN_WRITABLE_OFFSET);
+    addr_hit[26] = (reg_addr == RV_CORE_IBEX_MCOUNTEREN_WRITABLE_REGWEN_OFFSET);
+    addr_hit[27] = (reg_addr == RV_CORE_IBEX_MCOUNTEREN_WRITABLE_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -1496,8 +1539,7 @@ module rv_core_ibex_cfg_reg_top (
                (addr_hit[24] & (|(RV_CORE_IBEX_CFG_PERMIT[24] & ~reg_be))) |
                (addr_hit[25] & (|(RV_CORE_IBEX_CFG_PERMIT[25] & ~reg_be))) |
                (addr_hit[26] & (|(RV_CORE_IBEX_CFG_PERMIT[26] & ~reg_be))) |
-               (addr_hit[27] & (|(RV_CORE_IBEX_CFG_PERMIT[27] & ~reg_be))) |
-               (addr_hit[28] & (|(RV_CORE_IBEX_CFG_PERMIT[28] & ~reg_be)))));
+               (addr_hit[27] & (|(RV_CORE_IBEX_CFG_PERMIT[27] & ~reg_be)))));
   end
 
   // Generate write-enables
@@ -1510,6 +1552,8 @@ module rv_core_ibex_cfg_reg_top (
   assign alert_test_fatal_hw_err_wd = reg_wdata[2];
 
   assign alert_test_recov_hw_err_wd = reg_wdata[3];
+
+  assign alert_test_regwen_wd = reg_wdata[31];
   assign sw_recov_err_we = addr_hit[1] & reg_we & !reg_error;
 
   assign sw_recov_err_wd = reg_wdata[3:0];
@@ -1591,11 +1635,10 @@ module rv_core_ibex_cfg_reg_top (
   assign cheriot_lock_we = addr_hit[25] & reg_we & !reg_error;
 
   assign cheriot_lock_wd = reg_wdata[3:0];
-  assign fpga_info_re = addr_hit[26] & reg_re & !reg_error;
-  assign mcounteren_writable_regwen_we = addr_hit[27] & reg_we & !reg_error;
+  assign mcounteren_writable_regwen_we = addr_hit[26] & reg_we & !reg_error;
 
   assign mcounteren_writable_regwen_wd = reg_wdata[0];
-  assign mcounteren_writable_we = addr_hit[28] & reg_we & !reg_error;
+  assign mcounteren_writable_we = addr_hit[27] & reg_we & !reg_error;
 
   assign mcounteren_writable_wd = reg_wdata[3:0];
 
@@ -1627,9 +1670,8 @@ module rv_core_ibex_cfg_reg_top (
     reg_we_check[23] = 1'b0;
     reg_we_check[24] = cheriot_ena_we;
     reg_we_check[25] = cheriot_lock_we;
-    reg_we_check[26] = 1'b0;
-    reg_we_check[27] = mcounteren_writable_regwen_we;
-    reg_we_check[28] = mcounteren_writable_gated_we;
+    reg_we_check[26] = mcounteren_writable_regwen_we;
+    reg_we_check[27] = mcounteren_writable_gated_we;
   end
 
   // Read data return
@@ -1641,6 +1683,7 @@ module rv_core_ibex_cfg_reg_top (
         reg_rdata_next[1] = '0;
         reg_rdata_next[2] = '0;
         reg_rdata_next[3] = '0;
+        reg_rdata_next[31] = alert_test_regwen_qs;
       end
 
       addr_hit[1]: begin
@@ -1750,14 +1793,10 @@ module rv_core_ibex_cfg_reg_top (
       end
 
       addr_hit[26]: begin
-        reg_rdata_next[31:0] = fpga_info_qs;
-      end
-
-      addr_hit[27]: begin
         reg_rdata_next[0] = mcounteren_writable_regwen_qs;
       end
 
-      addr_hit[28]: begin
+      addr_hit[27]: begin
         reg_rdata_next[3:0] = mcounteren_writable_qs;
       end
 

@@ -51,11 +51,20 @@ otp_size_as_uint32 = otp_size_as_bytes // 4
       notes:              "",
     }
     {
+      version:            "2.0.0",
+      life_stage:         "L1",
+      design_stage:       "D3",
+      verification_stage: "V2S",
+      dif_stage:          "S2",
+      commit_id:          "aaf0970acc8d5c466308a3a856e9433d85636c95",
+      notes:              "",
+    }
+    {
       version:            "3.0.0",
       life_stage:         "L1",
       design_stage:       "D1",
-      verification_stage: "V1",
-      dif_stage:          "S2",
+      verification_stage: "V0",
+      dif_stage:          "S1",
       notes:              "",
     }
   ]
@@ -609,9 +618,7 @@ otp_size_as_uint32 = otp_size_as_bytes // 4
     }
     {
       name: "OTP_CTRL.ENTROPY_READ"
-      desc: '''Firmware can read entropy from ENTROPY_SRC block by configuring following field of HW_CFG* partition.
-        - EN_CSRNG_SW_APP_READ
-      '''
+      desc: "Firmware can read entropy from ENTROPY_SRC block."
     }
     {
       name: "OTP_CTRL.KEY_DERIVATION"

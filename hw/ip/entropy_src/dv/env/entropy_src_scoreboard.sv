@@ -365,6 +365,21 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
     end
   endfunction
 
+  function int calc_adaptps_test(queue_of_rng_val_t window);
+    rng_val_t cur_symbol = window[0];
+    int result = 1;
+    for (int i = 1; i < window.size(); i++) begin
+      if (window[i] == cur_symbol) begin
+        result++;
+      end
+    end
+    // Saturation
+    if (result > {HALF_REG_WIDTH{1'b1}}) begin
+      result = {HALF_REG_WIDTH{1'b1}};
+    end
+    return result;
+  endfunction
+
   function bucket_test_result calc_bucket_test(queue_of_rng_val_t window);
     parameter int BucketHtDataWidth = entropy_src_pkg::bucket_ht_data_width(`RNG_BUS_WIDTH);
     parameter int NumBuckets = 2**BucketHtDataWidth;
@@ -454,6 +469,7 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
     bit is_valid;
     is_valid = (name == "adaptp_hi") ||
                (name == "adaptp_lo") ||
+               (name == "adaptps"  ) ||
                (name == "bucket"   ) ||
                (name == "markov_hi") ||
                (name == "markov_lo") ||
@@ -483,15 +499,15 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
     // Is the test continuous or windowed? For windowed tests, we may need to update the watermark
     // now. For continuous tests, this has already been done in case the ENTROPY_SRC is getting
     // disabled.
-    if (test inside {"adaptp_hi", "adaptp_lo", "bucket", "markov_hi", "markov_lo"}) begin
+    if (test inside {"adaptp_hi", "adaptp_lo", "adaptps", "bucket", "markov_hi", "markov_lo"}) begin
       windowed_test = 1;
     end else begin
       windowed_test = 0;
     end
-    // The watermark registers for repcnt, repcnts and bucket tests deviate from the
+    // The watermark registers for repcnt, repcnts, adaptps and bucket tests deviate from the
     // general convention of suppressing the "_hi" suffix for tests that do not have a low
     // threshold.
-    if (test inside {"repcnt", "repcnts", "bucket"}) begin
+    if (test inside {"repcnt", "repcnts", "adaptps", "bucket"}) begin
       test = {test, "_hi"};
     end
 
@@ -723,6 +739,40 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
     return (fail_hi || fail_lo);
   endfunction
 
+  function bit evaluate_adaptps_test(queue_of_rng_val_t window, bit fips_mode);
+    int value;
+    bit fail;
+    int window_size;
+    int threshold;
+    real sigma;
+
+    value = calc_adaptps_test(window);
+    update_watermark("adaptps", value);
+
+    fail = check_threshold("adaptps", value);
+    if (fail) predict_failure_logs("adaptps");
+
+    if (ht_is_active()) begin
+      // The ideal_threshold_to_sigma() function expects the health test window size in bits. The
+      // bypass window is specified in bits. In contrast, the FIPS window is specified in symbols
+      // and the `rng_bit_enable` setting effectively manipulates the symbol size.
+      window_size = fips_mode ?
+          `gmv(ral.health_test_windows.fips_window) *
+              (`gmv(ral.conf.rng_bit_enable) == MuBi4True ? 1 : `RNG_BUS_WIDTH) :
+          `gmv(ral.health_test_windows.bypass_window);
+
+      threshold = `gmv(ral.adaptps_threshold);
+
+      sigma = ideal_threshold_to_sigma(window_size, adaptps_ht, 0, 0, high_test, threshold);
+
+      cov_vif.cg_win_ht_sample(adaptps_ht, high_test, window_size, fail);
+      cov_vif.cg_win_ht_deep_threshold_sample(adaptps_ht, high_test, window_size,
+                                              1'b0, sigma, fail);
+    end
+
+    return fail;
+  endfunction
+
   function bit evaluate_bucket_test(queue_of_rng_val_t window, bit fips_mode);
     bucket_test_result test_result;
     int test_result_max [$];
@@ -897,6 +947,7 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
     string        fmt;
 
     windowed_fail_count = evaluate_adaptp_test(window, fips_mode) +
+                          evaluate_adaptps_test(window, fips_mode) +
                           evaluate_bucket_test(window, fips_mode) +
                           evaluate_markov_test(window, fips_mode);
 
@@ -1072,8 +1123,7 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
     bit               match_found;
     bit entropy_data_reg_enable;
     bit module_enabled;
-    entropy_data_reg_enable = (cfg.otp_en_es_fw_read == MuBi8True) &&
-                              (ral.conf.entropy_data_reg_enable.get_mirrored_value() == MuBi4True);
+    entropy_data_reg_enable = ral.conf.entropy_data_reg_enable.get_mirrored_value() == MuBi4True;
 
     module_enabled = (ral.module_enable.module_enable.get_mirrored_value() == MuBi4True);
     match_found = 0;
@@ -1114,9 +1164,7 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
               mubi4_t'(ral.entropy_control.es_route.get_mirrored_value()),
               mubi4_t'(ral.entropy_control.es_type.get_mirrored_value()),
               mubi4_t'(ral.conf.entropy_data_reg_enable.get_mirrored_value()),
-              mubi8_t'(cfg.otp_en_es_fw_read),
               mubi4_t'(ral.fw_ov_control.fw_ov_mode.get_mirrored_value()),
-              mubi8_t'(cfg.otp_en_es_fw_over),
               mubi4_t'(ral.fw_ov_control.fw_ov_entropy_insert.get_mirrored_value()),
               full_seed_found
           );
@@ -1136,9 +1184,10 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
     string stat_regs [] = '{
         "ht_watermark",
         "repcnt_total_fails", "repcnts_total_fails", "adaptp_hi_total_fails",
-        "adaptp_lo_total_fails", "bucket_total_fails", "markov_hi_total_fails",
-        "markov_lo_total_fails", "extht_hi_total_fails", "extht_lo_total_fails",
-        "alert_summary_fail_counts", "alert_fail_counts", "extht_fail_counts"
+        "adaptp_lo_total_fails", "adaptps_total_fails", "bucket_total_fails",
+        "markov_hi_total_fails", "markov_lo_total_fails", "extht_hi_total_fails",
+        "extht_lo_total_fails", "alert_summary_fail_counts", "alert_fail_counts",
+        "extht_fail_counts"
     };
     foreach (stat_regs[i]) begin
       uvm_reg csr = ral.get_reg_by_name(stat_regs[i]);
@@ -1197,8 +1246,9 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
         begin
           // Clear watermark register to all-0 or all-1 depending on the config.
           ht_watermark_num_e ht_watermark_num = ht_watermark_num_e'(`gmv(ral.ht_watermark_num));
-          bit ht_watermark_high = (ht_watermark_num inside {REPCNT_HI, REPCNTS_HI, ADAPTP_HI,
-                                                            BUCKET_HI, MARKOV_HI, EXTHT_HI});
+          bit ht_watermark_high =
+              (ht_watermark_num inside {REPCNT_HI, REPCNTS_HI, ADAPTP_HI, ADAPTPS_HI,
+                                        BUCKET_HI, MARKOV_HI, EXTHT_HI});
           `DV_CHECK_FATAL(ral.ht_watermark.predict({16{~ht_watermark_high}}))
           repcnt_event_cnt = 16'd1;
           repcnts_event_cnt = 16'd1;
@@ -1492,8 +1542,6 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
       end
       "intr_test": begin
       end
-      "me_regwen": begin
-      end
       "sw_regupd": begin
       end
       "regwen": begin
@@ -1535,6 +1583,11 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
         one_way_threshold   = `gmv(ral.threshold_oneway) != MuBi4False;
         threshold_increases = 1;
       end
+      "adaptps_threshold": begin
+        locked_reg_access = dut_reg_locked;
+        one_way_threshold   = `gmv(ral.threshold_oneway) != MuBi4False;
+        threshold_increases = 0;
+      end
       "bucket_threshold": begin
         locked_reg_access = dut_reg_locked;
         one_way_threshold   = `gmv(ral.threshold_oneway) != MuBi4False;
@@ -1562,6 +1615,8 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
       "adaptp_hi_total_fails": begin
       end
       "adaptp_lo_total_fails": begin
+      end
+      "adaptps_total_fails": begin
       end
       "bucket_total_fails": begin
       end
@@ -1614,7 +1669,6 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
             begin
               bit es_fw_ov_insert_mode, es_bypass_mode, module_enable;
               es_fw_ov_insert_mode = (`gmv(ral.fw_ov_control.fw_ov_mode) == MuBi4True) &&
-                  (cfg.otp_en_es_fw_over == MuBi8True) &&
                   (`gmv(ral.fw_ov_control.fw_ov_entropy_insert) == MuBi4True);
               es_bypass_mode = (`gmv(ral.conf.fips_enable) != MuBi4True) ||
                   ((`gmv(ral.entropy_control.es_type) == MuBi4True) &&
@@ -1671,7 +1725,6 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
           csr_rd(.ptr(ral.main_sm_state.main_sm_state), .value(reg_data), .backdoor(1));
           tl_data_lsbs = item.get_written_data();
           cov_vif.cg_sw_disable_sample(
-              ral.me_regwen.me_regwen.get_mirrored_value(),
               tl_data_lsbs == MuBi4True,
               entropy_src_main_sm_pkg::state_e'(reg_data)
           );
@@ -1840,6 +1893,7 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
                 REPCNTS_HI,
                 ADAPTP_HI,
                 ADAPTP_LO,
+                ADAPTPS_HI,
                 BUCKET_HI,
                 MARKOV_HI,
                 MARKOV_LO,
@@ -1872,8 +1926,7 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
               bit is_fips_mode    = fips_enabled && !(es_route && es_type);
               mubi4_t fw_ov_mubi  = mubi4_t'(ral.fw_ov_control.fw_ov_mode.get_mirrored_value());
 
-              bit fw_ov_mode      = (cfg.otp_en_es_fw_over == MuBi8True) &&
-                                    (fw_ov_mubi == MuBi4True);
+              bit fw_ov_mode      = fw_ov_mubi == MuBi4True;
               mubi4_t insert_mubi = mubi4_t'(
                   ral.fw_ov_control.fw_ov_entropy_insert.get_mirrored_value());
               bit fw_ov_insert    = fw_ov_mode && (insert_mubi == MuBi4True);
@@ -1931,7 +1984,6 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
                   ral.module_enable.module_enable.get_mirrored_value() == MuBi4True;
               bit predict_conditioned = do_condition_data();
               bit fw_ov_entropy_insert =
-                  (cfg.otp_en_es_fw_over == MuBi8True) &&
                   (ral.fw_ov_control.fw_ov_mode.get_mirrored_value() == MuBi4True) &&
                   (ral.fw_ov_control.fw_ov_entropy_insert.get_mirrored_value() == MuBi4True);
 
@@ -2138,8 +2190,7 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
     forever begin
       @(vif.mon_cb);
 
-      fw_ov_mode   = (cfg.otp_en_es_fw_over == MuBi8True) &&
-                     (`gmv(ral.fw_ov_control.fw_ov_mode) == MuBi4True);
+      fw_ov_mode   = `gmv(ral.fw_ov_control.fw_ov_mode) == MuBi4True;
       fw_ov_insert = fw_ov_mode && (`gmv(ral.fw_ov_control.fw_ov_entropy_insert) == MuBi4True);
       fips_enabled = `gmv(ral.conf.fips_enable) == MuBi4True;
       es_route     = `gmv(ral.entropy_control.es_route) == MuBi4True;
@@ -2450,8 +2501,7 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
       wait(postht_fifo_processed);
 
       predict_conditioning = do_condition_data();
-      fw_ov_mode   = (cfg.otp_en_es_fw_over == MuBi8True) &&
-                     (`gmv(ral.fw_ov_control.fw_ov_mode) == MuBi4True);
+      fw_ov_mode   = `gmv(ral.fw_ov_control.fw_ov_mode) == MuBi4True;
       fw_ov_insert = fw_ov_mode && (`gmv(ral.fw_ov_control.fw_ov_entropy_insert) == MuBi4True);
 
       // If the conditioner is being used and we are not in fw_ov_insert mode,
@@ -2536,8 +2586,7 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
       end
 
       predict_conditioning = do_condition_data();
-      fw_ov_mode   = (cfg.otp_en_es_fw_over == MuBi8True) &&
-                     (`gmv(ral.fw_ov_control.fw_ov_mode) == MuBi4True);
+      fw_ov_mode   = `gmv(ral.fw_ov_control.fw_ov_mode) == MuBi4True;
       fw_ov_insert = fw_ov_mode && (`gmv(ral.fw_ov_control.fw_ov_entropy_insert) == MuBi4True);
 
       // The fw_ov_insert case is handled in process_tl_access().
@@ -2567,8 +2616,7 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
       wait(sha3_ready_predicted);
 
       predict_conditioning = do_condition_data();
-      fw_ov_mode   = (cfg.otp_en_es_fw_over == MuBi8True) &&
-                     (`gmv(ral.fw_ov_control.fw_ov_mode) == MuBi4True);
+      fw_ov_mode   = `gmv(ral.fw_ov_control.fw_ov_mode) == MuBi4True;
       fw_ov_insert = fw_ov_mode && (`gmv(ral.fw_ov_control.fw_ov_entropy_insert) == MuBi4True);
 
       // If the conditioner is not being used or the data for the conditioner comes from firmware,
@@ -2664,8 +2712,7 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
 
       is_fips_mode  = fips_enable && !(es_route && es_type);
 
-      fw_ov_insert = (cfg.otp_en_es_fw_over == MuBi8True) &&
-                     (`gmv(ral.fw_ov_control.fw_ov_mode) == MuBi4True) &&
+      fw_ov_insert = (`gmv(ral.fw_ov_control.fw_ov_mode) == MuBi4True) &&
                      (`gmv(ral.fw_ov_control.fw_ov_entropy_insert) == MuBi4True);
 
       pass_count = 0;
@@ -2843,8 +2890,7 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
     bit [CSRNG_BUS_WIDTH - 1:0] csrng_seed;
     bit entropy_data_reg_enable;
 
-    entropy_data_reg_enable = (cfg.otp_en_es_fw_read == MuBi8True) &&
-                              (ral.conf.entropy_data_reg_enable.get_mirrored_value() == MuBi4True);
+    entropy_data_reg_enable = ral.conf.entropy_data_reg_enable.get_mirrored_value() == MuBi4True;
 
     `uvm_info(`gfn, $sformatf("raw_process_q.size(): %01d", raw_process_q.size()), UVM_FULL)
     `uvm_info(`gfn, $sformatf("sha_process_q.size(): %01d", sha_process_q.size()), UVM_FULL)
@@ -2910,8 +2956,7 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
   virtual function void process_observe_fifo_csr_access(tl_seq_item item, uvm_reg csr);
     bit [TL_DW - 1:0] csr_val;
     string msg, fmt;
-    bit fw_ov_enabled = (cfg.otp_en_es_fw_over == MuBi8True) &&
-                        (ral.fw_ov_control.fw_ov_mode.get_mirrored_value() == MuBi4True);
+    bit fw_ov_enabled = ral.fw_ov_control.fw_ov_mode.get_mirrored_value() == MuBi4True;
     bit drops_allowed;
 
     csr_val = item.d_data;
@@ -2950,9 +2995,7 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
             mubi4_t'(ral.entropy_control.es_route.get_mirrored_value()),
             mubi4_t'(ral.entropy_control.es_type.get_mirrored_value()),
             mubi4_t'(ral.conf.entropy_data_reg_enable.get_mirrored_value()),
-            mubi8_t'(cfg.otp_en_es_fw_read),
             mubi4_t'(ral.fw_ov_control.fw_ov_mode.get_mirrored_value()),
-            mubi8_t'(cfg.otp_en_es_fw_over),
             mubi4_t'(ral.fw_ov_control.fw_ov_entropy_insert.get_mirrored_value())
         );
         msg = $sformatf("Match found: %d\n", observe_fifo_words);
@@ -2983,7 +3026,6 @@ class entropy_src_scoreboard extends cip_base_scoreboard#(
       is_fips_mode = fips_enabled && !(es_route && es_type);
 
       fw_ov_entropy_insert =
-          (cfg.otp_en_es_fw_over == MuBi8True) &&
           (ral.fw_ov_control.fw_ov_mode.get_mirrored_value() == MuBi4True) &&
           (ral.fw_ov_control.fw_ov_entropy_insert.get_mirrored_value() == MuBi4True);
 

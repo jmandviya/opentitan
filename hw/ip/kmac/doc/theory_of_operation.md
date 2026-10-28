@@ -45,6 +45,19 @@ If desired, the masking can be disabled and the internal state width can be redu
 
 ## Design Details
 
+### Stripped-Down Configuration
+
+By default, the KMAC HWIP supports SHA3, SHAKE, cSHAKE, and the keyed MAC (KMAC).
+If the `EnFullKmac` compile-time Verilog parameter is not set, the keyed MAC is removed and only SHA3, SHAKE, and cSHAKE remain.
+Masking must be disabled in this configuration, i.e., `EnMasking` must not be set either.
+
+Without the keyed MAC, the block never uses a secret key.
+The key registers, the sideloaded key from the key manager, and the entropy generator are unused.
+The key manager application interface runs a cSHAKE operation instead of a keyed MAC.
+
+Software can still access the registers belonging to the removed functionality, but they do not affect the operation of the block.
+This applies to [`CFG_SHADOWED.kmac_en`](registers.md#cfg_shadowed), the `KEY_SHARE0_*` and `KEY_SHARE1_*` registers, and the entropy registers such as [`ENTROPY_REFRESH_THRESHOLD_SHADOWED`](registers.md#entropy_refresh_threshold_shadowed).
+
 ### Keccak Round
 
 In the KMAC HWIP the Keccak round module is instantiated with a 1600 bit internal state.
@@ -96,7 +109,7 @@ The interface has an additional address signal on top of the valid, ready, and d
 
 ![](../doc/sha3-padding.svg)
 
-The hashing process begins when the software issues the start command to [`CMD`](registers.md#cmd) .
+The hashing process begins when the software issues the Start command to [`CMD`](registers.md#cmd) , or resumes a saved context with the Continue command.
 If cSHAKE is enabled, the padding logic expands the prefix value (`N || S` above) into a block size.
 The block size is determined by the [`CFG_SHADOWED.kstrength`](registers.md#cfg_shadowed) .
 If the value is 128, the block size will be 168 bytes.
@@ -111,7 +124,30 @@ After the software writes the message bitstream, it should issue the Process com
 The padding logic, after receiving the Process command, appends proper ending bits with respect to the [`CFG_SHADOWED.mode`](registers.md#cfg_shadowed) value.
 The logic writes 0 up to the block size to the Keccak round logic then ends with 1 at the end of the block.
 
-![](../doc/sha3-padding-fsm.svg)
+```mermaid
+stateDiagram-v2
+[*] --> StPadIdle
+
+StPadIdle --> StPrefix: Start command && cSHAKE
+StPadIdle --> StMessage: Start command && !cSHAKE, or Continue command
+
+StPrefix --> StPrefixWait: prefix block sent
+StPrefixWait --> StMessage: keccak_f completed
+
+StMessage --> StMessage: partial message word latched
+StMessage --> StMessageWait: message block sent
+StMessageWait --> StMessage: keccak_f completed
+
+StMessage --> StPad: Process command && message drained
+StMessage --> StPadIdle: Stop command && message drained
+
+StPad --> StPadRun: last word of the block
+StPad --> StPad01: not the last word of the block
+StPad01 --> StPadFlush: block filled
+StPadRun --> StPadFlush
+
+StPadFlush --> StPadIdle: keccak_f completed
+```
 
 After the Keccak round completes the last block, the padding logic asserts an `absorbed` signal to notify the software.
 The signal generates the `kmac_done` interrupt.
@@ -120,6 +156,11 @@ If the output length is greater than the Keccak block rate in SHAKE and cSHAKE m
 
 The software completes the operation by issuing Done command after reading the digest.
 The padding logic clears internal variables and goes back to Idle state.
+
+Instead of the Process command, the software may issue the Stop command to save the current context.
+The padding logic then ends the message state without entering any of the padding states, as an intermediate sponge state must not be padded, and it asserts a `stopped` signal instead of `absorbed`.
+The Continue command resumes such a context: it enters the message state directly, skipping the prefix that the Start command sends in cSHAKE mode.
+See [KMAC/SHA3 context switching](programmers_guide.md#kmacsha3-context-switching) for the full procedure.
 
 ### Padding for KMAC
 
@@ -207,10 +248,15 @@ If `EnMasking` is set, the upper 256B of the window is the second share of the K
 The software can read both of the Keccak state shares and can recover the plain, unmasked digest value by XORing the two shares.
 If `EnMasking` is not set, the upper half of the window reads as zero.
 
-The Keccak state is valid after the sponge absorbing process is completed.
+The Keccak state is valid after the sponge absorbing process is completed or the absorbing process has been stopped to save a context.
 While in an idle state or in the sponge absorbing stage, the value is zero.
 This ensures that the logic does not expose the secret key XORed with the keccak_f results of the prefix to the software.
 In addition to that, the KMAC/SHA3 blocks the software access to the Keccak state when it processes the request from KeyMgr for Key Derivation Function (KDF).
+
+The Keccak state can also be written such that software can restore a previously saved context.
+Writes are only accepted after software claimed the block with the StateWrite command and while the Keccak round logic is idle.
+[`STATUS.state_write`](registers.md#status--state_write) shows whether both conditions are met.
+The StateWrite command also clears the Keccak state, so a restore always starts from a known state and resumes only the context written afterwards.
 
 ### Application Interfaces
 
@@ -308,7 +354,7 @@ Note, for SHA3-224 this does not divide properly.
 As such, the interface sends back 4 responses where the last one contains some bits which must be ignored.
 
 For KMAC the requested output length is fixed to `AppDigestW` bits.
-Therefore, the interface sends back `AppDigestW / DynAppDigestW = 384 / 64 = 6` responses.
+Therefore, the interface sends back `AppDigestW / DynAppDigestW = 512 / 64 = 8` responses.
 
 For SHAKE and cSHAKE the standard defines the `StateWidth` to be 1600 bits (Same as SHA3) and these algorithms produce `StateWidth - 2 * Strength` bits of digest per squeeze.
 A dynamic app interface then returns this digest data in `(StateWidth - 2 * Strength) / DynAppDigestW` responses.
@@ -322,7 +368,7 @@ If `EnMasking` is not active, the second share is set to `'0`.
 The app interface follows the same command order (START, PROCESS, RUN, DONE) as software but commands are implicitly send with message requests.
 An FSM inside the app interface controls the hashing operation.
 Its state diagram is shown below and the following text explains how an app can use the interface.
-The transitions into error states from an invalid key or a hashing engine error (SHA3 error) are not drawn: see error handling section.
+The transitions into error states from an invalid key are not drawn: see error handling section.
 
 Any app starts a session by placing its first request.
 More than one app can have a session request active at a particular time.
@@ -392,6 +438,10 @@ stateDiagram-v2
 
 StIdle --> StAppCfg: app selected
 StIdle --> StSw: Start command
+StIdle --> StStateWrite: StateWrite command
+
+StStateWrite --> StSw: Continue command
+StStateWrite --> StIdle: Done command
 
 StSw --> StIdle: Done command
 
@@ -421,16 +471,12 @@ StErrorNotify --> StErrorAwaitTermination: DYN && error rsp sent
 StErrorNotify --> StErrorFinish: STATIC && error rsp sent
 StErrorAwaitTermination --> StErrorFinish: termination req
 
-StErrorFinish --> StIdle: (finish rsp sent || STATIC) && ServiceRejected && !SHA3 error
-StErrorFinish --> StErrorAwaitSw: (finish rsp sent || STATIC) && (!ServiceRejected || SHA3 error)
+StErrorFinish --> StIdle: (finish rsp sent || STATIC) && ServiceRejected
+StErrorFinish --> StErrorAwaitSw: (finish rsp sent || STATIC) && !ServiceRejected
 
 StErrorAwaitSw --> StErrorAwaitAbsorb: err_processed
 
 StErrorAwaitAbsorb --> StIdle: absorbed
-
-StAppPushDigest --> StErrorPush: DYN && SHA3 error
-
-StErrorPush --> StAppFinish: termination req
 
 ```
 
@@ -526,6 +572,7 @@ The reason is that it is planned to rework when the entropy engine places EDN re
 ##### Terminal state error
 This error occurs if an FSM in the interface entered its terminal error state because one of the following is true:
 - A life cycle escalation request was received, see [Reaction to Life Cycle Escalation Requests](#reaction-to-life-cycle-escalation-requests).
+- A SHA3 error occurred whilst an app was active, see [below](#sha3-engine-internal-error) for more details.
 - The FSM itself entered an invalid state.
 
 The terminal error state leads to a fatal alert which will result in a chip reset.
@@ -640,60 +687,13 @@ The following wave shows an example (case 2) where the key invalid error occurs 
 ```
 
 ##### SHA3 engine internal error
-This error arises if an invalid command sequence is sent to the hashing engine or one of these control signals is manipulated.
-Usually this error cannot occur during an app session.
-However, if the control signals are faulted, this error occurs and any digest value should be considered as invalid.
+This error condition arises if an invalid command sequence is sent to the hashing engine or an internal control signal is manipulated.
+As an invalid command sequence should never be issued by the app interface, this error will result in a fatal alert by bringing the FSM into the terminal state.
+The behaviour of the interface is not defined in this case.
 
-This error must be handled in two cases, namely:
-- The error occurs in the message phase.
-- The error occurs after the complete message is received.
-
-The first case is simple and is handled the same way as a key invalid error.
-Once the error occurs, the message data is voided.
-As soon as the complete message is received the hashing engine is brought back to idle by issuing a process and done command.
-There is only one error response sent and a dynamic interface waits for the termination request.
-It then waits for SW to acknowledge the error.
-
-If the error occurs after the complete message is received, the behavior depends on the interface type.
-A static interface continues to process the message and simply sets the error flag for the digest response.
-Once the digest response is sent it then waits for SW to acknowledge the error.
-
-A dynamic interface begins to continuously send error responses once the message is processed.
-It continues to send error responses until a termination request arrives.
-The interface then sends a finish response with the error flag set (= 1) and returns back to idle without waiting for SW to process the error.
-The finish response must have set the error flag so that errors occurred during the last digest handshake are still propagated.
-
-The following wave shows an example for a dynamic interface where the error occurs in cycle 4 / after the complete message is received.
-```wavejson
-{
-  signal: [
-    {name: 'App state',  wave: '2222.2..22', data: ["AppMsg","AppProcess","AppWait","AppPushDigest","ErrorPush","AppFinish","Idle"]},
-    {},
-    ['Request',
-    {name: 'req_valid',  wave: '10.....10.'},
-    {name: 'data_s0',    wave: '2x........', data: [""]},
-    {name: 'data_s1',    wave: '2x........'},
-    {name: 'strb',       wave: '2x........', data: ["0x03"]},
-    {name: 'req_last',   wave: '1x.....1x.'},
-    {name: 'req_ready',  wave: '10.....10.'},
-    ],
-    {},
-    ['Response',
-    {name: 'rsp_valid',  wave: '0..1.....0'},
-    {name: 'digest_s0',  wave: 'x..22x..2x'},
-    {name: 'digest_s1',  wave: 'x..22x..2x'},
-    {name: 'error',      wave: 'x..0.1...x'},
-    {name: 'rsp_finish', wave: 'x..0....1x'},
-    {name: 'rsp_ready',  wave: '1.........'},
-    ],
-  ],
-  edge: [],
-  foot:{
-   tock:0
- },
- config:{hscale:2},
-}
-```
+Note, that this error is not treated as a fatal alert if KMAC HWIP is controlled by SW.
+If controlled by SW, it is not possible to distinguish between a wrong command sequence or a fault injection.
+The error is then only reported to SW via the register interface.
 
 ### Entropy Generator
 
@@ -729,7 +729,7 @@ Value | Error Code | Description
 0x06  | UnexpectedModeStrength | SHA3 mode and Keccak Strength combination is not expected.
 0x07  | IncorrectFunctionName | In KMAC mode, the PREFIX has the value other than `encoded_string("KMAC")`
 0x08  | SwCmdSequence | SW does not follow the guided sequence, `start` -> `process` -> {`run` ->} `done`
-0x09  | SwHashingWithoutEntropyReady | SW requests KMAC op without proper config of Entropy in KMAC. This error occurs if KMAC IP masking feature is enabled.
+0x09  | SwHashingWithoutEntropyReady | SW starts (`start`) or resumes (`continue`) a KMAC op without proper config of Entropy in KMAC. This error occurs if KMAC IP masking feature is enabled.
 0x80  | Sha3Control | SW may receive Sha3Control error along with `SwCmdSequence` error. Can be ignored.
 
 #### KeyNotValid (0x01)
@@ -755,11 +755,12 @@ Bits    | Name        | Description
 
 #### SwIssuedCmdInAppActive (0x03)
 
-If the SW issues any commands while the application interface is being used, the module reports `SwIssuedCmdInAppActive` error.
+If the SW issues any commands while the application interface is being used, or in the same cycle an application request is granted, the module reports `SwIssuedCmdInAppActive` error.
 The received command does not affect the Application process.
 The request is dropped by the KMAC_APP module.
 
-The lower 3 bits of [`ERR_CODE`](registers.md#err_code) contains the received command from the SW.
+The info field of [`ERR_CODE`](registers.md#err_code) contains the received command in bits [5:0].
+
 #### WaitTimerExpired (0x04)
 
 The timer values set by SW is internally used only when pending EDN request is completed.
@@ -802,10 +803,29 @@ The SW may get the incorrect signature value.
 
 The KMAC_ERRCHK module checks the SW issued commands if it follows the guideline.
 If the SW issues the command that is not relevant to the current context, the module reports the `SwCmdSequence` error.
-The lower 3bits of the [`ERR_CODE`](registers.md#err_code) contains the received command.
+The info field of [`ERR_CODE`](registers.md#err_code) contains the state of the KMAC_ERRCHK module in bits [10:8] and the received command in bits [5:0].
 
 This error, however, does not stop the KMAC HWIP.
 The incorrect command is dropped at the following datapath, SHA3 core.
+
+#### SwStopNotBlockAligned (0x0A)
+
+A context can only be saved at the boundary of complete message blocks (when the rate is full), as bytes that have been written but not yet absorbed are not part of the Keccak state.
+If the SW issues the Stop command after an incomplete block, the KMAC_ERRCHK module reports the `SwStopNotBlockAligned` error.
+
+The absorbing stage is ended anyway and the Keccak state is exposed, but it does not represent a valid context.
+The KMAC_ERRCHK module still moves into the Stopped state, so the SW has to complete the operation with the Done command before it can start a new one.
+The lower 3 bits of [`ERR_CODE`](registers.md#err_code) contain the state of the KMAC_ERRCHK module.
+
+#### SwSaveRestoreSideload (0x0B)
+
+Saving a context while a sideloaded key is used would hand the key to the SW.
+The Keccak function is a public permutation, so the SW can undo the absorb of every message block it wrote itself, one inversion per block, until it reaches the state after the secret key block and recovers the key.
+This works for any saved state, so there is no point in the absorbing stage at which a context could be exposed safely.
+The KMAC_ERRCHK module therefore reports the `SwSaveRestoreSideload` error if the SW issues the Stop, the StateWrite, or the Continue command while [`CFG_SHADOWED.sideload`](registers.md#cfg_shadowed) is set.
+
+This error blocks the command, so neither a context is exposed nor one is restored.
+The lower 6 bits of [`ERR_CODE`](registers.md#err_code) contain the received command from the SW.
 
 ### Reaction to Life Cycle Escalation Requests
 

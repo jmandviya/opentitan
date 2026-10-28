@@ -7,7 +7,9 @@
 #include "sw/device/lib/base/hardened_memory.h"
 #include "sw/device/lib/base/math.h"
 #include "sw/device/lib/crypto/drivers/hmac.h"
+#include "sw/device/lib/crypto/impl/cmvp.h"
 #include "sw/device/lib/crypto/impl/keyblob.h"
+#include "sw/device/lib/crypto/impl/state.h"
 #include "sw/device/lib/crypto/impl/status.h"
 #include "sw/device/lib/crypto/include/config.h"
 #include "sw/device/lib/crypto/include/cryptolib_build_info.h"
@@ -68,6 +70,12 @@ otcrypto_status_t otcrypto_hkdf(const otcrypto_blinded_key_t *ikm,
                                 const otcrypto_const_byte_buf_t *salt,
                                 const otcrypto_const_byte_buf_t *info,
                                 otcrypto_blinded_key_t *okm) {
+  OTCRYPTO_LOCKED_STATE_CHECK();
+#ifndef OTCRYPTO_DISABLE_NULL_CHECKS
+  if (ikm == NULL) {
+    return OTCRYPTO_BAD_ARGS;
+  }
+#endif
   // Infer the digest length.
   size_t digest_wordlen;
   HARDENED_TRY(
@@ -111,6 +119,8 @@ otcrypto_status_t otcrypto_hkdf(const otcrypto_blinded_key_t *ikm,
 static status_t hkdf_check_prk(size_t digest_words,
                                const otcrypto_blinded_key_t *prk) {
   if (launder32(prk->config.key_mode) >> 16 != kOtcryptoKeyTypeHmac) {
+    // COVERAGE (FI CM) Redundant check; callers already validate
+    // prk->config.key_mode via digest_num_words_from_key_mode.
     return OTCRYPTO_BAD_ARGS;
   }
   HARDENED_CHECK_EQ(prk->config.key_mode >> 16, kOtcryptoKeyTypeHmac);
@@ -137,6 +147,8 @@ static status_t hkdf_check_prk(size_t digest_words,
 otcrypto_status_t otcrypto_hkdf_extract(const otcrypto_blinded_key_t *ikm,
                                         const otcrypto_const_byte_buf_t *salt,
                                         otcrypto_blinded_key_t *prk) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_HKDF_EXTRACT);
+  OTCRYPTO_LOCKED_STATE_CHECK();
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
   // Check for null pointers.
   if (ikm == NULL || ikm->keyblob == NULL || prk == NULL ||
@@ -176,6 +188,7 @@ otcrypto_status_t otcrypto_hkdf_extract(const otcrypto_blinded_key_t *ikm,
   size_t salt_wordlen = ceil_div(salt_bytelen, sizeof(uint32_t));
 
   if (salt_wordlen > kHkdfMaxSaltWords) {
+    // COVERAGE (MISSING) Oversized salt is not covered.
     return OTCRYPTO_BAD_ARGS;
   }
   uint32_t salt_aligned_data[kHkdfMaxSaltWords];
@@ -191,6 +204,7 @@ otcrypto_status_t otcrypto_hkdf_extract(const otcrypto_blinded_key_t *ikm,
   // Unmask the input key.
   size_t unmasked_ikm_wordlen = keyblob_share_num_words(ikm->config);
   if (unmasked_ikm_wordlen > kHkdfMaxIkmWords) {
+    // COVERAGE (MISSING) Oversized IKM is not covered.
     return OTCRYPTO_BAD_ARGS;
   }
   uint32_t unmasked_ikm_data[kHkdfMaxIkmWords];
@@ -246,6 +260,8 @@ otcrypto_status_t otcrypto_hkdf_extract(const otcrypto_blinded_key_t *ikm,
 otcrypto_status_t otcrypto_hkdf_expand(const otcrypto_blinded_key_t *prk,
                                        const otcrypto_const_byte_buf_t *info,
                                        otcrypto_blinded_key_t *okm) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_HKDF_EXPAND);
+  OTCRYPTO_LOCKED_STATE_CHECK();
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
   if (okm == NULL || okm->keyblob == NULL || prk == NULL ||
       prk->keyblob == NULL) {
@@ -281,6 +297,8 @@ otcrypto_status_t otcrypto_hkdf_expand(const otcrypto_blinded_key_t *prk,
   size_t okm_wordlen = ceil_div(okm_bytelen, sizeof(uint32_t));
   size_t num_iterations = ceil_div(okm_wordlen, digest_words);
   if (launder32(num_iterations) > 255) {
+    // COVERAGE (FI CM) Redundant check; keyblob_ensure_xor_masked already
+    // bounds okm->config.key_length so num_iterations <= 49.
     return OTCRYPTO_BAD_ARGS;
   }
   HARDENED_CHECK_LE(num_iterations, 255);
@@ -294,7 +312,7 @@ otcrypto_status_t otcrypto_hkdf_expand(const otcrypto_blinded_key_t *prk,
   // Array to hold T(i) from the previous loop iteration.
   uint32_t prev_t[kHmacMaxDigestWords];
 
-  for (uint8_t i = 0; i < num_iterations; i++) {
+  for (size_t i = 0; i < num_iterations; i++) {
     otcrypto_hmac_context_t ctx;
     HARDENED_TRY(otcrypto_hmac_init(&ctx, prk));
     if (launder32(i) != 0) {
@@ -306,7 +324,7 @@ otcrypto_status_t otcrypto_hkdf_expand(const otcrypto_blinded_key_t *prk,
 
     HARDENED_TRY(otcrypto_hmac_update(&ctx, info));
 
-    uint8_t counter_val = i + 1;
+    uint8_t counter_val = (uint8_t)(i + 1);
     otcrypto_const_byte_buf_t counter_buf =
         OTCRYPTO_MAKE_BUF(otcrypto_const_byte_buf_t, &counter_val, 1);
     HARDENED_TRY(otcrypto_hmac_update(&ctx, &counter_buf));

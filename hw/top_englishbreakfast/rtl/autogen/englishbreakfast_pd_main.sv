@@ -41,6 +41,7 @@ module englishbreakfast_pd_main #(
   parameter int SramCtrlMainNumPrinceRoundsHalf = 3,
   parameter int SramCtrlMainNumAddrScrRounds = 2,
   parameter bit SramCtrlMainEccCorrection = 0,
+  parameter bit SecSramCtrlMainZeroInit = 0,
   // parameters for rom_ctrl
   parameter RomCtrlBootRomInitFile = "",
   parameter bit SecRomCtrlDisableScrambling = 1'b1,
@@ -103,7 +104,6 @@ module englishbreakfast_pd_main #(
   input  logic       dft_hold_tap_sel_i,
   output logic       usb_dp_pullup_en_o,
   output logic       usb_dn_pullup_en_o,
-  input  logic [31:0] fpga_info_i,
   input  logic       usbdev_usb_rx_d_i,
   output logic       usbdev_usb_tx_d_o,
   output logic       usbdev_usb_tx_se0_o,
@@ -965,7 +965,7 @@ module englishbreakfast_pd_main #(
     .lc_escalate_en_i(lc_ctrl_pkg::Off),
     .edn_o(),
     .edn_i(edn_pkg::EDN_RSP_DEFAULT),
-    .keymgr_key_i(keymgr_pkg::HW_KEY_REQ_DEFAULT),
+    .keymgr_key_i(keymgr_dpe_pkg::HW_KEY_REQ_DEFAULT),
     .tl_i(aes_tl_req),
     .tl_o(aes_tl_rsp)
   );
@@ -984,7 +984,8 @@ module englishbreakfast_pd_main #(
     .NumPrinceRoundsHalf(SramCtrlMainNumPrinceRoundsHalf),
     .NumAddrScrRounds(SramCtrlMainNumAddrScrRounds),
     .Outstanding(SramCtrlMainOutstanding),
-    .EccCorrection(SramCtrlMainEccCorrection)
+    .EccCorrection(SramCtrlMainEccCorrection),
+    .SecZeroInit(SecSramCtrlMainZeroInit)
   ) u_sram_ctrl_main (
     // Clock and reset connections
     .clk_i(clkmgr_clocks_i.clk_main_secure),
@@ -1133,7 +1134,6 @@ module englishbreakfast_pd_main #(
     .edn_i(edn_pkg::EDN_RSP_DEFAULT),
     .icache_otp_key_o(),
     .icache_otp_key_i(otp_ctrl_pkg::SRAM_OTP_KEY_RSP_DEFAULT),
-    .fpga_info_i(fpga_info_i),
     .corei_tl_h_o(main_tl_rv_core_ibex__corei_req),
     .corei_tl_h_i(main_tl_rv_core_ibex__corei_rsp),
     .cored_tl_h_o(main_tl_rv_core_ibex__cored_req),

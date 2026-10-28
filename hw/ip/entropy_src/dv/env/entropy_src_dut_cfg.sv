@@ -32,7 +32,7 @@ class entropy_src_dut_cfg extends uvm_object;
   uint          preconfig_disable_pct;
 
   // Constraint knob for SW-accessible REGWEN-related fields
-  uint          me_regwen_pct, sw_regupd_pct;
+  uint          sw_regupd_pct;
 
   // Constraint knobs for Boolean fields in CONF register
   // (RNG_BIT_SEL is always uniform)
@@ -56,6 +56,8 @@ class entropy_src_dut_cfg extends uvm_object;
   // Real constraints on sigma ranges (floating point value)
   // The range of each threshold depends on whether the particular test is intended to be tight
   real adaptp_sigma_max_typ, adaptp_sigma_max_tight, adaptp_sigma_min_typ, adaptp_sigma_min_tight;
+  real adaptps_sigma_max_typ, adaptps_sigma_max_tight;
+  real adaptps_sigma_min_typ, adaptps_sigma_min_tight;
   real markov_sigma_max_typ, markov_sigma_max_tight, markov_sigma_min_typ, markov_sigma_min_tight;
   real bucket_sigma_max_typ, bucket_sigma_max_tight, bucket_sigma_min_typ, bucket_sigma_min_tight;
 
@@ -78,7 +80,7 @@ class entropy_src_dut_cfg extends uvm_object;
 
   rand bit [NumEntropySrcIntr-1:0] en_intr;
 
-  rand bit                      sw_regupd, me_regwen;
+  rand bit                      sw_regupd;
   rand bit                      preconfig_disable;
   rand bit [1:0]                rng_bit_sel;
 
@@ -108,15 +110,15 @@ class entropy_src_dut_cfg extends uvm_object;
   rand health_test_e which_tight_ht;
 
   // Note: These integer-valued fields are used to derive their real-valued counterparts.
-  rand int unsigned adaptp_sigma_i, markov_sigma_i, bucket_sigma_i;
+  rand int unsigned adaptp_sigma_i, adaptps_sigma_i, markov_sigma_i, bucket_sigma_i;
 
   // Randomized ranges, to be set in post_randomize after the actual tight HT's are selected
-  real adaptp_sigma_min, markov_sigma_min, bucket_sigma_min;
-  real adaptp_sigma_max, markov_sigma_max, bucket_sigma_max;
+  real adaptp_sigma_min, adaptps_sigma_min, markov_sigma_min, bucket_sigma_min;
+  real adaptp_sigma_max, adaptps_sigma_max, markov_sigma_max, bucket_sigma_max;
 
   // Randomized real values: to be managed in post_randomize
   // Controlled by the knobs <test>_sigma_max_<typ/tight>, and <test>_sigma_min_<typ/tight>
-  real              adaptp_sigma, markov_sigma, bucket_sigma;
+  real adaptp_sigma, adaptps_sigma, markov_sigma, bucket_sigma;
 
   // Thresholds for repcnt repcnts
   rand bit [15:0]   repcnt_thresh_bypass, repcnt_thresh_fips,
@@ -153,10 +155,6 @@ class entropy_src_dut_cfg extends uvm_object;
   constraint sw_regupd_c {sw_regupd dist {
       1 :/ sw_regupd_pct,
       0 :/ (100 - sw_regupd_pct) };}
-
-  constraint me_regwen_c {me_regwen dist {
-      1 :/ me_regwen_pct,
-      0 :/ (100 - me_regwen_pct) };}
 
   constraint fw_read_enable_c {fw_read_enable dist {
       prim_mubi_pkg::MuBi4True  :/ fw_read_pct,
@@ -434,6 +432,8 @@ class entropy_src_dut_cfg extends uvm_object;
                   ht_threshold_scope),
         $sformatf("\n\t |***** adaptp_sigma                : %12.3f *****| \t",
                   adaptp_sigma),
+        $sformatf("\n\t |***** adaptps_sigma               : %12.3f *****| \t",
+                  adaptps_sigma),
         $sformatf("\n\t |***** bucket_sigma                : %12.3f *****| \t",
                   bucket_sigma),
         $sformatf("\n\t |***** markov_sigma                : %12.3f *****| \t",
@@ -470,6 +470,8 @@ class entropy_src_dut_cfg extends uvm_object;
                   ht_threshold_scope_pct),
         $sformatf("\n\t |***** adaptp_sigma range          : (%04.2f, %04.2f) *****| \t",
                   adaptp_sigma_min, adaptp_sigma_max),
+        $sformatf("\n\t |***** adaptps_sigma range         : (%04.2f, %04.2f) *****| \t",
+                  adaptps_sigma_min, adaptps_sigma_max),
         $sformatf("\n\t |***** bucket_sigma range          : (%04.2f, %04.2f) *****| \t",
                   bucket_sigma_min, bucket_sigma_max),
         $sformatf("\n\t |***** markov_sigma range          : (%04.2f, %04.2f) *****| \t",
@@ -493,6 +495,15 @@ class entropy_src_dut_cfg extends uvm_object;
     adaptp_sigma_max = tight_thresholds && (which_tight_ht == adaptp_ht) ? adaptp_sigma_max_tight :
                                                                            adaptp_sigma_max_typ;
     adaptp_sigma = adaptp_sigma_min + (adaptp_sigma_max - adaptp_sigma_min) * tmp_r;
+
+    tmp_r = real'(adaptps_sigma_i)/{$bits(adaptps_sigma_i){1'b1}};
+    adaptps_sigma_min =
+        tight_thresholds && (which_tight_ht == adaptps_ht) ? adaptps_sigma_min_tight :
+                                                             adaptps_sigma_min_typ;
+    adaptps_sigma_max =
+        tight_thresholds && (which_tight_ht == adaptps_ht) ? adaptps_sigma_max_tight :
+                                                             adaptps_sigma_max_typ;
+    adaptps_sigma = adaptps_sigma_min + (adaptps_sigma_max - adaptps_sigma_min) * tmp_r;
 
     tmp_r = real'(markov_sigma_i)/{$bits(markov_sigma_i){1'b1}};
     markov_sigma_min = tight_thresholds && (which_tight_ht == markov_ht) ? markov_sigma_min_tight :
@@ -556,7 +567,6 @@ class entropy_src_dut_cfg extends uvm_object;
     `DV_CHECK(en_intr_pct <= 100);
     `DV_CHECK(module_enable_pct <= 100);
     `DV_CHECK(preconfig_disable_pct <= 100);
-    `DV_CHECK(me_regwen_pct <= 100);
     `DV_CHECK(sw_regupd_pct <= 100);
     `DV_CHECK(fips_enable_pct <= 100);
     `DV_CHECK(entropy_data_reg_enable_pct <= 100);

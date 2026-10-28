@@ -27,8 +27,10 @@ enum {
 
 status_t aes_kwp_wrap(const aes_key_t kek, const uint32_t *plaintext,
                       const size_t plaintext_len, uint32_t *ciphertext) {
-  // The plaintext length is expected to be at most 2^32 bytes.
-  if (plaintext_len > UINT32_MAX || plaintext_len == 0) {
+  // The plaintext length must be non-empty and not overflow semiblock rounding.
+  if (plaintext_len > UINT32_MAX - kSemiblockBytes || plaintext_len == 0) {
+    // COVERAGE (SW ERR) Internal callers always pass a valid non-zero
+    // plaintext_len.
     return OTCRYPTO_BAD_ARGS;
   }
 
@@ -39,6 +41,8 @@ status_t aes_kwp_wrap(const aes_key_t kek, const uint32_t *plaintext,
 
   if (plaintext_semiblocks < 2) {
     // Plaintext is too short.
+    // COVERAGE (SW ERR) Wrapped keys include metadata and are always at least
+    // 2 semiblocks long.
     return OTCRYPTO_BAD_ARGS;
   }
 
@@ -95,9 +99,9 @@ status_t aes_kwp_wrap(const aes_key_t kek, const uint32_t *plaintext,
 status_t aes_kwp_unwrap(const aes_key_t kek, const uint32_t *ciphertext,
                         const size_t ciphertext_len, hardened_bool_t *success,
                         uint32_t *plaintext) {
-  // The ciphertext length is expected to be nonempty, at most 2^32 bytes, and
-  // a multiple of the semiblock size.
-  if (ciphertext_len > UINT32_MAX || ciphertext_len == 0 ||
+  // The ciphertext length is expected to be nonempty, at most 2^32 - 8 bytes,
+  // and a multiple of the semiblock size.
+  if (ciphertext_len > UINT32_MAX - kSemiblockBytes || ciphertext_len == 0 ||
       ciphertext_len % kSemiblockBytes != 0) {
     return OTCRYPTO_BAD_ARGS;
   }
@@ -107,6 +111,8 @@ status_t aes_kwp_unwrap(const aes_key_t kek, const uint32_t *ciphertext,
 
   if (ciphertext_semiblocks < 3) {
     // Ciphertext is too short.
+    // COVERAGE (SW ERR) Wrapped keys include metadata and are always at least
+    // 3 semiblocks long.
     return OTCRYPTO_BAD_ARGS;
   }
 
@@ -178,12 +184,14 @@ status_t aes_kwp_unwrap(const aes_key_t kek, const uint32_t *ciphertext,
 
   if (launderw(is_bad) != 0) {
     *success = kHardenedBoolFalse;
+    HARDENED_TRY(hardened_memshred(r, ARRAYSIZE(r)));
     return aes_end(NULL);
   }
 
   // Copy the plaintext into the destination buffer.
   size_t plaintext_words = ceil_div(plaintext_len, sizeof(uint32_t));
   HARDENED_TRY(hardened_memcpy(plaintext, r, plaintext_words));
+  HARDENED_TRY(hardened_memshred(r, ARRAYSIZE(r)));
 
   // Return success.
   *success = kHardenedBoolTrue;

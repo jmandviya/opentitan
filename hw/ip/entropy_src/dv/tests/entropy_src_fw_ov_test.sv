@@ -24,6 +24,10 @@ class entropy_src_fw_ov_test extends entropy_src_base_test;
     cfg.dut_cfg.adaptp_sigma_min_tight      = 0.0;
     cfg.dut_cfg.adaptp_sigma_max_typ        = 0.0;
     cfg.dut_cfg.adaptp_sigma_max_tight      = 0.0;
+    cfg.dut_cfg.adaptps_sigma_min_typ       = 0.0;
+    cfg.dut_cfg.adaptps_sigma_min_tight     = 0.0;
+    cfg.dut_cfg.adaptps_sigma_max_typ       = 0.0;
+    cfg.dut_cfg.adaptps_sigma_max_tight     = 0.0;
     cfg.dut_cfg.bucket_sigma_min_typ        = 0.0;
     cfg.dut_cfg.bucket_sigma_min_tight      = 0.0;
     cfg.dut_cfg.bucket_sigma_max_typ        = 0.0;
@@ -38,12 +42,6 @@ class entropy_src_fw_ov_test extends entropy_src_base_test;
 
     cfg.dut_cfg.entropy_data_reg_enable_pct = 50;
     cfg.dut_cfg.route_software_pct          = 50;
-    cfg.otp_en_es_fw_read_pct               = 33;
-    cfg.otp_en_es_fw_read_inval_pct         = 33;
-
-    // To read from the observe FIFO, both otp_en_entropy_src_fw_over and
-    // FW_OV_CONTROL.FW_OV_MODE need to be enabled.
-    cfg.otp_en_es_fw_over_pct               = 85;
 
     cfg.dut_cfg.ht_threshold_oneway_pct     = 10;
     cfg.dut_cfg.ht_threshold_scope_pct      = 50;
@@ -56,8 +54,7 @@ class entropy_src_fw_ov_test extends entropy_src_base_test;
     cfg.dut_cfg.type_bypass_pct             = 75;
 
     cfg.dut_cfg.fw_read_pct                 = 50;
-    // To read from the observe FIFO, both otp_en_entropy_src_fw_over and
-    // FW_OV_CONTROL.FW_OV_MODE need to be enabled.
+    // To read from the observe FIFO, FW_OV_CONTROL.FW_OV_MODE needs to be enabled.
     cfg.dut_cfg.fw_over_pct                 = 85;
 
     // Spurious injection parameter has no meaning here.

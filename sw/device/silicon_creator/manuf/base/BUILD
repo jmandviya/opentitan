@@ -133,10 +133,7 @@ opentitan_test(
         },
         needs_jtag = True,
         otp = "//hw/top_earlgrey/data/otp:img_raw",
-        tags = [
-            "manuf",
-            "skip_in_ci",
-        ],
+        tags = ["manuf"],
         test_cmd = """
             --provisioning-sram-elf={sram_cp_provision}
             --test-sram-elf={sram_cp_provision_functest}
@@ -450,5 +447,9 @@ offline_signature_attach(
         for sku, data in EARLGREY_SKUS.items()
         if data["signature_prefix"] and not disqualified_for_signing(sku, data)
     ]).to_list(),
-    tags = ["manual"],
+    tags = [
+        "manual",
+        # This requires some signatures to be manually provided, so it should not be built in CI.
+        "skip_build_in_ci",
+    ],
 )

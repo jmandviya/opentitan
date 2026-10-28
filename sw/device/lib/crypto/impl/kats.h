@@ -17,7 +17,7 @@ typedef enum {
   kTestHmacSha256Bit,
   kTestHashSha512Bit,
   kTestHmacSha512Bit,
-  kTestDrgbBit,
+  kTestRngBit,
   kTestP256BasePointMulBit,
   kTestP256PointOnCurveBit,
   kTestP256SignBit,
@@ -28,6 +28,7 @@ typedef enum {
   kTestP384BasePointMulBit,
   kTestP384PointOnCurveBit,
   kTestAesGcm256EncryptBit,
+  kTestAesGcm256DecryptBit,
   kTestAesEcb256DecryptBit,
   kTestRsa4096VerifyBit,
   kTestRsa4096SignBit,
@@ -35,9 +36,11 @@ typedef enum {
   kTestKmac256Bit,
   kTestEd25519SignBit,
   kTestEd25519VerifyBit,
+  kTestKdfCtrHmacBit,
+  kTestKmacKdfBit,
   // Last entry used for mask calculation
   kTestLastBit,
-} otcrypto_kat_bits_t;
+} kat_bits_t;
 
 #define _FLAG(flag) (1UL << kTest##flag##Bit)
 
@@ -48,7 +51,7 @@ typedef enum {
 #define OTCRYPTO_KAT_HMAC_SHA256 _FLAG(HmacSha256)
 #define OTCRYPTO_KAT_HASH_SHA512 _FLAG(HashSha512)
 #define OTCRYPTO_KAT_HMAC_SHA512 _FLAG(HmacSha512)
-#define OTCRYPTO_KAT_DRBG _FLAG(Drgb)
+#define OTCRYPTO_KAT_RNG _FLAG(Rng)
 #define OTCRYPTO_KAT_P256_BASE_POINT_MUL _FLAG(P256BasePointMul)
 #define OTCRYPTO_KAT_P256_POINT_ON_CURVE _FLAG(P256PointOnCurve)
 #define OTCRYPTO_KAT_P256_SIGN _FLAG(P256Sign)
@@ -61,17 +64,20 @@ typedef enum {
 #define OTCRYPTO_KAT_P384_SIGN _FLAG(P384Sign)
 #define OTCRYPTO_KAT_P384_VERIFY _FLAG(P384Verify)
 #define OTCRYPTO_KAT_AES_GCM_256_ENCRYPT _FLAG(AesGcm256Encrypt)
+#define OTCRYPTO_KAT_AES_GCM_256_DECRYPT _FLAG(AesGcm256Decrypt)
 #define OTCRYPTO_KAT_AES_ECB_256_DECRYPT _FLAG(AesEcb256Decrypt)
 #define OTCRYPTO_KAT_SHAKE_256 _FLAG(Shake256)
 #define OTCRYPTO_KAT_KMAC_256 _FLAG(Kmac256)
 #define OTCRYPTO_KAT_ED25519_SIGN _FLAG(Ed25519Sign)
 #define OTCRYPTO_KAT_ED25519_VERIFY _FLAG(Ed25519Verify)
+#define OTCRYPTO_KAT_KDF_CTR_HMAC _FLAG(KdfCtrHmac)
+#define OTCRYPTO_KAT_KMAC_KDF _FLAG(KmacKdf)
 
 typedef struct {
   uint64_t flags;
-} otcrypto_kat_id_t;
+} kat_id_t;
 
-#define OTCRYPTO_KAT_FLAGS(_flags) ((otcrypto_kat_id_t){.flags = _flags})
+#define OTCRYPTO_KAT_FLAGS(_flags) ((kat_id_t){.flags = _flags})
 
 #define OTCRYPTO_KAT_ALL_TESTS OTCRYPTO_KAT_FLAGS(((1UL << kTestLastBit) - 1))
 
@@ -81,7 +87,7 @@ typedef struct {
  * @param tests_to_run bit mask with tests to run
  * @return OK if the requested KATs passed.
  */
-otcrypto_status_t run_kats(otcrypto_kat_id_t tests_to_run);
+otcrypto_status_t run_kats(kat_id_t tests_to_run);
 
 #ifdef __cplusplus
 }  // extern "C"

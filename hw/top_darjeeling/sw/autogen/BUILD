@@ -19,9 +19,13 @@ cc_library(
     ],
     hdrs = [
         "top_darjeeling.h",
-        "top_darjeeling_memory.h",
+        "top_memory.h",
     ],
     defines = ["OPENTITAN_IS_DARJEELING"],
+    # To make the memory header top agnostic, remap it into the hw/top
+    # include namespace so that targets can include `hw/top/top_memory`.
+    include_prefix = "hw/top",
+    strip_include_prefix = "/hw/top_darjeeling/sw/autogen",
     target_compatible_with = opentitan_require_top("darjeeling"),
 )
 

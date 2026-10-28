@@ -39,8 +39,6 @@ module ${top["name"]}_pd_${domain.lower()} #(
   // OTP HW_CFG* Broadcast signals.
   // TODO(#6713): The actual struct breakout and mapping currently needs to
   // be performed by hand.
-  assign csrng_otp_en_csrng_sw_app_read =
-      otp_ctrl_otp_broadcast.hw_cfg1_data.en_csrng_sw_app_read;
   assign sram_ctrl_main_otp_en_sram_ifetch =
       otp_ctrl_otp_broadcast.hw_cfg1_data.en_sram_ifetch;
   assign sram_ctrl_sec_otp_en_sram_ifetch =
@@ -85,55 +83,51 @@ module ${top["name"]}_pd_${domain.lower()} #(
   % endif
 % endif
 
-<%
-  keymgr_dpe_seed_selector = top.get("keymgr_dpe_seed_selector", "none")
-%>\
-  % if keymgr_dpe_seed_selector == "otp_ctrl":
-  // Otp_ctrl provides the creator / owner seed
-  keymgr_dpe_pkg::keymgr_dpe_creator_seed_t unused_keymgr_creator_seed;
-  keymgr_dpe_pkg::keymgr_dpe_owner_seed_t unused_keymgr_owner_seed;
-  assign keymgr_dpe_creator_seed = otp_ctrl_keymgr_creator_seed;
-  assign keymgr_dpe_owner_seed = otp_ctrl_keymgr_owner_seed;
-  assign unused_keymgr_creator_seed =
-      {rram_ctrl_keymgr.seeds[0], 1'b1};
-  assign unused_keymgr_owner_seed =
-      {rram_ctrl_keymgr.seeds[1], 1'b1};
-
-  % elif keymgr_dpe_seed_selector == "nvm_ctrl":
-  // nvm_ctrl provides the creator / owner seed
-  keymgr_dpe_pkg::keymgr_dpe_creator_seed_t unused_keymgr_creator_seed;
-  keymgr_dpe_pkg::keymgr_dpe_owner_seed_t unused_keymgr_owner_seed;
-  // TODO(#30965 / #31004): Connect the valid bit as soon as available.
-  // Replace rram_ctrl_keymgr.seeds output with designated seed outputs.
-  assign keymgr_dpe_creator_seed =
-      {rram_ctrl_keymgr.seeds[0], 1'b1};
-  assign keymgr_dpe_owner_seed =
-      {rram_ctrl_keymgr.seeds[1], 1'b1};
-  assign unused_keymgr_creator_seed = otp_ctrl_keymgr_creator_seed;
-  assign unused_keymgr_owner_seed = otp_ctrl_keymgr_owner_seed;
-
-  % endif
-  // Struct breakout module tool-inserted DFT TAP signals
-  pinmux_jtag_breakout u_dft_tap_breakout (
-    .req_i    (pinmux_dft_jtag_req),
-    .rsp_o    (pinmux_dft_jtag_rsp),
-    .tck_o    (),
-    .trst_no  (),
-    .tms_o    (),
-    .tdi_o    (),
-    .tdo_i    (1'b0),
-    .tdo_oe_i (1'b0)
-  );
+% if lib.find_module(top["module"], "pinmux", domain=domain):
+<%include file="/toplevel_snippets/pinmux_jtag_breakout.tpl"/>\
+% endif
 
 <%include file="/toplevel_snippets/clk_reset_lpg_assigns.tpl" args="top=top, feature_info=feature_info, domain=domain" />\
 
-<%include file="/toplevel_snippets/module_instantiations.tpl" args="top=top, domain=domain" />\
+<%include file="/toplevel_snippets/module_instantiations.tpl" args="top=top, feature_info=feature_info, domain=domain" />\
 
 <%include file="/toplevel_snippets/interrupt_assigns.tpl" args="top=top, domain=domain" />\
 
 <%include file="/toplevel_snippets/xbar_instantiations.tpl" args="top=top, domain=domain" />\
 
 <%include file="/toplevel_snippets/cio_assigns.tpl" args="top=top, feature_info=feature_info, cio_info=cio_info, domain=domain" />\
+
+  // Tie-off unused clock gate signal
+  logic unused_cg_en_ast_ext;
+  assign unused_cg_en_ast_ext = ^cg_en_ast_ext_i;
+
+<%
+  # (struct field, flat inter-signal base name)
+  # for every memory-cfg consumer of this PD.
+  mem_cfg_consumers = [
+    ('otbn_imem',                'otbn_ram_cfg_imem'),
+    ('otbn_dmem',                'otbn_ram_cfg_dmem'),
+    ('i2c0',                     'i2c0_ram_cfg'),
+    ('i2c1',                     'i2c1_ram_cfg'),
+    ('i2c2',                     'i2c2_ram_cfg'),
+    ('i3c0_ram',                 'i3c0_ram_cfg'),
+    ('i3c0_dat',                 'i3c0_dat_cfg'),
+    ('i3c0_dct',                 'i3c0_dct_cfg'),
+    ('i3c1_ram',                 'i3c1_ram_cfg'),
+    ('i3c1_dat',                 'i3c1_dat_cfg'),
+    ('i3c1_dct',                 'i3c1_dct_cfg'),
+    ('usbdev_ram',               'usbdev_ram_cfg'),
+    ('rv_core_ibex_icache_tag',  'rv_core_ibex_ram_cfg_icache_tag'),
+    ('rv_core_ibex_icache_data', 'rv_core_ibex_ram_cfg_icache_data'),
+    ('sram_ctrl_main',           'sram_ctrl_main_ram_cfg'),
+    ('sram_ctrl_sec',            'sram_ctrl_sec_ram_cfg'),
+    ('sram_ctrl_meta',           'sram_ctrl_meta_ram_cfg'),
+    ('spi_device_sys2spi',       'spi_device_ram_cfg_sys2spi'),
+    ('spi_device_spi2sys',       'spi_device_ram_cfg_spi2sys'),
+    ('rom_ctrl_rom',             'rom_ctrl_rom_cfg'),
+  ]
+%>\
+<%include file="/toplevel_snippets/mem_cfg_wiring.tpl" args="mem_cfg_consumers=mem_cfg_consumers" />\
 
 % if lib.find_module(top["module"], "clkmgr").get("domain") == domain:
   // Make sure scanmode_i is never X (including during reset)

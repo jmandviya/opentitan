@@ -3,11 +3,12 @@
 ## SPDX-License-Identifier: Apache-2.0
 
 ## Commonly used instances. Adapt only here if their location changes.
-set clkgen       clkgen/pll
-set u_ast        u_ast
-set u_clkmgr     top_*/*_pd_aon/u_clkmgr
-set u_pinmux     top_*/*_pd_main/u_pinmux
-set u_spi_device top_*/*_pd_main/u_spi_device
+set clkgen          clkgen/pll
+set u_ast_primary   top_*/*_pd_main/u_ast_part_primary
+set u_ast_secondary top_*/*_pd_aon/u_ast_part_secondary
+set u_clkmgr        top_*/*_pd_aon/u_clkmgr
+set u_pinmux        top_*/*_pd_aon/u_pinmux
+set u_spi_device    top_*/*_pd_main/u_spi_device
 
 ## Clock Signal
 create_clock -add -name sys_clk_pin -period 10.00 -waveform {0 5} [get_ports IO_CLK]
@@ -18,7 +19,7 @@ create_generated_clock -name clk_main [get_pin ${clkgen}/CLKOUT0]
 create_generated_clock -name clk_usb_48 [get_pin ${clkgen}/CLKOUT1]
 create_generated_clock -name clk_aon [get_pin ${clkgen}/CLKOUT4]
 
-set clk_io_pin [get_pin ${u_ast}/u_ast_main/u_ast_clks_byp_main/u_no_scan_clk_src_io_d1ord2/u_clk_div_buf/gen_fpga_buf.gen_bufg.bufg_i/O]
+set clk_io_pin [get_pin ${u_ast_primary}/u_ast_clks_byp_primary/u_no_scan_clk_src_io_d1ord2/u_clk_div_buf/gen_fpga_buf.gen_bufg.bufg_i/O]
 create_generated_clock -name clk_io -divide_by 1 -add \
     -master_clock [get_clocks clk_main] \
     -source [get_pins ${clkgen}/CLKOUT0] \
@@ -42,7 +43,7 @@ set u_div4 ${u_clkmgr}/u_no_scan_io_div4_div
 create_generated_clock -name clk_io_div4 -divide_by 4 -source [get_pins ${u_div4}/gen_div.clk_int_reg/C] [get_pins ${u_div4}/gen_div.clk_int_reg/Q]
 
 
-set ast_src_io ${u_ast}/u_ast_main/u_ast_clks_byp_main/u_no_scan_clk_src_io_d1ord2
+set ast_src_io ${u_ast_primary}/u_ast_clks_byp_primary/u_no_scan_clk_src_io_d1ord2
 #create_generated_clock -name clk_src_io -divide_by 1 -source [get_pins ${u_pll}/CLKOUT0] \
 #  [get_pins ${ast_src_io}/gen_div2.u_div2/q_o[0]]
 
@@ -90,23 +91,14 @@ set_clock_sense -negative ${lc_jtag_tck_inv_pin}
 set_clock_sense -negative ${rv_jtag_tck_inv_pin}
 
 # Assign input and output delays.
-# Note that incidental combinatorial paths through the pinmux do not get removed
-# from timing below, but the half cycle timing for JTAG leaves a fairly generous
-# requirement. If the JTAG constraints need to be tightened and overly constrain
-# the combinational port-to-port paths,
-#   set_max_delay -datapath_only
-# may be used to apply timing exceptions for those paths.
-# However, remember that the input and output delays contribute to the path
-# delay for such a case, so the constraint value for set_max_delay must
-# accommodate them. In other words, for the constraint
-#   set_max_delay -datapath_only -from [get_ports] -through ${combo_path_pin} \
-#                 -to [get_ports] ${max_delay_value}
-# ${max_delay_value} =
-#     ${max_input_delay} + ${max_output_delay} + ${max_port_to_port_delay}
 set_output_delay -add_delay -clock_fall -clock jtag_tck -max 10.0 [get_ports IOR1]
 set_output_delay -add_delay -clock_fall -clock jtag_tck -min -5.0 [get_ports IOR1]
 set_input_delay  -add_delay -clock_fall -clock jtag_tck -min  0.0 [get_ports {IOR0 IOR2}]
 set_input_delay  -add_delay -clock_fall -clock jtag_tck -max 12.5 [get_ports {IOR0 IOR2}]
+# The TAPs have no combinational path from TMS/TDI to TDO. Any port-to-port path
+# between them only exists through the pinmux and is not a JTAG timing path.
+# The delays above still constrain the paths to and from the TAP flops.
+set_false_path -from [get_ports {IOR0 IOR2}] -to [get_ports IOR1]
 
 ## SPI clocks
 set spi_dev_period 100.0
@@ -331,7 +323,7 @@ set_multicycle_path -hold -end -from [get_clocks clk_spi_tpm] \
 
 ## The usb calibration handling inside ast is assumed to be async to the outside world
 ## even though its interface is also a usb clock.
-set_false_path -from ${clks_48_unbuf} -to [get_pins ${u_ast}/u_ast_main/u_usb_clk/u_ref_pulse_sync/u_sync*/u_sync_1/q_o_reg[0]/D]
+set_false_path -from ${clks_48_unbuf} -to [get_pins ${u_ast_primary}/u_usb_clk/u_ref_pulse_sync/u_sync*/u_sync_1/q_o_reg[0]/D]
 
 ## USB input delay to accommodate T_FST (full-speed transition time) and the
 ## PHY's sampling logic. The PHY expects to only see up to one transient / fake

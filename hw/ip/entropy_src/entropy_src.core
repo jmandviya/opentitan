@@ -20,7 +20,6 @@ filesets:
       - lowrisc:prim:mubi
       - lowrisc:ip:tlul
       - lowrisc:ip:sha3
-      - lowrisc:ip:otp_ctrl_pkg
       - lowrisc:ip:entropy_src_pkg
       - lowrisc:ip:entropy_src_ack_sm_pkg
       - lowrisc:ip:entropy_src_main_sm_pkg
@@ -35,6 +34,7 @@ filesets:
       - rtl/entropy_src_repcnt_ht.sv
       - rtl/entropy_src_repcnts_ht.sv
       - rtl/entropy_src_adaptp_ht.sv
+      - rtl/entropy_src_adaptps_ht.sv
       - rtl/entropy_src_bucket_ht.sv
       - rtl/entropy_src_markov_ht.sv
       - rtl/entropy_src_enable_delay.sv
@@ -61,6 +61,12 @@ filesets:
     file_type: waiver
 
 
+  files_slang_waiver:
+    depend:
+      # common waivers
+      - lowrisc:lint:common
+      - lowrisc:lint:comportable
+
 parameters:
   SYNTHESIS:
     datatype: bool
@@ -72,6 +78,7 @@ targets:
     filesets:
       - tool_verilator  ? (files_verilator_waiver)
       - tool_ascentlint ? (files_ascentlint_waiver)
+      - tool_slang      ? (files_slang_waiver)
       - files_rtl
     toplevel: entropy_src
 

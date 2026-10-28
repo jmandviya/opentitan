@@ -8,7 +8,7 @@
 // do the right thing.
 
 interface otbn_model_if
-  import keymgr_pkg::otbn_key_req_t;
+  import keymgr_dpe_pkg::wide_hw_key_req_t;
 #(
   // Size of the instruction memory, in bytes
   parameter int ImemSizeByte = 4096,
@@ -17,7 +17,7 @@ interface otbn_model_if
 ) (
   input logic clk_i,
   input logic rst_ni,
-  input otbn_key_req_t keymgr_key_i
+  input wide_hw_key_req_t keymgr_key_i
 );
   import uvm_pkg::*;
 
@@ -141,6 +141,12 @@ interface otbn_model_if
     `uvm_info("otbn_model_if", "writing to wfi_enabled", UVM_HIGH);
     `DV_CHECK_FATAL(u_model.otbn_model_set_wfi_enabled(handle, new_val) == 0,
                     "Failed to set wfi_enabled", "otbn_model_if")
+  endfunction
+
+  function automatic void set_urnd_ctrl_enabled(bit new_val);
+    `uvm_info("otbn_model_if", "writing to urnd_ctrl_enabled", UVM_HIGH);
+    `DV_CHECK_FATAL(u_model.otbn_model_set_urnd_ctrl_enabled(handle, new_val) == 0,
+                    "Failed to set urnd_ctrl_enabled", "otbn_model_if")
   endfunction
 
   function automatic void otbn_set_no_sec_wipe_chk();

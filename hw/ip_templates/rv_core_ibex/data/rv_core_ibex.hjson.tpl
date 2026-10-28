@@ -30,9 +30,9 @@
           notes:              ""
       },
       {
-          version:            "2.2.0",
+          version:            "3.0.0",
           life_stage:         "L1",
-          design_stage:       "D0",
+          design_stage:       "D1",
           verification_stage: "V0",
           dif_stage:          "S0",
           notes:              ""
@@ -105,7 +105,7 @@
       name:    "cored_tl_h",
       act:     "req",
       package: "tlul_pkg",
-      desc:    "Core data host port to the CHERIoT subsystem."
+      desc:    "Core data host port to the CHERIoT memory subsystem."
     },
 
     { struct:  "logic",
@@ -259,14 +259,6 @@
       name:    "icache_otp_key",
       act:     "req",
       package: "otp_ctrl_pkg",
-    },
-
-    { struct:  "logic",
-      type:    "uni",
-      name:    "fpga_info",
-      act:     "rcv",
-      width:   "32",
-      package: "",
     },
   % if racl_support:
     { struct:  "racl_policy_vec",
@@ -720,16 +712,17 @@
     }
     { name: "DATA_REG_SW.INTEGRITY"
       desc: '''
-        Register file integrity checking. Note that whilst the core itself is
-        duplicated (see LOGIC.SHADOW) the register file is not. Protection is
-        provided by an ECC.
+        Register file integrity checking via ECC. The register file is split across two instances:
+        the main core's register file stores data bits only, while the shadow core's register file
+        (see LOGIC.SHADOW) stores the corresponding ECC bits only. ECC checking is performed inside
+        the shadow core.
       '''
     }
     { name: "DATA_REG_SW.GLITCH_DETECT"
       desc: '''
-        This countermeasure augments DATA_REG_SW.INTEGRITY and checks for spurious
-        write-enable signals on the register file by monitoring the one-hot0 property
-        of the individual write-enable strobes.
+        The split register file architecture provides implicit glitch detection. A physical fault
+        that modifies data in the main register file through a glitch will be caught in the shadow
+        core's ECC check.
       '''
     }
     { name: "LOGIC.SHADOW"
@@ -759,6 +752,36 @@
     { name: "ICACHE.MEM.INTEGRITY"
       desc: "ICache memory integrity checking."
     }
+    { name: "ICACHE.MEM.ADDR_INFECTION"
+      desc: '''
+        ICache data and tag words are XORed with a tweak derived from their cache-line address. A
+        fault causing data to land in the wrong cache index produces a tweak mismatch on read-back.
+      '''
+    }
+    { name: "CORED_TLUL.BUS.LC_GATED"
+      desc: '''
+        Outstanding data-bus TL-UL requests are gated when the CPU is disabled via the life-cycle
+        controller.
+      '''
+    }
+    { name: "TLUL_ADAPTER.LOGIC.SHADOW"
+      desc: '''
+        Address translation and TL-UL adapters (data and instruction interface) run in lockstep with
+        shadow logic protecting both interfaces against faults.
+      '''
+    }
+    { name: "MCOUNTEREN_WRITABLE.CTRL.MUBI"
+      desc: '''
+        Use MuBI signals for critical control signals such as `mcounteren_writable`.
+      '''
+    }
+% if cheriot_available:
+    { name: "CHERIOT_ENABLE.CTRL.MUBI"
+      desc: '''
+        The cheriot_enable input is MuBi and checked for a valid MuBi encoding in Ibex.
+      '''
+    }
+% endif
   ]
 
   regwidth: "32",
@@ -1216,25 +1239,6 @@
         "excl:CsrAllTests:CsrExclAll"],
       },
 % endif
-
-      { name: "FPGA_INFO",
-        desc: '''
-          FPGA build timestamp info.
-          This register only contains valid data for fpga, for all other variants it is simply 0.
-        ''',
-        swaccess: "ro",
-        hwaccess: "hwo",
-        hwext: "true"
-        fields: [
-          { bits: "31:0",
-            name: "VAL",
-            resval: "0x0"
-            desc: '''
-              FPGA build timestamp information.
-            '''
-          },
-        ]
-      },
 
       { name: "MCOUNTEREN_WRITABLE_REGWEN",
         desc: "Register write-enable for !!MCOUNTEREN_WRITABLE.",

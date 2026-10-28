@@ -4,7 +4,7 @@
 
 #include "sram_start.h"
 
-#include "hw/top_earlgrey/sw/autogen/top_earlgrey_memory.h"
+#include "hw/top/top_memory.h"
 #include "sw/device/lib/base/multibits_asm.h"
 #include "sw/device/lib/testing/test_framework/ottf_macros.h"
 
@@ -166,7 +166,7 @@ sram_start:
   // initialize memory scrambling, as well as the entropy distribution network.
   // This enables writing to the SECRET* OTP partitions, required for
   // provisioning the test unlock/exit tokens.
-  li a0, TOP_EARLGREY_ENTROPY_SRC_BASE_ADDR
+  li a0, TOP_ENTROPY_SRC_BASE_ADDR
   li t0, (MULTIBIT_ASM_BOOL4_FALSE << ENTROPY_SRC_CONF_FIPS_ENABLE_OFFSET) | \
          (MULTIBIT_ASM_BOOL4_FALSE << ENTROPY_SRC_CONF_ENTROPY_DATA_REG_ENABLE_OFFSET) | \
          (MULTIBIT_ASM_BOOL4_FALSE << ENTROPY_SRC_CONF_FIPS_FLAG_OFFSET) | \
@@ -176,13 +176,13 @@ sram_start:
   sw t0, ENTROPY_SRC_CONF_REG_OFFSET(a0)
   li t0, (MULTIBIT_ASM_BOOL4_TRUE << ENTROPY_SRC_MODULE_ENABLE_MODULE_ENABLE_OFFSET)
   sw t0, ENTROPY_SRC_MODULE_ENABLE_REG_OFFSET(a0)
-  li a0, TOP_EARLGREY_CSRNG_BASE_ADDR
+  li a0, TOP_CSRNG_BASE_ADDR
   li t0, (MULTIBIT_ASM_BOOL4_TRUE << CSRNG_CTRL_ENABLE_OFFSET) | \
          (MULTIBIT_ASM_BOOL4_TRUE << CSRNG_CTRL_SW_APP_ENABLE_OFFSET) | \
          (MULTIBIT_ASM_BOOL4_TRUE << CSRNG_CTRL_READ_INT_STATE_OFFSET) | \
          (MULTIBIT_ASM_BOOL4_FALSE << CSRNG_CTRL_FIPS_FORCE_ENABLE_OFFSET)
   sw t0, CSRNG_CTRL_REG_OFFSET(a0)
-  li a0, TOP_EARLGREY_EDN0_BASE_ADDR
+  li a0, TOP_EDN0_BASE_ADDR
   li t0, (MULTIBIT_ASM_BOOL4_TRUE << EDN_CTRL_EDN_ENABLE_OFFSET) | \
          (MULTIBIT_ASM_BOOL4_TRUE << EDN_CTRL_BOOT_REQ_MODE_OFFSET) | \
          (MULTIBIT_ASM_BOOL4_FALSE << EDN_CTRL_AUTO_REQ_MODE_OFFSET) | \
@@ -220,7 +220,7 @@ sram_start:
    * but does not require a valid stack pointer, thread pointer or global
    * pointer.
    *
-   * Clobbers a0, t0 and t1.
+   * Clobbers a0, a2, a3, t0 and t1.
    *
    * @param a0 pointer to start of section to clear (inclusive).
    * @param a1 pointer to end of section to clear (exclusive).
@@ -238,14 +238,18 @@ compute_crc32:
   bnez t0, .L_crc_error
   // Initialize CRC digest.
   li   t0, 0xffffffff
+  // Barrett reduction constants for clmul/clmulr.
+  li   a2, 0xf7011641
+  li   a3, 0xedb88320
 
 .L_crc_loop:
   // Compute the CRC word-by-word.
   lw      t1, 0(a0)
   xor     t0, t0, t1
   .option push
-  .option arch, +zbr0p93
-  crc32.w t0, t0
+  .option arch, +zbc
+  clmul   t0, t0, a2
+  clmulr  t0, t0, a3
   .option pop
   addi    a0, a0, 4
   bltu    a0, a1, .L_crc_loop

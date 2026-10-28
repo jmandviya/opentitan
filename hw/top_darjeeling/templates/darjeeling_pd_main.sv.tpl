@@ -40,8 +40,6 @@ module ${top["name"]}_pd_${domain.lower()} #(
   // OTP HW_CFG Broadcast signals.
   // TODO(#6713): The actual struct breakout and mapping currently needs to
   // be performed by hand.
-  assign csrng_otp_en_csrng_sw_app_read =
-      otp_ctrl_otp_broadcast.hw_cfg1_data.en_csrng_sw_app_read;
   assign sram_ctrl_main_otp_en_sram_ifetch =
       otp_ctrl_otp_broadcast.hw_cfg1_data.en_sram_ifetch;
   assign lc_ctrl_otp_device_id =
@@ -90,7 +88,7 @@ module ${top["name"]}_pd_${domain.lower()} #(
 
 <%include file="/toplevel_snippets/clk_reset_lpg_assigns.tpl" args="top=top, feature_info=feature_info, domain=domain" />\
 
-<%include file="/toplevel_snippets/module_instantiations.tpl" args="top=top, domain=domain" />\
+<%include file="/toplevel_snippets/module_instantiations.tpl" args="top=top, feature_info=feature_info, domain=domain" />\
 
 <%include file="/toplevel_snippets/interrupt_assigns.tpl" args="top=top, domain=domain" />\
 

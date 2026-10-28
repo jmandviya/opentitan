@@ -83,6 +83,12 @@
       randcount: "288",
       randtype:  "data"
     },
+    { name:    "RndCnstUrndPerm",
+      type:    "otbn_pkg::urnd_perm_t",
+      desc:    "Compile-time random permutation applied to the primary URND output, directly after the PRNG and before it is distributed to the rest of the design.",
+      randcount: "389",
+      randtype:  "perm"
+    },
     { name:    "SecFixMaiOpSeq"
       type:    "bit"
       default: "0"
@@ -133,6 +139,14 @@
         Compile-time random permutation for URND permutation in BN MAC.
       '''
       randcount: "256",
+      randtype:  "perm"
+    },
+    { name:    "RndCnstMaiUrndPerm",
+      type:    "otbn_pkg::mai_urnd_perm_t",
+      desc:    '''
+        Compile-time random permutation for URND permutation in MAI.
+      '''
+      randcount: "389",
       randtype:  "perm"
     },
     { name: "RndCnstOtbnKey",
@@ -241,11 +255,11 @@
     },
 
     // Key sideload
-    { struct:  "otbn_key_req"
+    { struct:  "wide_hw_key_req"
       type:    "uni"
       name:    "keymgr_key"
       act:     "rcv"
-      package: "keymgr_pkg"
+      package: "keymgr_dpe_pkg"
     },
 
     // KMAC interface
@@ -806,6 +820,27 @@
         // updates on memory writes).
         "excl:CsrAllTests:CsrExclAll"
       ]
+    }
+
+    { skipto: "0x2000" }
+
+    { multireg: {
+      name: "SCRATCH",
+      desc: '''
+        General-purpose 128-bit scratch storage for software use.
+      '''
+      count: "4",
+      cname: "SCRATCH",
+      swaccess: "rw",
+      hwaccess: "none",
+      fields: [
+        { bits: "31:0",
+          name: "SCRATCH",
+          resval: "0",
+          desc: "Scratch data"
+        }
+      ]
+      }
     }
 
     { skipto: "0x4000" }

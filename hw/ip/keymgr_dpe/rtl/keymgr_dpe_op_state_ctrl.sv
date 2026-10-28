@@ -19,6 +19,7 @@ module keymgr_dpe_op_state_ctrl
   input erase_req_i,
   input dis_req_i,
   input load_req_i,
+  input load_secondary_req_i,
 
   // `op_ack_o` signals to the top module that the requested operation is completed
   output logic op_ack_o,
@@ -55,8 +56,8 @@ module keymgr_dpe_op_state_ctrl
   // Minimum Hamming weight: 2
   // Maximum Hamming weight: 6
   //
-  localparam int StateWidth = 8;
-  typedef enum logic [StateWidth-1:0] {
+  localparam int OpStateWidth = 8;
+  typedef enum logic [OpStateWidth-1:0] {
     StIdle = 8'b11101110,
     StAdv = 8'b00000101,
     StWait = 8'b01110011,
@@ -83,17 +84,15 @@ module keymgr_dpe_op_state_ctrl
 
     unique case (state_q)
       StIdle: begin
-        if (dis_req_i) begin
-          state_d = StSingleCycle;
-        end else if (adv_req_i) begin
-          state_d = StAdv;
-        end else if (gen_req_i) begin
-          state_d = StWait;
-        end else if (erase_req_i) begin
-          state_d = StSingleCycle;
-        end else if (load_req_i) begin
-          state_d = StSingleCycle;
-        end
+        unique case (1'b1)
+          adv_req_i: state_d = StAdv;
+          gen_req_i: state_d = StWait;
+          dis_req_i,
+          erase_req_i,
+          load_req_i,
+          load_secondary_req_i: state_d = StSingleCycle;
+          default: ;
+        endcase
       end
 
       // Erasing, disabling, and loading root key happen in a single clock cycle in keymgr slot

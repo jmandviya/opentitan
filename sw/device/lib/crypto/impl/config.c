@@ -8,10 +8,14 @@
 #include "sw/device/lib/base/hardened.h"
 #include "sw/device/lib/base/mmio.h"
 #include "sw/device/lib/crypto/drivers/alert.h"
+#include "sw/device/lib/crypto/drivers/entropy.h"
 #include "sw/device/lib/crypto/drivers/keymgr_dpe.h"
 #include "sw/device/lib/crypto/drivers/otbn.h"
 #include "sw/device/lib/crypto/drivers/rv_core_ibex.h"
+#include "sw/device/lib/crypto/impl/cmvp.h"
+#include "sw/device/lib/crypto/impl/state.h"
 #include "sw/device/lib/crypto/include/entropy_src.h"
+#include "sw/device/lib/crypto/include/self_integrity.h"
 
 #include "hw/top/clkmgr_regs.h"
 #include "hw/top_earlgrey/sw/autogen/top_earlgrey.h"
@@ -32,6 +36,8 @@ otcrypto_status_t otcrypto_security_config_check(
     // enabled in ibex.
     hardened_bool_t ibex_secure_config = ibex_check_security_config();
     if (launder32(ibex_secure_config) == kHardenedBoolFalse) {
+      // COVERAGE (MISSING) Mismatched Ibex security configuration is not
+      // covered.
       return OTCRYPTO_FATAL_ERR;
     }
     HARDENED_CHECK_EQ(ibex_secure_config, kHardenedBoolTrue);
@@ -42,7 +48,7 @@ otcrypto_status_t otcrypto_security_config_check(
   return OTCRYPTO_OK;
 }
 
-otcrypto_status_t otcrypto_set_security_config(
+static status_t set_security_config_internal(
     otcrypto_key_security_level_t security_level) {
   if (launder32(security_level) != kOtcryptoKeySecurityLevelLow) {
     // Enable the jittery clock.
@@ -59,12 +65,20 @@ otcrypto_status_t otcrypto_set_security_config(
   return OTCRYPTO_OK;
 }
 
+otcrypto_status_t otcrypto_set_security_config(
+    otcrypto_key_security_level_t security_level) {
+  OTCRYPTO_LOCKED_STATE_CHECK();
+  return set_security_config_internal(security_level);
+}
+
 otcrypto_status_t otcrypto_disable_icache(hardened_bool_t *icache_enabled) {
+  OTCRYPTO_LOCKED_STATE_CHECK();
   HARDENED_TRY(ibex_disable_icache(icache_enabled));
   return OTCRYPTO_OK;
 }
 
 otcrypto_status_t otcrypto_restore_icache(hardened_bool_t icache_enabled) {
+  OTCRYPTO_LOCKED_STATE_CHECK();
   ibex_restore_icache(icache_enabled);
   return LAUNDERED_OTCRYPTO_OK;
 }
@@ -75,12 +89,26 @@ otcrypto_status_t otcrypto_clear_alerts(void) {
 }
 
 otcrypto_status_t otcrypto_init(otcrypto_key_security_level_t security_level) {
-  HARDENED_TRY(otcrypto_set_security_config(security_level));
+  HARDENED_TRY(set_security_config_internal(security_level));
 
   HARDENED_TRY(init_alert_registers());
 
-  // Instantiate the RNG.
+  // Instantiate the state in the OTBN scratch registers.
+  HARDENED_TRY(init_state(security_level));
+
+  // Instantiate the entropy source in FIPS mode.
   HARDENED_TRY(otcrypto_entropy_init());
+
+#ifdef FIPS_MODE
+  OTCRYPTO_HEALTH_CHECK(kTestRngBit);
+  OTCRYPTO_HEALTH_CHECK(kTestHashSha512Bit);
+  HARDENED_TRY(otcrypto_integrity_check());
+  crypto_state_t state;
+  HARDENED_TRY(read_state(&state));
+  state.cmvp_service_indicator = kOtcryptoCmvpNoService;
+  state.cmvp_call_depth = 0;
+  HARDENED_TRY(store_state(&state));
+#endif
 
   // The OTBN is still left with DMEM from the boot.
   HARDENED_TRY(otbn_dmem_sec_wipe());
@@ -88,20 +116,39 @@ otcrypto_status_t otcrypto_init(otcrypto_key_security_level_t security_level) {
   HARDENED_TRY(keymgr_dpe_sideload_clear_otbn());
   HARDENED_TRY(keymgr_dpe_sideload_clear_kmac());
 
-#ifdef HASH_SELF_CHECK_ENABLE
-  HARDENED_TRY(otcrypto_integrity_check());
-#endif
-
   return OTCRYPTO_OK;
 }
 
 otcrypto_status_t otcrypto_eval_exit(otcrypto_status_t status) {
-  if (read_alert_registers()) {
-    return OTCRYPTO_FATAL_ERR;
+  crypto_state_t state;
+  HARDENED_TRY(read_state(&state));
+
+  if (state.security_level != kOtcryptoKeySecurityLevelLow) {
+    // Verify the entropy source before leaving.
+    HARDENED_TRY(otcrypto_entropy_health_test_config_check());
+
+    if (read_alert_registers()) {
+      return OTCRYPTO_FATAL_ERR;
+    }
   }
 
-  // Verify the entropy source before leaving.
-  HARDENED_TRY(otcrypto_entropy_health_test_config_check());
+#ifdef FIPS_MODE
+  if (!status_ok(status)) {
+    state.cmvp_service_indicator = kOtcryptoCmvpNotApprovedService;
+  }
+  if (state.cmvp_call_depth > 0) {
+    state.cmvp_call_depth--;
+  }
+  HARDENED_TRY(store_state(&state));
+#endif
 
   return status;
+}
+
+uint8_t otcrypto_show_status(void) {
+  crypto_state_t state;
+  if (!status_ok(read_state(&state))) {
+    return kHardenedByteBoolTrue;
+  }
+  return state.locked_state;
 }

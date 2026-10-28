@@ -27,7 +27,7 @@ module i3c_core
   parameter int unsigned BufAddrW         = i3c_pkg::BufAddrW,
   parameter int unsigned DataWidth        = 32,
   parameter int unsigned NumSDALanes      = 1,
-  parameter int unsigned NumTargets       = i3c_pkg::NumTargets,
+  parameter int unsigned NumTargets       = 2,
   parameter int unsigned NumDATEntries    = i3c_pkg::NumDATEntries,
   parameter int unsigned NumDCTEntries    = i3c_pkg::NumDCTEntries,
   parameter int unsigned SWDirAddrW       = 9,
@@ -48,6 +48,11 @@ module i3c_core
   // Configuration.
   input  i3c_reg2hw_t       reg2hw_i,
   output i3c_hw2reg_t       hw2reg_o,
+
+  // Software resets for the registers.
+  output                    hci_soft_rst_o,  // Host Controller Interface (HCI) registers.
+  output                    tti_soft_rst_o,  // Target Transaction Interface (TTI) registers.
+  output                    sc_soft_rst_o,   // Standby Controller registers.
 
   // HCI Command Queue Port access.
   // HCI Response Queue Port access.
@@ -139,13 +144,9 @@ module i3c_core
   localparam int unsigned FIFODepthW = i3c_fifo_pkg::DepthW;
 
   // DFT-related signals.
-  // TODO: sync?
+  // TODO(#31335): sync?
   wire scanmode = prim_mubi_pkg::mubi4_test_true_strict(scanmode_i);
   wire unused_dft_ = ^{mbist_en_i, scan_rst_ni};
-
-  // Software resets for Controller and Target logic.
-  wire ctrl_sw_reset = reg2hw_i.reset_control.soft_rst.qe & reg2hw_i.reset_control.soft_rst.q;
-  wire targ_sw_reset = reg2hw_i.reset_control.soft_rst.qe & reg2hw_i.reset_control.soft_rst.q;
 
   // High-level enable signals.
   logic enabling, ctrl_enabled, stby_cr_enabled, targ_enabled, buf_enabled, inbuf_enable;
@@ -160,6 +161,22 @@ module i3c_core
   i3c_stby_cr_en_init_e stby_cr_en_init;
   assign stby_cr_en_init = i3c_stby_cr_en_init_e'(hw2reg_o.stby_cr_control.stby_cr_enable_init.d);
   assign stby_cr_enabled = (stby_cr_en_init inside {StbyCrEn_SCMRunning, StbyCrEn_SCMHotJoin});
+
+  // Software reset for the Host Controller registers and logic.
+  wire ctrl_sw_reset = reg2hw_i.reset_control.soft_rst.qe & reg2hw_i.reset_control.soft_rst.q;
+  assign hci_soft_rst_o = ctrl_sw_reset;
+
+  // Software reset for the Target logic.
+  // - if operating as Standby Controller, and thus sharing the Target-side logic with all other
+  //   Virtual Targets
+  wire targ_sw_reset = reg2hw_i.targ_control.sw_reset.qe & reg2hw_i.targ_control.sw_reset.q;
+  assign tti_soft_rst_o = targ_sw_reset;
+
+  // Software reset for the Standby Controller registers, but note that it shares its logic with all
+  // other Virtual Targets, so if they are reset then its registers shall be too, returning it to
+  // `SCM_DISABLED`.
+  wire stby_cr_sw_reset = ctrl_sw_reset | (targ_sw_reset & stby_cr_enabled);
+  assign sc_soft_rst_o = stby_cr_sw_reset;
 
   // Synchronize the SCL and SDA signals to the IP block, for monitoring of bus available/idle
   // condition, detection of Start Requests, and to present them in the debug state.
@@ -206,11 +223,16 @@ module i3c_core
   logic targ_scl_buf, targ_scl_buf_n;    // Posedge and negedge SCL clock signals.
   logic targ_sda0_clk, targ_sda0_clk_n;  // Posedge and negedge SDA signals, suitable for clocking.
   logic [NumSDALanes-1:0] targ_sda_buf;  // Buffered SDA lanes, to avoid SCL-relative skew.
-  logic targ_reset_trx;                  // Initiate reset of Target-side transceiver logic.
+  logic targ_trx_rst_trig;               // Initiate reset of Target-side transceiver logic.
   logic targ_trx_rst_n;                  // Asynchronous reset into Target-side transceiver.
 
   // Indicate to software whether the Target transceiver logic is still under reset.
   assign hw2reg_o.targ_status.active.d = targ_trx_rst_n;
+  // Indicate to software whether the Target transceiver logic is connected to the bus and
+  // monitoring traffic.
+  assign hw2reg_o.targ_status.connected.d = targ_trx_rst_n & inbuf_enable;
+  // Report the number of Targets supported, because any software driver will need this information.
+  assign hw2reg_o.targ_status.num_targets.d = (Target | SecondaryCtrl) ? 3'(NumTargets) : 3'b000;
 
   // We measure tAVAL from the most recently bus active _and_ the most recent transceiver reset.
   assign targ_rst_bus_avail = targ_bus_active | !targ_trx_rst_n;
@@ -222,7 +244,7 @@ module i3c_core
   // Diagnostic visibility into the Target state.
   logic [7:0] targ_trx_state;
   logic [3:0] targ_bus_mode;
-  prim_flop_2sync #(.Width(12)) u_reg_sync (  // TODO: Narrow the state variable.
+  prim_flop_2sync #(.Width(12)) u_reg_sync (  // TODO(#31307): Narrow the state variable.
     .clk_i (clk_i),
     .rst_ni(rst_ni),
     .d_i   ({targ_trx_state, targ_bus_mode}),
@@ -242,24 +264,35 @@ module i3c_core
     // Control.
     .enable_i   (targ_enabled),
     .sw_reset_i (targ_sw_reset),
-    // TODO: Error conditions requiring a reset shall be received and handled here.
+    // TODO(#31333): Error conditions requiring a reset shall be received and handled here.
+    .te_recov_i (1'b0),
 
     // Bus monitoring.
     .bus_avail_i(targ_bus_avail),
 
     // Initiate asynchronous reset of Target-side transceiver logic.
-    .reset_trx_o(targ_reset_trx),
+    .reset_trig_o(targ_trx_rst_trig),
 
     // Buffer enable for SCL and SDA into the SCL-driven target transceiver logic.
     .inbuf_en_o (inbuf_enable)
   );
 
+  // Ensure that the asynchronous reset into the Target transceiver is glitch free.
+  // TODO(#31335): scan mode will need to be able to issue a reset too.
+  logic targ_trx_prst_n;
+  prim_flop #(.Width(1), .ResetValue(0)) u_targ_rst_src (
+    .clk_i (clk_i),
+    .rst_ni(rst_ni),
+    .d_i   (targ_trx_prst_n),
+    .q_o   (targ_trx_rst_n)
+  );
+
   // Controller-side I3C input buffering.
   logic [NumSDALanes-1:0] ctrl_sda_buf;
   i3c_buf_en #(.Width(NumSDALanes)) u_ctrl_inbufs (
-    // Enable input propagation.
-    // TODO: Probably want to gate off the SDA lane when the bus is available and the Controller
-    //       does not need to drive it. We need a transceiver output to achieve this.
+    // Enable input propagation; disconnect from the SDA input only when the Controller logic is
+    // disabled; at other times even if the Controller is not active, it must still handle
+    // Start Requests from Targets.
     .en_i (ctrl_enabled),
     .in_i (ctrl_bus_obs_i.sda),
     .out_o(ctrl_sda_buf)
@@ -288,7 +321,8 @@ module i3c_core
   );
 
   // Enable for the Target Reset Detector.
-  // TODO: When the IP block is in a sleep state, the `enable` assertion will need to be maintained.
+  // TODO(#31337): When the IP block is in a sleep state, the `enable` assertion will need to be
+  // maintained.
   assign rstdet_enable_o = inbuf_enable;
 
   // TTI interrupt signal.
@@ -300,7 +334,7 @@ module i3c_core
 
   // `SDA Read Detector` (4.3.2.3) indicates whether a Private Read operation in SDR mode has
   // stalled, i.e. no SCL activity observed for at least 100us.
-  // TODO: Timing implemented but not yet routed to the core logic.
+  // TODO(#31333): Timing implemented but not yet routed to the core logic.
   logic rst_read_stalled;
   logic read_stalled;
   assign rst_read_stalled = 1'b0;
@@ -324,8 +358,11 @@ module i3c_core
   logic hdr_restart_det;
   logic hdr_exit_det;
   // Acknowledge and clear the `HDR Restart detected` condition.
+  // TODO(#31035): Target-side logic does not yet use `hdr_restart_det`; once it does, it shall
+  // acknowledge each detection here, through a registered pulse in the `clk_i` domain. Until
+  // then, the detection remains set until the HDR Restart detector is disabled.
   logic hdr_restart_done;
-  assign hdr_restart_done = hdr_restart_det;  // TODO: Target-side logic does not yet use this.
+  assign hdr_restart_done = 1'b0;
 
   // High-keeper enables; see section 4.3.3.1.
   assign scl_hk_en_o = reg2hw_i.phy_config.scl_hk_en.q;
@@ -364,15 +401,9 @@ module i3c_core
   logic ctrl_trx_rdvalid;
   logic ctrl_trx_rvalid, ctrl_trx_rready;
 
-  logic ctrl_trx_arb_nack;  // TODO: Temporary.
-
   // Timing parameters; target- and transfer-invariant.
   logic [TmCycW-1:0] ctrl_tcas_d2;
   logic [TmCycW-1:0] ctrl_tcbp_d2;
-  logic [TmCycW-1:0] ctrl_todch_d2;
-  logic [TmCycW-1:0] ctrl_todcl_d2;
-  // Enable use of the half-cycle SCL extension?
-  logic ctrl_enable_hc_scl;
 
   // Retrying of NACKed commands within the Controller.
   logic ctrl_cmd_nacked;
@@ -491,11 +522,6 @@ module i3c_core
     // Timing parameters; target- and transfer-invariant.
     .tcas_d2_o         (ctrl_tcas_d2),
     .tcbp_d2_o         (ctrl_tcbp_d2),
-    .todch_d2_o        (ctrl_todch_d2),
-    .todcl_d2_o        (ctrl_todcl_d2),
-
-    // Configuration signals to the transceiver logic.
-    .enable_hc_scl_o   (ctrl_enable_hc_scl),
 
     // Retrying of NACKed commands.
     .cmd_nacked_o      (ctrl_cmd_nacked),
@@ -510,7 +536,6 @@ module i3c_core
     .trx_avalid_i      (ctrl_trx_avalid),
     .trx_arb_i         (ctrl_trx_arb),
     .trx_aready_o      (ctrl_trx_aready),
-    .trx_arb_nack_o    (ctrl_trx_arb_nack),
 
     // Read data from the transceiver logic.
     .trx_rdvalid_i     (ctrl_trx_rdvalid),
@@ -561,17 +586,18 @@ module i3c_core
   );
 
   // Status outputs from Target logic.
-  logic hdr_exit_det_en;  // Enable HDR Exit Pattern detector.
+  logic hdr_exit_det_en;     // Enable HDR Exit Pattern detector.
+  logic hdr_restart_det_en;  // Enable HDR Restart Pattern detector.
 
   // Target device descriptions.
-  i3c_targ_dev_t      targ_dev[NumTargets];
+  i3c_targ_dev_t      targ_dev[MaxTargets];
   // Group address descriptions.
   i3c_grp_addr_t      grp_addr[NumGroups];
 
   // Interface between Target logic and transceiver.
-  logic               targ_trx_dvalid[NumTargets];
-  logic               targ_trx_dready[NumTargets];
-  i3c_targ_trx_txd_t  targ_trx_dreq[NumTargets];
+  logic               targ_trx_dvalid[MaxTargets];
+  logic               targ_trx_dready[MaxTargets];
+  i3c_targ_trx_txd_t  targ_trx_dreq[MaxTargets];
 
   // Direct Read CCC data for all Targets is carried as a single unit.
   logic               targ_trx_ctvalid;
@@ -641,22 +667,23 @@ module i3c_core
   end
 
   // Suspend transmission from Virtual Targets.
-  logic [NumTargets-1:0] targ_suspend_tx;
+  logic [MaxTargets-1:0] targ_suspend_tx;
   assign hw2reg_o.targ_pio_control.suspended.de = |targ_suspend_tx;
   assign hw2reg_o.targ_pio_control.suspended.d  = reg2hw_i.targ_pio_control.suspended.q
                                                 | targ_suspend_tx;
   // Suspend IBI Transmission from target; hardware only ever sets the 'suspended' bit.
   assign hw2reg_o.targ_pio_control.ibi_suspended.d = 1'b1;
   // Abort clearing.
-  logic [NumTargets-1:0] targ_abort_clr;
+  logic [MaxTargets-1:0] targ_abort_clr;
   assign hw2reg_o.targ_pio_control.abort.de = |targ_abort_clr;
-  assign hw2reg_o.targ_pio_control.abort.d  = reg2hw_i.targ_pio_control.abort.q & ~targ_abort_clr;
+  assign hw2reg_o.targ_pio_control.abort.d  = reg2hw_i.targ_pio_control.abort.q
+                                            & ~targ_abort_clr;
   assign hw2reg_o.targ_pio_control.ibi_abort.d = 1'b0;  // Hardware only ever clears the 'abort'.
 
   // Shared configuration/status for all Virtual Targets.
-  logic [NumTargets-1:0] targ_mwl_de;
-  logic [NumTargets-1:0] targ_mrl_de;
-  logic [NumTargets-1:0] targ_ibi_de;
+  logic [MaxTargets-1:0] targ_mwl_de;
+  logic [MaxTargets-1:0] targ_mrl_de;
+  logic [MaxTargets-1:0] targ_ibi_de;
   logic           [15:0] targ_mwl_d;
   logic           [15:0] targ_mrl_d;
   logic            [7:0] targ_ibi_d;
@@ -664,7 +691,7 @@ module i3c_core
   logic                  targ_grp_addr_de[MaxGroups];
   logic                  targ_grp_targ_de[MaxGroups];
   logic            [6:0] targ_grp_addr_d[MaxGroups];
-  logic [NumTargets-1:0] targ_grp_targ_d[MaxGroups];
+  logic [MaxTargets-1:0] targ_grp_targ_d[MaxGroups];
 
   // Enable/disable Events for a set of Virtual Targets.
   i3c_endis_event_t targ_endis_evt;
@@ -682,9 +709,9 @@ module i3c_core
   end
 
   // Updating of Target dynamic addresses.
-  logic [NumTargets-1:0] targ_dynaddr_de;
+  logic [MaxTargets-1:0] targ_dynaddr_de;
   logic                  targ_dynaddr_valid_d;
-  logic            [6:0] targ_dynaddr_d[NumTargets];
+  logic            [6:0] targ_dynaddr_d[MaxTargets];
   always_comb begin
     for (int unsigned t = 0; t < MaxTargets; t++) begin
       if (t < NumTargets) begin
@@ -698,12 +725,12 @@ module i3c_core
   end
 
   // Updating of Target Activity State (ENTASn) and ENDXFER configuration.
-  logic [NumTargets-1:0] targ_act_state_de;
+  logic [MaxTargets-1:0] targ_act_state_de;
   logic            [1:0] targ_act_state_d;
-  logic [NumTargets-1:0] targ_endxfer_cand_de;
+  logic [MaxTargets-1:0] targ_endxfer_cand_de;
   logic            [2:0] targ_endxfer_cand_d;
-  logic [NumTargets-1:0] targ_endxfer_de;
-  logic            [2:0] targ_endxfer_d[NumTargets];
+  logic [MaxTargets-1:0] targ_endxfer_de;
+  logic            [2:0] targ_endxfer_d[MaxTargets];
   always_comb begin
     for (int unsigned t = 0; t < MaxTargets; t++) begin
       if (t < NumTargets) begin
@@ -737,7 +764,7 @@ module i3c_core
   assign hw2reg_o.targ_status.rstact.d =
     i3c_rstact_e'(hw2reg_o.stby_cr_ccc_config_rstact_params.rst_action.d);
 
-  // TODO: Recovery from TE0.
+  // TODO(#31333): Recovery from TE0.
   logic te0_recov;
 
   // Target Error counting (TE[6:0], Table 43).
@@ -746,8 +773,11 @@ module i3c_core
 
   // The Asynchronous Event Queue also has a queue-specific reset under software control.
   logic async_evt_rst;
-  assign async_evt_rst = reg2hw_i.targ_async_evt_control.reset.qe
-                       & reg2hw_i.targ_async_evt_control.reset.q;
+  assign async_evt_rst = reg2hw_i.targ_async_evt_control.queue_reset.qe
+                       & reg2hw_i.targ_async_evt_control.queue_reset.q;
+
+  // TODO(#31035): This driver should be in `i3c_target`.
+  assign hdr_restart_det_en = targ_ddr_mode;
 
   // Target core.
   i3c_target #(
@@ -770,7 +800,7 @@ module i3c_core
     .stby_cr_enabled_i    (stby_cr_enabled),
     .sw_reset_i           (targ_sw_reset),
     .async_evt_rst_i      (async_evt_rst),
-    // TODO: Target core logic will need to be aware of reset/enable of transceiver logic.
+    // TODO(#31035): Target core logic will need to be aware of reset/enable of transceiver logic.
 
     // HDR pattern detection.
     .hdr_exit_det_i       (hdr_exit_det),
@@ -796,6 +826,8 @@ module i3c_core
 
     // Control outputs.
     .hdr_exit_det_en_o    (hdr_exit_det_en),
+    // TODO(#31035):
+    // .hdr_restart_det_en_o (hdr_restart_det_en),
 
     // Bus signals, already synchronized to the IP clock domain.
     .scl_i                (targ_scl_sync),
@@ -808,7 +840,6 @@ module i3c_core
     .dynaddr_de_o         (targ_dynaddr_de),
     .dynaddr_valid_d_o    (targ_dynaddr_valid_d),
     .dynaddr_d_o          (targ_dynaddr_d),
-    .virt_targ_det_o      (hw2reg_o.targ_status.rstact_virt_targ_det.d),  // I3C Basic 4.3.7.3.23.2.
     .mwl_de_o             (targ_mwl_de),
     .mrl_de_o             (targ_mrl_de),
     .ibi_de_o             (targ_ibi_de),
@@ -958,93 +989,104 @@ module i3c_core
 
   // Buffer configuration.
   // - a single physical buffer implements a number of logical FIFOs.
-  assign fifo_cfg[FIFO_CmdQ].min   = BufAddrW'(reg2hw_i.command_queue_config.min_addr.q);
-  assign fifo_cfg[FIFO_CmdQ].max   = BufAddrW'(reg2hw_i.command_queue_config.max_addr.q);
-  assign fifo_cfg[FIFO_CmdQ].size  = fifo_size(fifo_cfg[FIFO_CmdQ]);
+  assign fifo_cfg[FIFO_CmdQ].min_addr = BufAddrW'(reg2hw_i.command_queue_config.min_addr.q);
+  assign fifo_cfg[FIFO_CmdQ].max_addr = BufAddrW'(reg2hw_i.command_queue_config.max_addr.q);
+  assign fifo_cfg[FIFO_CmdQ].size     = fifo_size(fifo_cfg[FIFO_CmdQ]);
 
-  assign fifo_cfg[FIFO_RspQ].min   = BufAddrW'(reg2hw_i.response_queue_config.min_addr.q);
-  assign fifo_cfg[FIFO_RspQ].max   = BufAddrW'(reg2hw_i.response_queue_config.max_addr.q);
-  assign fifo_cfg[FIFO_RspQ].size  = fifo_size(fifo_cfg[FIFO_RspQ]);
+  assign fifo_cfg[FIFO_RspQ].min_addr = BufAddrW'(reg2hw_i.response_queue_config.min_addr.q);
+  assign fifo_cfg[FIFO_RspQ].max_addr = BufAddrW'(reg2hw_i.response_queue_config.max_addr.q);
+  assign fifo_cfg[FIFO_RspQ].size     = fifo_size(fifo_cfg[FIFO_RspQ]);
 
-  assign fifo_cfg[FIFO_IBIQ].min   = BufAddrW'(reg2hw_i.ibi_config.min_addr.q);
-  assign fifo_cfg[FIFO_IBIQ].max   = BufAddrW'(reg2hw_i.ibi_config.max_addr.q);
-  assign fifo_cfg[FIFO_IBIQ].size  = fifo_size(fifo_cfg[FIFO_IBIQ]);
+  assign fifo_cfg[FIFO_IBIQ].min_addr = BufAddrW'(reg2hw_i.ibi_config.min_addr.q);
+  assign fifo_cfg[FIFO_IBIQ].max_addr = BufAddrW'(reg2hw_i.ibi_config.max_addr.q);
+  assign fifo_cfg[FIFO_IBIQ].size     = fifo_size(fifo_cfg[FIFO_IBIQ]);
 
-  assign fifo_cfg[FIFO_IBIStD].min   = BufAddrW'(reg2hw_i.ibi_stat_config.min_addr.q);
-  assign fifo_cfg[FIFO_IBIStD].max   = BufAddrW'(reg2hw_i.ibi_stat_config.max_addr.q);
-  assign fifo_cfg[FIFO_IBIStD].size  = fifo_size(fifo_cfg[FIFO_IBIStD]);
+  assign fifo_cfg[FIFO_IBIStD].min_addr = BufAddrW'(reg2hw_i.ibi_stat_config.min_addr.q);
+  assign fifo_cfg[FIFO_IBIStD].max_addr = BufAddrW'(reg2hw_i.ibi_stat_config.max_addr.q);
+  assign fifo_cfg[FIFO_IBIStD].size     = fifo_size(fifo_cfg[FIFO_IBIStD]);
 
-  assign fifo_cfg[FIFO_TxBuf].min   = BufAddrW'(reg2hw_i.ctrl_txbuf_config.min_addr.q);
-  assign fifo_cfg[FIFO_TxBuf].max   = BufAddrW'(reg2hw_i.ctrl_txbuf_config.max_addr.q);
-  assign fifo_cfg[FIFO_TxBuf].size  = fifo_size(fifo_cfg[FIFO_TxBuf]);
+  assign fifo_cfg[FIFO_TxBuf].min_addr = BufAddrW'(reg2hw_i.ctrl_txbuf_config.min_addr.q);
+  assign fifo_cfg[FIFO_TxBuf].max_addr = BufAddrW'(reg2hw_i.ctrl_txbuf_config.max_addr.q);
+  assign fifo_cfg[FIFO_TxBuf].size     = fifo_size(fifo_cfg[FIFO_TxBuf]);
 
-  assign fifo_cfg[FIFO_RxBuf].min   = BufAddrW'(reg2hw_i.ctrl_rxbuf_config.min_addr.q);
-  assign fifo_cfg[FIFO_RxBuf].max   = BufAddrW'(reg2hw_i.ctrl_rxbuf_config.max_addr.q);
-  assign fifo_cfg[FIFO_RxBuf].size  = fifo_size(fifo_cfg[FIFO_RxBuf]);
+  assign fifo_cfg[FIFO_RxBuf].min_addr = BufAddrW'(reg2hw_i.ctrl_rxbuf_config.min_addr.q);
+  assign fifo_cfg[FIFO_RxBuf].max_addr = BufAddrW'(reg2hw_i.ctrl_rxbuf_config.max_addr.q);
+  assign fifo_cfg[FIFO_RxBuf].size     = fifo_size(fifo_cfg[FIFO_RxBuf]);
 
-  assign fifo_cfg[FIFO_IBITarg].min  = BufAddrW'(reg2hw_i.targ_ibi_config.min_addr.q);
-  assign fifo_cfg[FIFO_IBITarg].max  = BufAddrW'(reg2hw_i.targ_ibi_config.min_addr.q);
-  assign fifo_cfg[FIFO_IBITarg].size = fifo_size(fifo_cfg[FIFO_IBITarg]);
+  assign fifo_cfg[FIFO_IBITarg].min_addr = BufAddrW'(reg2hw_i.targ_ibi_config.min_addr.q);
+  assign fifo_cfg[FIFO_IBITarg].max_addr = BufAddrW'(reg2hw_i.targ_ibi_config.max_addr.q);
+  assign fifo_cfg[FIFO_IBITarg].size     = fifo_size(fifo_cfg[FIFO_IBITarg]);
 
-  assign fifo_cfg[FIFO_RxTarg].min  = BufAddrW'(reg2hw_i.targ_rxbuf_config.min_addr.q);
-  assign fifo_cfg[FIFO_RxTarg].max  = BufAddrW'(reg2hw_i.targ_rxbuf_config.max_addr.q);
-  assign fifo_cfg[FIFO_RxTarg].size = fifo_size(fifo_cfg[FIFO_RxTarg]);
+  assign fifo_cfg[FIFO_RxTarg].min_addr = BufAddrW'(reg2hw_i.targ_rxbuf_config.min_addr.q);
+  assign fifo_cfg[FIFO_RxTarg].max_addr = BufAddrW'(reg2hw_i.targ_rxbuf_config.max_addr.q);
+  assign fifo_cfg[FIFO_RxTarg].size     = fifo_size(fifo_cfg[FIFO_RxTarg]);
 
-  assign fifo_cfg[FIFO_RxDTarg].min  = BufAddrW'(reg2hw_i.targ_rxdesc_config.min_addr.q);
-  assign fifo_cfg[FIFO_RxDTarg].max  = BufAddrW'(reg2hw_i.targ_rxdesc_config.max_addr.q);
-  assign fifo_cfg[FIFO_RxDTarg].size = fifo_size(fifo_cfg[FIFO_RxDTarg]);
+  assign fifo_cfg[FIFO_RxDTarg].min_addr = BufAddrW'(reg2hw_i.targ_rxdesc_config.min_addr.q);
+  assign fifo_cfg[FIFO_RxDTarg].max_addr = BufAddrW'(reg2hw_i.targ_rxdesc_config.max_addr.q);
+  assign fifo_cfg[FIFO_RxDTarg].size     = fifo_size(fifo_cfg[FIFO_RxDTarg]);
 
-  assign fifo_cfg[FIFO_IBIDTarg].min  = BufAddrW'(reg2hw_i.targ_ibidesc_config.min_addr.q);
-  assign fifo_cfg[FIFO_IBIDTarg].max  = BufAddrW'(reg2hw_i.targ_ibidesc_config.max_addr.q);
-  assign fifo_cfg[FIFO_IBIDTarg].size = fifo_size(fifo_cfg[FIFO_IBIDTarg]);
+  assign fifo_cfg[FIFO_IBIDTarg].min_addr = BufAddrW'(reg2hw_i.targ_ibidesc_config.min_addr.q);
+  assign fifo_cfg[FIFO_IBIDTarg].max_addr = BufAddrW'(reg2hw_i.targ_ibidesc_config.max_addr.q);
+  assign fifo_cfg[FIFO_IBIDTarg].size     = fifo_size(fifo_cfg[FIFO_IBIDTarg]);
 
-  assign fifo_cfg[FIFO_AsyncTarg].min  = BufAddrW'(reg2hw_i.targ_async_config.min_addr.q);
-  assign fifo_cfg[FIFO_AsyncTarg].max  = BufAddrW'(reg2hw_i.targ_async_config.max_addr.q);
-  assign fifo_cfg[FIFO_AsyncTarg].size = fifo_size(fifo_cfg[FIFO_AsyncTarg]);
+  assign fifo_cfg[FIFO_AsyncTarg].min_addr = BufAddrW'(reg2hw_i.targ_async_config.min_addr.q);
+  assign fifo_cfg[FIFO_AsyncTarg].max_addr = BufAddrW'(reg2hw_i.targ_async_config.max_addr.q);
+  assign fifo_cfg[FIFO_AsyncTarg].size     = fifo_size(fifo_cfg[FIFO_AsyncTarg]);
 
   // The number of extant Virtual Targets may be configured; extract their buffer configuration.
   for (genvar t = 0; t < NumTargets; t++) begin : gen_vt_buf_config
-    assign fifo_cfg[FIFO_TxTarg0 + t].min  = BufAddrW'(reg2hw_i.targ_txbuf_config[t].min_addr.q);
-    assign fifo_cfg[FIFO_TxTarg0 + t].max  = BufAddrW'(reg2hw_i.targ_txbuf_config[t].max_addr.q);
-    assign fifo_cfg[FIFO_TxTarg0 + t].size = fifo_size(fifo_cfg[FIFO_TxTarg0 + t]);
+    assign fifo_cfg[FIFO_TxTarg0 + t].min_addr =
+        BufAddrW'(reg2hw_i.targ_txbuf_config[t].min_addr.q);
+    assign fifo_cfg[FIFO_TxTarg0 + t].max_addr =
+        BufAddrW'(reg2hw_i.targ_txbuf_config[t].max_addr.q);
+    assign fifo_cfg[FIFO_TxTarg0 + t].size     = fifo_size(fifo_cfg[FIFO_TxTarg0 + t]);
 
-    assign fifo_cfg[FIFO_TxDTarg0 + t].min  = BufAddrW'(reg2hw_i.targ_txdesc_config[t].min_addr.q);
-    assign fifo_cfg[FIFO_TxDTarg0 + t].max  = BufAddrW'(reg2hw_i.targ_txdesc_config[t].max_addr.q);
-    assign fifo_cfg[FIFO_TxDTarg0 + t].size = fifo_size(fifo_cfg[FIFO_TxDTarg0 + t]);
+    assign fifo_cfg[FIFO_TxDTarg0 + t].min_addr =
+        BufAddrW'(reg2hw_i.targ_txdesc_config[t].min_addr.q);
+    assign fifo_cfg[FIFO_TxDTarg0 + t].max_addr =
+        BufAddrW'(reg2hw_i.targ_txdesc_config[t].max_addr.q);
+    assign fifo_cfg[FIFO_TxDTarg0 + t].size     = fifo_size(fifo_cfg[FIFO_TxDTarg0 + t]);
   end
   for (genvar t = NumTargets; t < MaxTargets; t++) begin : gen_no_vt_buf_config
-    assign fifo_cfg[FIFO_TxTarg0  + t].min  = 'b0;
-    assign fifo_cfg[FIFO_TxTarg0  + t].max  = 'b0;
-    assign fifo_cfg[FIFO_TxTarg0  + t].size = 'b0;
-    assign fifo_cfg[FIFO_TxDTarg0 + t].min  = 'b0;
-    assign fifo_cfg[FIFO_TxDTarg0 + t].max  = 'b0;
-    assign fifo_cfg[FIFO_TxDTarg0 + t].size = 'b0;
+    assign fifo_cfg[FIFO_TxTarg0  + t].min_addr = 'b0;
+    assign fifo_cfg[FIFO_TxTarg0  + t].max_addr = 'b0;
+    assign fifo_cfg[FIFO_TxTarg0  + t].size     = 'b0;
+    assign fifo_cfg[FIFO_TxDTarg0 + t].min_addr = 'b0;
+    assign fifo_cfg[FIFO_TxDTarg0 + t].max_addr = 'b0;
+    assign fifo_cfg[FIFO_TxDTarg0 + t].size     = 'b0;
   end
 
   // FIFO software reset signals.
   // - when first enabling one or more FIFO use cases, `i3c_buffer` needs to initialize pointers.
-  wire buffer_clear = (reg2hw_i.buffer_ctrl.clear.qe & reg2hw_i.buffer_ctrl.clear.q) | enabling;
-  assign fifo_rst[FIFO_CmdQ]   = (reg2hw_i.reset_control.cmd_queue_rst.qe &
-                                  reg2hw_i.reset_control.cmd_queue_rst.q) | buffer_clear;
-  assign fifo_rst[FIFO_RspQ]   = (reg2hw_i.reset_control.resp_queue_rst.qe &
-                                  reg2hw_i.reset_control.resp_queue_rst.q) | buffer_clear;
-  assign fifo_rst[FIFO_IBIQ]   = (reg2hw_i.reset_control.ibi_queue_rst.qe &
-                                  reg2hw_i.reset_control.ibi_queue_rst.q) | buffer_clear;
-  assign fifo_rst[FIFO_IBIStD] = fifo_rst[FIFO_IBIQ];
-  assign fifo_rst[FIFO_TxBuf]  = (reg2hw_i.reset_control.tx_fifo_rst.qe &
-                                  reg2hw_i.reset_control.tx_fifo_rst.q) | buffer_clear;
-  assign fifo_rst[FIFO_RxBuf]  = (reg2hw_i.reset_control.rx_fifo_rst.qe &
-                                  reg2hw_i.reset_control.rx_fifo_rst.q) | buffer_clear;
+  // - there is also a global reset (`BUFFER_CTRL.CLEAR`) for software use _when the IP block is
+  //   disabled_.
+  // - both the HCI and the TTI require that their associated FIFOs be cleared when the software
+  //   reset is asserted (`RESET_CONTROL.SOFT_RST` and `TARG_CONTROL.SW_RESET`).
+  wire buffer_clear  = (reg2hw_i.buffer_ctrl.clear.qe & reg2hw_i.buffer_ctrl.clear.q) | enabling;
+  wire hci_buf_clear = ctrl_sw_reset | buffer_clear;
+  wire tti_buf_clear = targ_sw_reset | buffer_clear;
 
-  assign fifo_rst[FIFO_RxTarg]    = buffer_clear;
-  assign fifo_rst[FIFO_IBITarg]   = buffer_clear;
-  assign fifo_rst[FIFO_RxDTarg]   = buffer_clear;
-  assign fifo_rst[FIFO_IBIDTarg]  = buffer_clear;
-  assign fifo_rst[FIFO_AsyncTarg] = buffer_clear | async_evt_rst;
+  assign fifo_rst[FIFO_CmdQ]   = (reg2hw_i.reset_control.cmd_queue_rst.qe &
+                                  reg2hw_i.reset_control.cmd_queue_rst.q) | hci_buf_clear;
+  assign fifo_rst[FIFO_RspQ]   = (reg2hw_i.reset_control.resp_queue_rst.qe &
+                                  reg2hw_i.reset_control.resp_queue_rst.q) | hci_buf_clear;
+  assign fifo_rst[FIFO_IBIQ]   = (reg2hw_i.reset_control.ibi_queue_rst.qe &
+                                  reg2hw_i.reset_control.ibi_queue_rst.q) | hci_buf_clear;
+  assign fifo_rst[FIFO_IBIStD] = fifo_rst[FIFO_IBIQ];  // As above.
+  assign fifo_rst[FIFO_TxBuf]  = (reg2hw_i.reset_control.tx_fifo_rst.qe &
+                                  reg2hw_i.reset_control.tx_fifo_rst.q) | hci_buf_clear;
+  assign fifo_rst[FIFO_RxBuf]  = (reg2hw_i.reset_control.rx_fifo_rst.qe &
+                                  reg2hw_i.reset_control.rx_fifo_rst.q) | hci_buf_clear;
+
+  assign fifo_rst[FIFO_RxTarg]    = tti_buf_clear;
+  assign fifo_rst[FIFO_IBITarg]   = tti_buf_clear;
+  assign fifo_rst[FIFO_RxDTarg]   = tti_buf_clear;
+  assign fifo_rst[FIFO_IBIDTarg]  = tti_buf_clear;
+  assign fifo_rst[FIFO_AsyncTarg] = tti_buf_clear | async_evt_rst;
 
   for (genvar t = 0; t < MaxTargets; t++) begin : gen_targ_fifo_rst
-    assign fifo_rst[FIFO_TxTarg0  + t] = buffer_clear;
-    assign fifo_rst[FIFO_TxDTarg0 + t] = buffer_clear;
+    assign fifo_rst[FIFO_TxTarg0  + t] = tti_buf_clear;
+    assign fifo_rst[FIFO_TxDTarg0 + t] = tti_buf_clear;
   end
 
   // Diagnostic information about the virtual FIFOs is presented in the register API.
@@ -1128,11 +1170,13 @@ module i3c_core
   assign ibi_read  = ibi_status_desc ? fifo_in[FIFO_IBIStD].rready   : fifo_in[FIFO_IBIQ].rready;
 
   // Diagnostic indicators reporting invalid queue access; implies a driver error.
+  // - clear them in response to a software reset, but since they share a register and registers
+  //   support only a single `reinit` signal, we must do this manually; diagnostic, not critical.
   logic hciq_access_err, ttiq_access_err;
-  assign hw2reg_o.buffer_status.hciq_err.de = hciq_access_err;
-  assign hw2reg_o.buffer_status.hciq_err.d  = 1'b1;
-  assign hw2reg_o.buffer_status.ttiq_err.de = ttiq_access_err;
-  assign hw2reg_o.buffer_status.ttiq_err.d  = 1'b1;
+  assign hw2reg_o.buffer_status.hciq_err.de = hciq_access_err | ctrl_sw_reset;
+  assign hw2reg_o.buffer_status.hciq_err.d  = ~ctrl_sw_reset;
+  assign hw2reg_o.buffer_status.ttiq_err.de = ttiq_access_err | targ_sw_reset;
+  assign hw2reg_o.buffer_status.ttiq_err.d  = ~targ_sw_reset;
 
   logic hci_wvalid[HCI_Count], tti_wvalid[TTI_Count];
   logic hci_rready[HCI_Count], tti_rready[TTI_Count];
@@ -1197,30 +1241,30 @@ module i3c_core
     .rdata_o     (bufq_rdata_o[TL_HCI]),
 
     // Writes to logical queues.
-    .buf_wready_i({fifo_out[FIFO_CmdQ].wready,
-                   fifo_out[FIFO_RspQ].wready,
-                   fifo_out[FIFO_TxBuf].wready,
-                   fifo_out[FIFO_IBIQ].wready}),
-    .buf_full_i  ({fifo_state[FIFO_CmdQ].full,
-                   fifo_state[FIFO_RspQ].full,
-                   fifo_state[FIFO_TxBuf].full,
-                   fifo_state[FIFO_IBIQ].full}),
+    .buf_wready_i('{fifo_out[FIFO_CmdQ].wready,
+                    fifo_out[FIFO_RspQ].wready,
+                    fifo_out[FIFO_TxBuf].wready,
+                    fifo_out[FIFO_IBIQ].wready}),
+    .buf_full_i  ('{fifo_state[FIFO_CmdQ].full,
+                    fifo_state[FIFO_RspQ].full,
+                    fifo_state[FIFO_TxBuf].full,
+                    fifo_state[FIFO_IBIQ].full}),
     .buf_wvalid_o(hci_wvalid),
     .buf_wdata_o (hci_wdata),
 
     // Reads from logical queues.
-    .buf_rvalid_i({fifo_out[FIFO_CmdQ].rvalid,
-                   fifo_out[FIFO_RspQ].rvalid,
-                   fifo_out[FIFO_RxBuf].rvalid,
-                   ibi_avail}),
-    .buf_rdata_i ({fifo_out[FIFO_CmdQ].rdata,
-                   fifo_out[FIFO_RspQ].rdata,
-                   fifo_out[FIFO_RxBuf].rdata,
-                   ibi_rdata}),
-    .buf_empty_i ({fifo_state[FIFO_CmdQ].empty,
-                   fifo_state[FIFO_RspQ].empty,
-                   fifo_state[FIFO_RxBuf].empty,
-                   ibi_empty}),
+    .buf_rvalid_i('{fifo_out[FIFO_CmdQ].rvalid,
+                    fifo_out[FIFO_RspQ].rvalid,
+                    fifo_out[FIFO_RxBuf].rvalid,
+                    ibi_avail}),
+    .buf_rdata_i ('{fifo_out[FIFO_CmdQ].rdata,
+                    fifo_out[FIFO_RspQ].rdata,
+                    fifo_out[FIFO_RxBuf].rdata,
+                    ibi_rdata}),
+    .buf_empty_i ('{fifo_state[FIFO_CmdQ].empty,
+                    fifo_state[FIFO_RspQ].empty,
+                    fifo_state[FIFO_RxBuf].empty,
+                    ibi_empty}),
     .buf_rready_o(hci_rready),
 
     // Diagnostic error indicator.
@@ -1248,81 +1292,81 @@ module i3c_core
     .rdata_o     (bufq_rdata_o[TL_TTI]),
 
     // Writes to logical queues.
-    .buf_wready_i({fifo_out[FIFO_RxDTarg].wready,
-                   fifo_out[FIFO_RxTarg].wready,
-                   fifo_out[FIFO_IBIDTarg].wready,
-                   fifo_out[FIFO_IBITarg].wready,
-                   fifo_out[FIFO_AsyncTarg].wready,
-                   fifo_out[FIFO_TxDTarg0].wready,
-                   fifo_out[FIFO_TxDTarg1].wready,
-                   fifo_out[FIFO_TxDTarg2].wready,
-                   fifo_out[FIFO_TxDTarg3].wready,
-                   fifo_out[FIFO_TxTarg0].wready,
-                   fifo_out[FIFO_TxTarg1].wready,
-                   fifo_out[FIFO_TxTarg2].wready,
-                   fifo_out[FIFO_TxTarg3].wready}),
-    .buf_full_i  ({fifo_state[FIFO_RxDTarg].full,
-                   fifo_state[FIFO_RxTarg].full,
-                   fifo_state[FIFO_IBIDTarg].full,
-                   fifo_state[FIFO_IBITarg].full,
-                   fifo_state[FIFO_AsyncTarg].full,
-                   // Qualifying the `full` signals for the Virtual Targets both allows synthesis to
-                   // strip out unused logic and prevents system-side bus accesses from locking up;
-                   // writes will complete immediately.
-                   fifo_state[FIFO_TxDTarg0].full | (NumTargets < 1),
-                   fifo_state[FIFO_TxDTarg1].full | (NumTargets < 2),
-                   fifo_state[FIFO_TxDTarg2].full | (NumTargets < 3),
-                   fifo_state[FIFO_TxDTarg3].full | (NumTargets < 4),
-                   fifo_state[FIFO_TxTarg0].full  | (NumTargets < 1),
-                   fifo_state[FIFO_TxTarg1].full  | (NumTargets < 2),
-                   fifo_state[FIFO_TxTarg2].full  | (NumTargets < 3),
-                   fifo_state[FIFO_TxTarg3].full  | (NumTargets < 4)}),
+    .buf_wready_i('{fifo_out[FIFO_RxDTarg].wready,
+                    fifo_out[FIFO_RxTarg].wready,
+                    fifo_out[FIFO_IBIDTarg].wready,
+                    fifo_out[FIFO_IBITarg].wready,
+                    fifo_out[FIFO_AsyncTarg].wready,
+                    fifo_out[FIFO_TxDTarg0].wready,
+                    fifo_out[FIFO_TxDTarg1].wready,
+                    fifo_out[FIFO_TxDTarg2].wready,
+                    fifo_out[FIFO_TxDTarg3].wready,
+                    fifo_out[FIFO_TxTarg0].wready,
+                    fifo_out[FIFO_TxTarg1].wready,
+                    fifo_out[FIFO_TxTarg2].wready,
+                    fifo_out[FIFO_TxTarg3].wready}),
+    .buf_full_i  ('{fifo_state[FIFO_RxDTarg].full,
+                    fifo_state[FIFO_RxTarg].full,
+                    fifo_state[FIFO_IBIDTarg].full,
+                    fifo_state[FIFO_IBITarg].full,
+                    fifo_state[FIFO_AsyncTarg].full,
+                    // Qualifying the `full` signals for the Virtual Targets both allows synthesis
+                    // to strip out unused logic and prevents system-side bus accesses from locking
+                    // up; writes will complete immediately.
+                    fifo_state[FIFO_TxDTarg0].full | (NumTargets < 1),
+                    fifo_state[FIFO_TxDTarg1].full | (NumTargets < 2),
+                    fifo_state[FIFO_TxDTarg2].full | (NumTargets < 3),
+                    fifo_state[FIFO_TxDTarg3].full | (NumTargets < 4),
+                    fifo_state[FIFO_TxTarg0].full  | (NumTargets < 1),
+                    fifo_state[FIFO_TxTarg1].full  | (NumTargets < 2),
+                    fifo_state[FIFO_TxTarg2].full  | (NumTargets < 3),
+                    fifo_state[FIFO_TxTarg3].full  | (NumTargets < 4)}),
     .buf_wvalid_o(tti_wvalid),
     .buf_wdata_o (tti_wdata),
 
     // Reads from logical queues.
-    .buf_rvalid_i({fifo_out[FIFO_RxDTarg].rvalid,
-                   fifo_out[FIFO_RxTarg].rvalid,
-                   fifo_out[FIFO_IBIDTarg].rvalid,
-                   fifo_out[FIFO_IBITarg].rvalid,
-                   fifo_out[FIFO_AsyncTarg].rvalid,
-                   fifo_out[FIFO_TxDTarg0].rvalid,
-                   fifo_out[FIFO_TxDTarg1].rvalid,
-                   fifo_out[FIFO_TxDTarg2].rvalid,
-                   fifo_out[FIFO_TxDTarg3].rvalid,
-                   fifo_out[FIFO_TxTarg0].rvalid,
-                   fifo_out[FIFO_TxTarg1].rvalid,
-                   fifo_out[FIFO_TxTarg2].rvalid,
-                   fifo_out[FIFO_TxTarg3].rvalid}),
-    .buf_rdata_i ({fifo_out[FIFO_RxDTarg].rdata,
-                   fifo_out[FIFO_RxTarg].rdata,
-                   fifo_out[FIFO_IBIDTarg].rdata,
-                   fifo_out[FIFO_IBITarg].rdata,
-                   fifo_out[FIFO_AsyncTarg].rdata,
-                   fifo_out[FIFO_TxDTarg0].rdata,
-                   fifo_out[FIFO_TxDTarg1].rdata,
-                   fifo_out[FIFO_TxDTarg2].rdata,
-                   fifo_out[FIFO_TxDTarg3].rdata,
-                   fifo_out[FIFO_TxTarg0].rdata,
-                   fifo_out[FIFO_TxTarg1].rdata,
-                   fifo_out[FIFO_TxTarg2].rdata,
-                   fifo_out[FIFO_TxTarg3].rdata}),
-    .buf_empty_i ({fifo_state[FIFO_RxDTarg].empty,
-                   fifo_state[FIFO_RxTarg].empty,
-                   fifo_state[FIFO_IBIDTarg].empty,
-                   fifo_state[FIFO_IBITarg].empty,
-                   fifo_state[FIFO_AsyncTarg].empty,
-                   // Qualifying the `empty` signals for the Virtual Targets both allows synthesis
-                   // to strip out unused logic and prevents system-side bus accesses from locking
-                   // up; writes will complete immediately.
-                   fifo_state[FIFO_TxDTarg0].empty | (NumTargets < 1),
-                   fifo_state[FIFO_TxDTarg1].empty | (NumTargets < 2),
-                   fifo_state[FIFO_TxDTarg2].empty | (NumTargets < 3),
-                   fifo_state[FIFO_TxDTarg3].empty | (NumTargets < 4),
-                   fifo_state[FIFO_TxTarg0].empty  | (NumTargets < 1),
-                   fifo_state[FIFO_TxTarg1].empty  | (NumTargets < 2),
-                   fifo_state[FIFO_TxTarg2].empty  | (NumTargets < 3),
-                   fifo_state[FIFO_TxTarg3].empty  | (NumTargets < 4)}),
+    .buf_rvalid_i('{fifo_out[FIFO_RxDTarg].rvalid,
+                    fifo_out[FIFO_RxTarg].rvalid,
+                    fifo_out[FIFO_IBIDTarg].rvalid,
+                    fifo_out[FIFO_IBITarg].rvalid,
+                    fifo_out[FIFO_AsyncTarg].rvalid,
+                    fifo_out[FIFO_TxDTarg0].rvalid,
+                    fifo_out[FIFO_TxDTarg1].rvalid,
+                    fifo_out[FIFO_TxDTarg2].rvalid,
+                    fifo_out[FIFO_TxDTarg3].rvalid,
+                    fifo_out[FIFO_TxTarg0].rvalid,
+                    fifo_out[FIFO_TxTarg1].rvalid,
+                    fifo_out[FIFO_TxTarg2].rvalid,
+                    fifo_out[FIFO_TxTarg3].rvalid}),
+    .buf_rdata_i ('{fifo_out[FIFO_RxDTarg].rdata,
+                    fifo_out[FIFO_RxTarg].rdata,
+                    fifo_out[FIFO_IBIDTarg].rdata,
+                    fifo_out[FIFO_IBITarg].rdata,
+                    fifo_out[FIFO_AsyncTarg].rdata,
+                    fifo_out[FIFO_TxDTarg0].rdata,
+                    fifo_out[FIFO_TxDTarg1].rdata,
+                    fifo_out[FIFO_TxDTarg2].rdata,
+                    fifo_out[FIFO_TxDTarg3].rdata,
+                    fifo_out[FIFO_TxTarg0].rdata,
+                    fifo_out[FIFO_TxTarg1].rdata,
+                    fifo_out[FIFO_TxTarg2].rdata,
+                    fifo_out[FIFO_TxTarg3].rdata}),
+    .buf_empty_i ('{fifo_state[FIFO_RxDTarg].empty,
+                    fifo_state[FIFO_RxTarg].empty,
+                    fifo_state[FIFO_IBIDTarg].empty,
+                    fifo_state[FIFO_IBITarg].empty,
+                    fifo_state[FIFO_AsyncTarg].empty,
+                    // Qualifying the `empty` signals for the Virtual Targets both allows synthesis
+                    // to strip out unused logic and prevents system-side bus accesses from locking
+                    // up; writes will complete immediately.
+                    fifo_state[FIFO_TxDTarg0].empty | (NumTargets < 1),
+                    fifo_state[FIFO_TxDTarg1].empty | (NumTargets < 2),
+                    fifo_state[FIFO_TxDTarg2].empty | (NumTargets < 3),
+                    fifo_state[FIFO_TxDTarg3].empty | (NumTargets < 4),
+                    fifo_state[FIFO_TxTarg0].empty  | (NumTargets < 1),
+                    fifo_state[FIFO_TxTarg1].empty  | (NumTargets < 2),
+                    fifo_state[FIFO_TxTarg2].empty  | (NumTargets < 3),
+                    fifo_state[FIFO_TxTarg3].empty  | (NumTargets < 4)}),
     .buf_rready_o(tti_rready),
 
     // Diagnostic error indicator.
@@ -1345,13 +1389,36 @@ module i3c_core
   i3c_buffer #(
     .BufAddrW  (BufAddrW),
     .DataWidth (DataWidth),
-    .NumFifos  (FIFO_Count),
+    .NumFifos  (int'(FIFO_Count)),
     // These FIFOs are involved in the transmission of data over the I3C bus, which means that
     // read prefetching must be prioritized over writing.
     .DirTx     (FIFO_Count'((1 << FIFO_CmdQ)    | (1 << FIFO_TxBuf)    |
                             (1 << FIFO_TxTarg0) | (1 << FIFO_TxDTarg0) |
                             (1 << FIFO_TxTarg1) | (1 << FIFO_TxDTarg1) |
-                            (1 << FIFO_IBITarg) | (1 << FIFO_IBIDTarg)))
+                            (1 << FIFO_IBITarg) | (1 << FIFO_IBIDTarg))),
+    // Presenting the default FIFO configuration permits the message buffer to initialize the write
+    // and read pointers for each FIFO such that they match the register descriptions even before
+    // any of the logic is enabled; this helps with CSR tests.
+    // - the FIFOs are listed in the order of their enumeration in `i3c_fifo_pkg`.
+    .DefMin    ('{I3C_TARG_TXBUF_STATE_0_WPTR_0_RESVAL,   // FIFO_TxTarg0
+                  I3C_TARG_TXBUF_STATE_1_WPTR_1_RESVAL,   // FIFO_TxTarg1
+                  I3C_TARG_TXBUF_STATE_2_WPTR_2_RESVAL,   // FIFO_TxTarg2
+                  I3C_TARG_TXBUF_STATE_3_WPTR_3_RESVAL,   // FIFO_TxTarg3
+                  I3C_CTRL_TXBUF_STATE_WPTR_RESVAL,       // FIFO_TxBuf
+                  I3C_TARG_IBI_STATE_WPTR_RESVAL,         // FIFO_IBITarg
+                  I3C_TARG_RXBUF_STATE_WPTR_RESVAL,       // FIFO_RxTarg
+                  I3C_CTRL_RXBUF_STATE_WPTR_RESVAL,       // FIFO_RxBuf
+                  I3C_IBI_STATE_WPTR_RESVAL,              // FIFO_IBIQ
+                  I3C_IBI_STAT_STATE_WPTR_RESVAL,         // FIFO_IBIStD
+                  I3C_RESPONSE_QUEUE_STATE_WPTR_RESVAL,   // FIFO_RspQ
+                  I3C_COMMAND_QUEUE_STATE_WPTR_RESVAL,    // FIFO_CmdQ
+                  I3C_TARG_TXDESC_STATE_0_WPTR_0_RESVAL,  // FIFO_TxDTarg0
+                  I3C_TARG_TXDESC_STATE_1_WPTR_1_RESVAL,  // FIFO_TxDTarg1
+                  I3C_TARG_TXDESC_STATE_2_WPTR_2_RESVAL,  // FIFO_TxDTarg2
+                  I3C_TARG_TXDESC_STATE_3_WPTR_3_RESVAL,  // FIFO_TxDTarg3
+                  I3C_TARG_RXDESC_STATE_WPTR_RESVAL,      // FIFO_RxDTarg
+                  I3C_TARG_IBIDESC_STATE_WPTR_RESVAL,     // FIFO_IBIDTarg
+                  I3C_TARG_ASYNC_STATE_WPTR_RESVAL})      // FIFO_AsyncTarg
   ) u_buf (
     .clk_i          (clk_i),
     .rst_ni         (rst_ni),
@@ -1417,7 +1484,6 @@ module i3c_core
     .trx_avalid_o    (ctrl_trx_avalid),
     .trx_arb_o       (ctrl_trx_arb),
     .trx_aready_i    (ctrl_trx_aready),
-    .trx_arb_nack_i  (ctrl_trx_arb_nack),
 
     // Read data from the transceiver.
     .trx_rdvalid_o   (ctrl_trx_rdvalid),
@@ -1431,10 +1497,6 @@ module i3c_core
     // Timing parameters; target- and transfer-invariant.
     .tcas_d2_i       (ctrl_tcas_d2),
     .tcbp_d2_i       (ctrl_tcbp_d2),
-    .todch_d2_i      (ctrl_todch_d2),
-    .todcl_d2_i      (ctrl_todcl_d2),
-    // Enable the use of the half-cycle SCL extension?
-    .enable_hc_scl_i (ctrl_enable_hc_scl),
 
     // Start request signaling from Targets.
     .sreq_sda_i      (ctrl_sda_sync | !ctrl_bus_avail),
@@ -1549,7 +1611,7 @@ module i3c_core
                    ctrl_bus_active,
                    rst_read_stalled,
                    targ_rst_bus_avail,
-                   targ_reset_trx,
+                   targ_trx_rst_trig,
                    targ_bus_active,
                    targ_bus_active,
                    ctrl_cmd_nacked}),
@@ -1559,7 +1621,7 @@ module i3c_core
                    ctrl_bus_avail,
                    read_stalled,
                    targ_bus_avail,
-                   targ_trx_rst_n,
+                   targ_trx_prst_n,
                    te0_recov,
                    targ_bus_idle,
                    ctrl_cmd_retry})
@@ -1569,20 +1631,21 @@ module i3c_core
   // - HDR Exit, HDR Restart.
   i3c_patt_detector u_patt_det (
     // No free-running clock from the IP block code; driven by SCL.
-    .rst_ni            (rst_ni),
+    .rst_ni              (rst_ni),
 
     // I3C I/O signaling.
-    .scl_i             (targ_scl_buf),
-    .sda_clk_i         (targ_sda0_clk),
-    .sda_clk_ni        (targ_sda0_clk_n),
+    .scl_buf_i           (targ_scl_buf),
+    .sda_clk_i           (targ_sda0_clk),
+    .sda_clk_ni          (targ_sda0_clk_n),
 
     // Control inputs.
-    .hdr_exit_det_en_i (hdr_exit_det_en),
-    .hdr_restart_done_i(hdr_restart_done),
+    .hdr_exit_det_en_i   (hdr_exit_det_en),
+    .hdr_restart_det_en_i(hdr_restart_det_en),
+    .hdr_restart_done_i  (hdr_restart_done),
 
     // HDR pattern detection.
-    .hdr_exit_det_o    (hdr_exit_det),
-    .hdr_restart_det_o (hdr_restart_det)
+    .hdr_exit_det_o      (hdr_exit_det),
+    .hdr_restart_det_o   (hdr_restart_det)
   );
 
   // IP block information.
@@ -1670,7 +1733,11 @@ module i3c_core
   );
 
   // General Host Controller interrupts.
-  i3c_intr #(.Width($bits(i3c_hc_intr_t)), .Event('1)) u_hc_intr (  // TODO: Check interrupt types.
+  // TODO(#31334): Check interrupt types.
+  i3c_intr #(
+    .Width    ($bits(i3c_hc_intr_t)),
+    .EventType({$bits(i3c_hc_intr_t){1'b1}})
+  ) u_hc_intr (
     .event_i    (hc_interrupts),
 
     .status_en_i({reg2hw_i.intr_status_enable.sched_cmd_missed_tick_stat_en.q,
@@ -1714,8 +1781,8 @@ module i3c_core
   );
 
   // PIO interrupts.
-  // TODO: Check interrupt types.
-  i3c_intr #(.Width($bits(i3c_pio_intr_t)), .Event(7'b11_00000)) u_pio_intr (
+  // TODO(#31334): Check interrupt types.
+  i3c_intr #(.Width($bits(i3c_pio_intr_t)), .EventType(7'b11_00000)) u_pio_intr (
     .event_i    (pio_interrupts),
 
     .status_en_i({reg2hw_i.pio_intr_status_enable.transfer_err_stat_en.q,
@@ -1768,8 +1835,11 @@ module i3c_core
   );
 
   // Secondary Controller interrupts.
-  // TODO: Check interrupt types.
-  i3c_intr #(.Width($bits(i3c_stby_cr_intr_t)), .Event('1)) u_stby_cr_intr (
+  // TODO(#31334): Check interrupt types.
+  i3c_intr #(
+    .Width    ($bits(i3c_stby_cr_intr_t)),
+    .EventType({$bits(i3c_stby_cr_intr_t){1'b1}})
+  ) u_stby_cr_intr (
     .event_i    (stby_cr_interrupts),
 
     .status_en_i('1),  // No INTR_STATUS_ENABLE for these interrupts.
@@ -1850,8 +1920,8 @@ module i3c_core
   );
 
   // Target-side interrupts; these are additional to those of the Standby Controller.
-  // TODO: Check interrupt types.
-  i3c_intr #(.Width($bits(i3c_targ_intr_t)), .Event('0)) u_targ_intr (
+  // TODO(#31334): Check interrupt types.
+  i3c_intr #(.Width($bits(i3c_targ_intr_t)), .EventType('0)) u_targ_intr (
     .event_i    (targ_interrupts),
 
     .status_en_i({reg2hw_i.targ_intr_status_enable.te_stat_en.q,
@@ -1961,6 +2031,9 @@ module i3c_core
     .clk_i                   (clk_i),
     .rst_ni                  (rst_ni),
 
+    // Software reset for Controller registers.
+    .sw_reset_i              (stby_cr_sw_reset),
+
     // Software register access.
     .reg2hw_i                (reg2hw_i),
     // Currently the Active Controller?
@@ -1989,7 +2062,7 @@ module i3c_core
   // HCI information fields.
   // - `BASE` is at offset 'h100 within the I3C block register space.
   // - offsets are specified relative to that base.
-  localparam bit [11:0] BASE_OFFSET = I3C_HCI_VERSION_OFFSET;
+  localparam logic [BlockAw-1:0] BASE_OFFSET = I3C_HCI_VERSION_OFFSET;
   assign hw2reg_o.hci_version.d = 'h120;
   // Controller Device Address.
   // - as the Active Controller this may be set by software before Controller Role handoff.
@@ -2018,11 +2091,11 @@ module i3c_core
   assign hw2reg_o.pio_section_offset.d              = 16'(I3C_HCI_PORTS_OFFSET - BASE_OFFSET);
   assign hw2reg_o.dat_section_offset.entry_size.d   = 'h0;
   assign hw2reg_o.dat_section_offset.table_size.d   = 7'(NumDATEntries);
-  assign hw2reg_o.dat_section_offset.table_offset.d = 16'(I3C_DAT_OFFSET - BASE_OFFSET);
+  assign hw2reg_o.dat_section_offset.table_offset.d = 12'(I3C_DAT_OFFSET - BASE_OFFSET);
   assign hw2reg_o.dct_section_offset.entry_size.d   = 'h0;
   assign hw2reg_o.dct_section_offset.table_index.d  = dct_idx;
   assign hw2reg_o.dct_section_offset.table_size.d   = 7'(NumDCTEntries);
-  assign hw2reg_o.dct_section_offset.table_offset.d = 16'(I3C_DCT_OFFSET - BASE_OFFSET);
+  assign hw2reg_o.dct_section_offset.table_offset.d = 12'(I3C_DCT_OFFSET - BASE_OFFSET);
   assign hw2reg_o.ring_headers_section_offset.d     = '0;
   // The start of the Extended Capabilities linked-list; we know that Hardware Identification is
   // the first entry in the list.
@@ -2186,5 +2259,137 @@ module i3c_core
 
   // Target clearing of Hot-Join request, once acknowledged by the Active Controller.
   assign hw2reg_o.targ_control.hj_request.d = 1'b0;
+
+  // Signals that the logic does not use (yet).
+  // - register fields of features that are not implemented, and `reinit` strobes of registers that
+  //   hold no state beyond the register itself.
+  logic unused_reg2hw;
+  assign unused_reg2hw = ^{
+    reg2hw_i.ctrl_error.reinit, reg2hw_i.data_buffer_thld_ctrl.reinit,
+    reg2hw_i.dbr_engage.dbr_asx_timing.q, reg2hw_i.dbr_engage.dbr_asx_timing.qe,
+    reg2hw_i.dbr_engage.dbr_ibi_address.q, reg2hw_i.dbr_engage.dbr_ibi_address.qe,
+    reg2hw_i.dbr_engage.dbr_mode.q, reg2hw_i.dbr_engage.dbr_mode.qe,
+    reg2hw_i.dbr_engage.dbr_verif_key.q, reg2hw_i.dbr_engage.dbr_verif_key.qe,
+    reg2hw_i.ibi_data_abort_ctrl.after_n_chunks.q,
+    reg2hw_i.ibi_data_abort_ctrl.ibi_data_abort_mon.q,
+    reg2hw_i.ibi_data_abort_ctrl.match_ibi_id.q,
+    reg2hw_i.ibi_data_abort_ctrl.match_status_type.q, reg2hw_i.ibi_data_abort_ctrl.reinit,
+    reg2hw_i.ibi_notify_ctrl.reinit, reg2hw_i.intr_force.reinit,
+    reg2hw_i.intr_signal_enable.reinit, reg2hw_i.intr_status.reinit,
+    reg2hw_i.intr_status_enable.reinit, reg2hw_i.mx_error_counters.q, reg2hw_i.phy_config.reinit,
+    reg2hw_i.pio_control.reinit, reg2hw_i.pio_intr_force.cmd_queue_ready_force.qe,
+    reg2hw_i.pio_intr_force.ibi_thld_force.qe, reg2hw_i.pio_intr_force.reinit,
+    reg2hw_i.pio_intr_force.resp_ready_force.qe, reg2hw_i.pio_intr_force.rx_thld_force.qe,
+    reg2hw_i.pio_intr_force.tx_thld_force.qe, reg2hw_i.pio_intr_signal_enable.reinit,
+    reg2hw_i.pio_intr_status.reinit, reg2hw_i.pio_intr_status_enable.reinit,
+    reg2hw_i.queue_thld_ctrl.reinit, reg2hw_i.reset_det_ctrl.rst_periph_en.qe,
+    reg2hw_i.reset_det_ctrl.rst_target_en.qe, reg2hw_i.reset_det_ctrl.sleep_req.qe,
+    reg2hw_i.reset_det_ctrl.wake_ack.q, reg2hw_i.reset_det_ctrl.wake_ack.qe,
+    reg2hw_i.stby_cr_ccc_config_rstact_params.rst_action.q,
+    reg2hw_i.stby_cr_ccc_config_rstact_params.rst_action.qe, reg2hw_i.stby_cr_intr_force.reinit,
+    reg2hw_i.stby_cr_intr_signal_enable.reinit, reg2hw_i.stby_cr_intr_status.reinit,
+    reg2hw_i.targ_async_evt_control.bcst_ccc.qe, reg2hw_i.targ_async_evt_control.bus_events.qe,
+    reg2hw_i.targ_async_evt_control.dir_get_ccc.qe,
+    reg2hw_i.targ_async_evt_control.dir_set_ccc.qe,
+    reg2hw_i.targ_async_evt_control.ibi_notify.qe,
+    reg2hw_i.targ_async_evt_control.ibi_suspend.qe, reg2hw_i.targ_async_evt_control.reinit,
+    reg2hw_i.targ_async_evt_control.tx_notify.qe, reg2hw_i.targ_async_evt_control.tx_suspend.qe,
+    reg2hw_i.targ_buf_thld_ctrl.reinit, reg2hw_i.targ_buf_thld_ctrl.rx_segment_size.q,
+    reg2hw_i.targ_buf_thld_ctrl.rx_start_thld.q, reg2hw_i.targ_control.hj_request.q,
+    reg2hw_i.targ_control.hj_request.qe, reg2hw_i.targ_control.reinit,
+    reg2hw_i.targ_error.reinit, reg2hw_i.targ_intr_force.async_evt_ovf_force.qe,
+    reg2hw_i.targ_intr_force.async_evt_ready_force.qe,
+    reg2hw_i.targ_intr_force.ibi_thld_force.qe, reg2hw_i.targ_intr_force.reinit,
+    reg2hw_i.targ_intr_force.rx_buffer_ovf_force.qe,
+    reg2hw_i.targ_intr_force.rx_desc_ready_force.qe, reg2hw_i.targ_intr_force.te_force.qe,
+    reg2hw_i.targ_intr_force.transfer_abort_force.qe,
+    reg2hw_i.targ_intr_force.transfer_err_force.qe,
+    reg2hw_i.targ_intr_force.tx0_desc_ready_force.qe, reg2hw_i.targ_intr_force.tx0_thld_force.qe,
+    reg2hw_i.targ_intr_force.tx1_desc_ready_force.qe, reg2hw_i.targ_intr_force.tx1_thld_force.qe,
+    reg2hw_i.targ_intr_force.tx2_desc_ready_force.qe, reg2hw_i.targ_intr_force.tx2_thld_force.qe,
+    reg2hw_i.targ_intr_force.tx3_desc_ready_force.qe, reg2hw_i.targ_intr_force.tx3_thld_force.qe,
+    reg2hw_i.targ_intr_signal_enable.reinit, reg2hw_i.targ_intr_status.reinit,
+    reg2hw_i.targ_intr_status_enable.reinit, reg2hw_i.targ_pio_control.abort.qe,
+    reg2hw_i.targ_pio_control.ibi_abort.q, reg2hw_i.targ_pio_control.ibi_abort.qe,
+    reg2hw_i.targ_pio_control.reinit, reg2hw_i.targ_queue_thld_ctrl.reinit,
+    reg2hw_i.targ_sink_control.reinit, reg2hw_i.targ_status.ext_info.q,
+    reg2hw_i.targ_status.ext_info.qe, reg2hw_i.targ_status.protocol_error.qe,
+    reg2hw_i.targ_sink_control.buffer.q[2]
+  };
+  // - register fields of all Virtual Targets.
+  logic [MaxTargets-1:0] unused_targ_reg2hw;
+  for (genvar t = 0; t < MaxTargets; t++) begin : gen_unused_targ_reg2hw
+    if (t < NumTargets) begin : gen_extant
+      assign unused_targ_reg2hw[t] = ^{
+        reg2hw_i.targ_addr[t].reinit, reg2hw_i.targ_caps[t].reinit,
+        reg2hw_i.targ_char[t].reinit, reg2hw_i.targ_enable[t].reinit,
+        reg2hw_i.targ_event_enable[t], reg2hw_i.targ_ibi_len[t].reinit,
+        reg2hw_i.targ_info[t].reinit, reg2hw_i.targ_max_rdwr[t].reinit,
+        reg2hw_i.targ_pid_lo[t].reinit, reg2hw_i.targ_rw_len[t].reinit,
+        reg2hw_i.targ_tx_thld_ctrl[t].reinit
+      };
+    end else begin : gen_non_extant
+      // Non-extant Virtual Targets.
+      assign unused_targ_reg2hw[t] = ^{
+        reg2hw_i.targ_addr[t], reg2hw_i.targ_caps[t], reg2hw_i.targ_char[t],
+        reg2hw_i.targ_enable[t], reg2hw_i.targ_event_enable[t], reg2hw_i.targ_ibi_len[t],
+        reg2hw_i.targ_info[t], reg2hw_i.targ_max_rdwr[t], reg2hw_i.targ_pid_lo[t],
+        reg2hw_i.targ_rw_len[t],
+        reg2hw_i.targ_tx_thld_ctrl[t], reg2hw_i.targ_txbuf_config[t],
+        reg2hw_i.targ_txdesc_config[t]
+      };
+    end
+  end
+  logic [MaxGroups-1:0] unused_targ_group_reinit;
+  for (genvar grp = 0; grp < MaxGroups; grp++) begin : gen_unused_targ_group_reinit
+    assign unused_targ_group_reinit[grp] = reg2hw_i.targ_group[grp].reinit;
+  end
+  // - the configuration updates of the Virtual Targets that this instance does not implement.
+  //   The Target core ties these slices off, and the register interface above presents them to
+  //   software as zero rather than from these signals.
+  logic unused_absent_vt;
+  always_comb begin
+    unused_absent_vt = 1'b0;
+    for (int unsigned t = NumTargets; t < MaxTargets; t++) begin
+      unused_absent_vt ^= ^{targ_mwl_de[t], targ_mrl_de[t], targ_ibi_de[t],
+                            targ_endis_evt.enint[t], targ_endis_evt.disint[t],
+                            targ_endis_evt.encr[t], targ_endis_evt.discr[t],
+                            targ_endis_evt.enhj[t], targ_endis_evt.dishj[t],
+                            targ_dynaddr_de[t], targ_dynaddr_d[t], targ_act_state_de[t],
+                            targ_endxfer_cand_de[t], targ_endxfer_de[t], targ_endxfer_d[t]};
+    end
+  end
+  // - FIFO status that is not presented to software or the Controller/Target logic.
+  logic unused_fifo_state;
+  always_comb begin
+    unused_fifo_state = ^{fifo_state[FIFO_IBIQ].avail, fifo_state[FIFO_IBIStD].avail,
+                          fifo_state[FIFO_RspQ].avail, fifo_state[FIFO_CmdQ].used,
+                          fifo_state[FIFO_RxDTarg].avail, fifo_state[FIFO_IBIDTarg].used,
+                          fifo_state[FIFO_AsyncTarg].avail};
+    for (int unsigned t = NumTargets; t < MaxTargets; t++) begin
+      unused_fifo_state ^= ^{fifo_state[FIFO_TxTarg0 + t], fifo_state[FIFO_TxDTarg0 + t]};
+    end
+  end
+  // - handshakes of queue directions that software does not support, and of non-extant Virtual
+  //   Targets.
+  logic unused_queue_handshakes;
+  always_comb begin
+    unused_queue_handshakes = ^{hci_wvalid[HCI_Response], hci_wvalid[HCI_IBI],
+                                hci_rready[HCI_Command], tti_wvalid[TTI_RxDesc],
+                                tti_wvalid[TTI_RxData], tti_wvalid[TTI_AsyncEvt],
+                                tti_rready[TTI_IBIDesc], tti_rready[TTI_IBIData]};
+    for (int unsigned t = 0; t < MaxTargets; t++) begin
+      unused_queue_handshakes ^= tti_rready[TTI_Tx0Desc + t] ^ tti_rready[TTI_Tx0Data + t];
+    end
+    for (int unsigned t = NumTargets; t < MaxTargets; t++) begin
+      unused_queue_handshakes ^= tti_wvalid[TTI_Tx0Desc + t] ^ tti_wvalid[TTI_Tx0Data + t];
+    end
+  end
+  // - only the lower address bits select an HCI queue.
+  logic unused_hci_addr;
+  assign unused_hci_addr = ^bufq_addr_i[TL_HCI][3:2];
+  // - TODO(#31333): timers whose outputs are not yet routed to the core logic.
+  logic unused_timers;
+  assign unused_timers = ^{read_stalled, te0_recov};
 
 endmodule

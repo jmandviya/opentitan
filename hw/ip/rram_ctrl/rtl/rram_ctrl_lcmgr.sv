@@ -55,6 +55,8 @@ module rram_ctrl_lcmgr
 
   // seeds to the outside world,
   output logic [NumSeeds-1:0][SeedWidth-1:0] seeds_o,
+  // a seed is valid if both reads of the seed returned the same value without error
+  output logic [NumSeeds-1:0]                seeds_valid_o,
 
   // fatal errors
   output logic fatal_err_o,
@@ -74,6 +76,9 @@ module rram_ctrl_lcmgr
 
   // disable access to RRAM
   output lc_tx_t rma_dis_access_o,
+
+  // disable software access to RRAM
+  output lc_tx_t rma_sw_dis_o,
 
   // scrambling keys have been read and are valid
   output logic keys_valid_o,
@@ -96,6 +101,10 @@ module rram_ctrl_lcmgr
 
   // the various seed outputs
   logic [NumSeeds-1:0][SeedReads-1:0][BusWidth-1:0] seeds_q;
+  logic [NumSeeds-1:0]                              seeds_valid_d, seeds_valid_q;
+  // set if a read error or a mismatch between the two reads of the current seed occurred
+  logic                                             seed_fail_d, seed_fail_q;
+  logic                                             seed_word_mismatch;
 
   // lfsr for local entropy usage
   logic [31:0] rand_val;
@@ -174,17 +183,21 @@ module rram_ctrl_lcmgr
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
-      rma_ack_q    <= lc_ctrl_pkg::Off;
-      validate_q   <= 1'b0;
-      seed_err_q   <= '0;
-      keys_valid_q <= '0;
-      init_done_q  <= '0;
+      rma_ack_q     <= lc_ctrl_pkg::Off;
+      validate_q    <= 1'b0;
+      seed_err_q    <= '0;
+      seeds_valid_q <= '0;
+      seed_fail_q   <= 1'b0;
+      keys_valid_q  <= '0;
+      init_done_q   <= '0;
     end else begin
-      rma_ack_q    <= rma_ack_d;
-      validate_q   <= validate_d;
-      seed_err_q   <= seed_err_d;
-      keys_valid_q <= keys_valid_d;
-      init_done_q  <= init_done_d;
+      rma_ack_q     <= rma_ack_d;
+      validate_q    <= validate_d;
+      seed_err_q    <= seed_err_d;
+      seeds_valid_q <= seeds_valid_d;
+      seed_fail_q   <= seed_fail_d;
+      keys_valid_q  <= keys_valid_d;
+      init_done_q   <= init_done_d;
     end
   end
 
@@ -294,20 +307,20 @@ module rram_ctrl_lcmgr
 
   // The RRAM is read twice per seed word. On the first pass (validate_q == 0)
   // the word is stored directly. On the second pass (validate_q == 1) the new
-  // read value is ANDed with the stored value: if any bit differs between the
-  // two reads, the stored word is silently corrupted resulting in a wrong seed.
+  // read value is compared against the stored value. A mismatch invalidates the
+  // seed and is flagged via seed_err.
   logic [NumSeeds-1:0][SeedReads-1:0][BusWidth-1:0] seeds_d;
 
   always_comb begin
     seeds_d = seeds_q;
-    if (seed_phase && rvalid_i) begin
-      if (validate_q) begin
-        seeds_d[seed_idx][rd_idx] = seeds_q[seed_idx][rd_idx] & rdata_i[BusWidth-1:0];
-      end else begin
-        seeds_d[seed_idx][rd_idx] = rdata_i[BusWidth-1:0];
-      end
+    if (seed_phase && rvalid_i && !validate_q) begin
+      seeds_d[seed_idx][rd_idx] = rdata_i[BusWidth-1:0];
     end
   end
+
+  // Compare the second read of a seed word against the stored first read.
+  assign seed_word_mismatch = seed_phase && rvalid_i && validate_q &&
+                              (seeds_q[seed_idx][rd_idx] != rdata_i[BusWidth-1:0]);
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
@@ -423,7 +436,9 @@ module rram_ctrl_lcmgr
     num_words = SeedReads - 10'd1;
 
     // seed status
-    seed_err_d = seed_err_q;
+    seed_err_d    = seed_err_q;
+    seeds_valid_d = seeds_valid_q;
+    seed_fail_d   = seed_fail_q;
 
     state_d    = state_q;
     rma_ack_d  = lc_ctrl_pkg::Off;
@@ -445,6 +460,9 @@ module rram_ctrl_lcmgr
 
     // disable RRAM access entirely
     rma_dis_access_o = lc_ctrl_pkg::Off;
+
+    // disable software access to RRAM
+    rma_sw_dis_o = lc_ctrl_pkg::Off;
 
     state_err = 1'b0;
 
@@ -490,14 +508,26 @@ module rram_ctrl_lcmgr
         start = 1'b1;
         addr = BusAddrW'(seed_page_addr);
 
+        // a mismatch between the two reads of a seed word is a seed error
+        if (seed_word_mismatch) begin
+          seed_err_d  = 1'b1;
+          seed_fail_d = 1'b1;
+        end
+
+        // a seed word with an integrity error invalidates the seed (reported via intg_err_o)
+        if (rvalid_i && data_err) begin
+          seed_fail_d = 1'b1;
+        end
+
         // we have checked all seeds, proceed
         addr_cnt_en = rvalid_i;
         if (seed_cnt_q == NumSeeds) begin
           start   = 1'b0;
           state_d = StWait;
         end else if (done_i) begin
-          seed_err_d = |err_i;
-          state_d    = StReadEval;
+          seed_err_d  = seed_err_d | (|err_i);
+          seed_fail_d = seed_fail_d | (|err_i);
+          state_d     = StReadEval;
         end
       end // case: StReadSeeds
 
@@ -507,8 +537,11 @@ module rram_ctrl_lcmgr
         state_d      = StReadSeeds;
 
         if (validate_q) begin
-          seed_cnt_en = 1'b1;
-          validate_d  = 1'b0;
+          // Both reads of the seed are done. The seed is valid if neither of them failed.
+          seeds_valid_d[seed_idx] = ~seed_fail_q;
+          seed_fail_d             = 1'b0;
+          seed_cnt_en             = 1'b1;
+          validate_d              = 1'b0;
         end else begin
           validate_d = 1'b1;
         end
@@ -525,6 +558,7 @@ module rram_ctrl_lcmgr
       // Reseed entropy
       StEntropyReseed: begin
         lfsr_seed_en = 1'b1;
+        rma_sw_dis_o = lc_ctrl_pkg::On;
         state_d      = StRmaWipe;
       end
 
@@ -538,6 +572,8 @@ module rram_ctrl_lcmgr
         phase          = PhaseRma;
         lfsr_en        = 1'b1;
         rma_wipe_req_d = 1'b1;
+        // Software must not access the RRAM while it is being wiped
+        rma_sw_dis_o   = lc_ctrl_pkg::On;
 
         if (rma_wipe_idx == MaxWipeEntry[WipeIdxWidth-1:0] && rma_wipe_done) begin
           // first check for error status
@@ -556,9 +592,10 @@ module rram_ctrl_lcmgr
       // Otherwise assign output to error status;
       StRmaRsp: begin
         phase            = PhaseNone;
-        // The original idea was to disable full RRAM access after RMA, but this does not work
-        // because lc_ctrl tries to access the OTP after an RMA operation.
-        // TODO(30948): disable access only for SW
+        // RRAM access cannot be disabled entirely after a successful RMA, because lc_ctrl still
+        // accesses the OTP to program the new life cycle state. Only the software access is
+        // disabled until the next reset. On an error, the RRAM is disabled entirely in StInvalid.
+        rma_sw_dis_o     = lc_ctrl_pkg::On;
         if (lc_ctrl_pkg::lc_tx_test_false_loose(err_sts_q)) begin
           state_d = StInvalid;
         end else begin
@@ -571,6 +608,7 @@ module rram_ctrl_lcmgr
       StDisabled: begin
         rma_dis_access_o = lc_ctrl_pkg::On;
         rma_ack_d        = lc_ctrl_pkg::Off;
+        seeds_valid_d    = '0;
         state_d          = StDisabled;
       end
 
@@ -578,6 +616,7 @@ module rram_ctrl_lcmgr
         rma_dis_access_o = lc_ctrl_pkg::On;
         state_err        = 1'b1;
         rma_ack_d        = lc_ctrl_pkg::Off;
+        seeds_valid_d    = '0;
         state_d          = StInvalid;
       end
 
@@ -586,6 +625,7 @@ module rram_ctrl_lcmgr
         rma_dis_access_o = lc_ctrl_pkg::On;
         state_err        = 1'b1;
         keys_valid_d     = 1'b0;
+        seeds_valid_d    = '0;
         state_d          = StInvalid;
       end
 
@@ -599,8 +639,9 @@ module rram_ctrl_lcmgr
     if (prim_mubi_pkg::mubi4_test_true_loose(disable_i) &&
         state_d != StInvalid &&
         !rma_done) begin
-      state_d      = StDisabled;
-      keys_valid_d = 1'b0;
+      state_d       = StDisabled;
+      keys_valid_d  = 1'b0;
+      seeds_valid_d = '0;
     end
 
   end // always_comb
@@ -610,6 +651,15 @@ module rram_ctrl_lcmgr
   // transition to disabled state as we need to continue acknowledging lc_ctrl.
   `ASSERT(DisableChk_A, prim_mubi_pkg::mubi4_test_true_loose(disable_i) & state_q != StRmaRsp
           |=> state_q == StDisabled)
+
+  // A seed can only become valid after both reads of it have completed without failure.
+  `ASSERT(SeedValidAfterEval_A, |(seeds_valid_d & ~seeds_valid_q) |->
+          state_q == StReadEval && validate_q && !seed_fail_q)
+  // Software access is only disabled from the start of the RMA wipe on.
+  `ASSERT(RmaSwDisOnlyInRma_A, rma_sw_dis_o == lc_ctrl_pkg::On |->
+          state_q inside {StEntropyReseed, StRmaWipe, StRmaRsp})
+  // lc_ctrl is never acknowledged while software can still access the RRAM.
+  `ASSERT(RmaAckWithSwDis_A, rma_ack_d == lc_ctrl_pkg::On |-> rma_sw_dis_o == lc_ctrl_pkg::On)
 
 
   ///////////////////////////////
@@ -963,8 +1013,10 @@ module rram_ctrl_lcmgr
 
   assign req_o    = seed_phase | rma_phase;
   assign rready_o = 1'b1;
-  assign seeds_o  = seeds_q;
-  assign phase_o  = phase;
+
+  assign seeds_o       = seeds_q;
+  assign seeds_valid_o = seeds_valid_q;
+  assign phase_o       = phase;
 
   assign rma_ack_o = rma_ack_q;
 

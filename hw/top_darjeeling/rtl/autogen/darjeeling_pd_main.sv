@@ -47,6 +47,7 @@ module darjeeling_pd_main #(
   parameter bit SecAesSkipPRNGReseeding = 1'b0,
   // parameters for kmac
   parameter bit KmacEnMasking = 1,
+  parameter bit KmacEnFullKmac = 1,
   parameter bit KmacSwKeyMasked = 0,
   parameter int SecKmacCmdDelay = 0,
   parameter bit SecKmacIdleAcceptSwMsg = 0,
@@ -79,6 +80,7 @@ module darjeeling_pd_main #(
   parameter int SramCtrlMainNumPrinceRoundsHalf = 3,
   parameter int SramCtrlMainNumAddrScrRounds = 2,
   parameter bit SramCtrlMainEccCorrection = 0,
+  parameter bit SecSramCtrlMainZeroInit = 0,
   // parameters for sram_ctrl_mbox
   parameter int SramCtrlMboxInstSize = 4096,
   parameter int SramCtrlMboxNumRamInst = 1,
@@ -86,6 +88,7 @@ module darjeeling_pd_main #(
   parameter int SramCtrlMboxNumPrinceRoundsHalf = 3,
   parameter int SramCtrlMboxNumAddrScrRounds = 2,
   parameter bit SramCtrlMboxEccCorrection = 0,
+  parameter bit SecSramCtrlMboxZeroInit = 0,
   // parameters for rom_ctrl0
   parameter RomCtrl0BootRomInitFile = "",
   parameter bit SecRomCtrl0DisableScrambling = 1'b0,
@@ -113,7 +116,7 @@ module darjeeling_pd_main #(
   parameter ibex_pkg::pmp_mseccfg_t RvCoreIbexPMPRstMsecCfg = ibex_pmp_reset_pkg::PmpMseccfgRst,
   parameter bit RvCoreIbexRV32E = 0,
   parameter ibex_pkg::rv32m_e RvCoreIbexRV32M = ibex_pkg::RV32MSingleCycle,
-  parameter ibex_pkg::rv32b_e RvCoreIbexRV32B = ibex_pkg::RV32BOTEarlGrey,
+  parameter ibex_pkg::rv32b_e RvCoreIbexRV32B = ibex_pkg::RV32BFull,
   parameter ibex_pkg::rv32zc_e RvCoreIbexRV32ZC = ibex_pkg::RV32ZcaZcbZcmp,
   parameter ibex_pkg::regfile_e RvCoreIbexRegFile = ibex_pkg::RegFileFF,
   parameter bit RvCoreIbexBranchTargetALU = 1,
@@ -268,7 +271,6 @@ module darjeeling_pd_main #(
   inout         otp_ext_voltage_h_io,
   output logic [7:0] otp_obs_o,
   input  otp_macro_pkg::otp_cfg_t       otp_cfg_i,
-  input  logic [31:0] fpga_info_i,
   output logic       sck_monitor_o,
   output soc_dbg_ctrl_pkg::soc_dbg_policy_t       soc_dbg_policy_bus_o,
   input  logic       debug_halt_cpu_boot_i,
@@ -571,10 +573,10 @@ module darjeeling_pd_main #(
   keymgr_dpe_pkg::keymgr_dpe_creator_root_key_t       otp_ctrl_keymgr_creator_root_key;
   keymgr_dpe_pkg::keymgr_dpe_creator_seed_t       otp_ctrl_keymgr_creator_seed;
   keymgr_dpe_pkg::keymgr_dpe_owner_seed_t       otp_ctrl_keymgr_owner_seed;
-  keymgr_pkg::hw_key_req_t       keymgr_dpe_aes_key;
-  keymgr_pkg::hw_key_req_t       keymgr_dpe_kmac_key;
-  keymgr_pkg::hw_key_req_t       keymgr_dpe_hmac_key;
-  keymgr_pkg::otbn_key_req_t       keymgr_dpe_otbn_key;
+  keymgr_dpe_pkg::hw_key_req_t       keymgr_dpe_aes_key;
+  keymgr_dpe_pkg::hw_key_req_t       keymgr_dpe_kmac_key;
+  keymgr_dpe_pkg::wide_hw_key_req_t       keymgr_dpe_hmac_key;
+  keymgr_dpe_pkg::wide_hw_key_req_t       keymgr_dpe_otbn_key;
   kmac_pkg::app_req_t [KmacNumAppIntf-1:0] kmac_app_req;
   kmac_pkg::app_rsp_t [KmacNumAppIntf-1:0] kmac_app_rsp;
   logic       kmac_en_masking;
@@ -760,7 +762,6 @@ module darjeeling_pd_main #(
   logic [31:0] rv_core_ibex_hart_id;
   logic [31:0] rv_core_ibex_boot_addr;
   otp_ctrl_part_pkg::otp_broadcast_t       otp_ctrl_otp_broadcast;
-  prim_mubi_pkg::mubi8_t       csrng_otp_en_csrng_sw_app_read;
   lc_ctrl_state_pkg::soc_dbg_state_t       soc_dbg_ctrl_soc_dbg_state;
   otp_ctrl_pkg::otp_device_id_t       lc_ctrl_otp_device_id;
   otp_ctrl_pkg::otp_manuf_state_t       lc_ctrl_otp_manuf_state;
@@ -793,8 +794,6 @@ module darjeeling_pd_main #(
   // OTP HW_CFG Broadcast signals.
   // TODO(#6713): The actual struct breakout and mapping currently needs to
   // be performed by hand.
-  assign csrng_otp_en_csrng_sw_app_read =
-      otp_ctrl_otp_broadcast.hw_cfg1_data.en_csrng_sw_app_read;
   assign sram_ctrl_main_otp_en_sram_ifetch =
       otp_ctrl_otp_broadcast.hw_cfg1_data.en_sram_ifetch;
   assign lc_ctrl_otp_device_id =
@@ -1586,6 +1585,7 @@ module darjeeling_pd_main #(
     .AlertAsyncOn(alert_handler_reg_pkg::AsyncOn[29:28]),
     .AlertSkewCycles(top_pkg::AlertSkewCycles),
     .EnMasking(KmacEnMasking),
+    .EnFullKmac(KmacEnFullKmac),
     .SwKeyMasked(KmacSwKeyMasked),
     .SecCmdDelay(SecKmacCmdDelay),
     .SecIdleAcceptSwMsg(SecKmacIdleAcceptSwMsg),
@@ -1632,11 +1632,13 @@ module darjeeling_pd_main #(
     .Stub(OtbnStub),
     .RegFile(OtbnRegFile),
     .RndCnstUrndPrngSeed(RndCnstOtbnUrndPrngSeed),
+    .RndCnstUrndPerm(RndCnstOtbnUrndPerm),
     .SecFixMaiOpSeq(SecOtbnFixMaiOpSeq),
     .SecFixMacOpSeq(SecOtbnFixMacOpSeq),
     .SecSkipUrndReseedAtStart(SecOtbnSkipUrndReseedAtStart),
     .FeatStubMai(OtbnFeatStubMai),
     .RndCnstBnMacUrndPerm(RndCnstOtbnBnMacUrndPerm),
+    .RndCnstMaiUrndPerm(RndCnstOtbnMaiUrndPerm),
     .RndCnstOtbnKey(RndCnstOtbnOtbnKey),
     .RndCnstOtbnNonce(RndCnstOtbnOtbnNonce)
   ) u_otbn (
@@ -1691,6 +1693,7 @@ module darjeeling_pd_main #(
     .RndCnstAesSeed(RndCnstKeymgrDpeAesSeed),
     .RndCnstKmacSeed(RndCnstKeymgrDpeKmacSeed),
     .RndCnstOtbnSeed(RndCnstKeymgrDpeOtbnSeed),
+    .RndCnstHmacSeed(RndCnstKeymgrDpeHmacSeed),
     .RndCnstNoneSeed(RndCnstKeymgrDpeNoneSeed),
     .NumInstHwSlot(KeymgrDpeNumInstHwSlot),
     .NumBootStages(KeymgrDpeNumBootStages),
@@ -1721,6 +1724,7 @@ module darjeeling_pd_main #(
     .kmac_data_o(kmac_app_req[0]),
     .kmac_data_i(kmac_app_rsp[0]),
     .creator_root_key_i(otp_ctrl_keymgr_creator_root_key),
+    .secondary_root_key_i(keymgr_dpe_pkg::KEYMGR_DPE_SECONDARY_ROOT_KEY_DEFAULT),
     .creator_seed_i(otp_ctrl_keymgr_creator_seed),
     .owner_seed_i(otp_ctrl_keymgr_owner_seed),
     .device_id_i(keymgr_dpe_device_id),
@@ -1759,7 +1763,6 @@ module darjeeling_pd_main #(
     .csrng_cmd_o(csrng_csrng_cmd_rsp),
     .entropy_src_hw_if_o(csrng_entropy_src_hw_if_req),
     .entropy_src_hw_if_i(csrng_entropy_src_hw_if_rsp),
-    .otp_en_csrng_sw_app_read_i(csrng_otp_en_csrng_sw_app_read),
     .lc_hw_debug_en_i(lc_ctrl_lc_hw_debug_en),
     .tl_i(csrng_tl_req),
     .tl_o(csrng_tl_rsp)
@@ -1802,8 +1805,6 @@ module darjeeling_pd_main #(
     .entropy_src_xht_health_test_window_o(),
     .entropy_src_xht_meta_o(),
     .entropy_src_xht_meta_i(entropy_src_pkg::ENTROPY_SRC_XHT_META_RSP_DEFAULT),
-    .otp_en_entropy_src_fw_read_i(prim_mubi_pkg::MuBi8True),
-    .otp_en_entropy_src_fw_over_i(prim_mubi_pkg::MuBi8True),
     .rng_fips_o(es_rng_fips_o),
     .tl_i(entropy_src_tl_req),
     .tl_o(entropy_src_tl_rsp)
@@ -1877,7 +1878,8 @@ module darjeeling_pd_main #(
     .NumPrinceRoundsHalf(SramCtrlMainNumPrinceRoundsHalf),
     .NumAddrScrRounds(SramCtrlMainNumAddrScrRounds),
     .Outstanding(SramCtrlMainOutstanding),
-    .EccCorrection(SramCtrlMainEccCorrection)
+    .EccCorrection(SramCtrlMainEccCorrection),
+    .SecZeroInit(SecSramCtrlMainZeroInit)
   ) u_sram_ctrl_main (
     // Clock and reset connections
     .clk_i(clkmgr_clocks_i.clk_main_infra),
@@ -1923,7 +1925,8 @@ module darjeeling_pd_main #(
     .NumPrinceRoundsHalf(SramCtrlMboxNumPrinceRoundsHalf),
     .NumAddrScrRounds(SramCtrlMboxNumAddrScrRounds),
     .Outstanding(SramCtrlMboxOutstanding),
-    .EccCorrection(SramCtrlMboxEccCorrection)
+    .EccCorrection(SramCtrlMboxEccCorrection),
+    .SecZeroInit(SecSramCtrlMboxZeroInit)
   ) u_sram_ctrl_mbox (
     // Clock and reset connections
     .clk_i(clkmgr_clocks_i.clk_main_infra),
@@ -2614,7 +2617,6 @@ module darjeeling_pd_main #(
     .edn_i(edn0_edn_rsp[6]),
     .icache_otp_key_o(otp_ctrl_sram_otp_key_req[3]),
     .icache_otp_key_i(otp_ctrl_sram_otp_key_rsp[3]),
-    .fpga_info_i(fpga_info_i),
     .corei_tl_h_o(main_tl_rv_core_ibex__corei_req),
     .corei_tl_h_i(main_tl_rv_core_ibex__corei_rsp),
     .cored_tl_h_o(main_tl_rv_core_ibex__cored_req),

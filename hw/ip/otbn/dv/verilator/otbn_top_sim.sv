@@ -8,7 +8,7 @@ module otbn_top_sim (
 );
   import otbn_pkg::*;
   import edn_pkg::*;
-  import keymgr_pkg::otbn_key_req_t;
+  import keymgr_dpe_pkg::wide_hw_key_req_t;
 
   // Size of the instruction memory, in bytes
   parameter int ImemSizeByte = otbn_reg_pkg::OTBN_IMEM_SIZE;
@@ -60,9 +60,9 @@ module otbn_top_sim (
   // Instruction counter (feeds into otbn.INSN_CNT in full block)
   logic [31:0]              insn_cnt;
   logic [1:0][SideloadKeyWidth-1:0] sideload_key_shares;
-  assign sideload_key_shares[0] = {12{32'hDEADBEEF}};
-  assign sideload_key_shares[1] = {12{32'hBAADF00D}};
-  otbn_key_req_t keymgr_key;
+  assign sideload_key_shares[0] = {16{32'hDEADBEEF}};
+  assign sideload_key_shares[1] = {16{32'hBAADF00D}};
+  wide_hw_key_req_t keymgr_key;
   assign keymgr_key.key[0] = sideload_key_shares[0];
   assign keymgr_key.key[1] = sideload_key_shares[1];
   assign keymgr_key.valid  = 1'b1;
@@ -111,10 +111,12 @@ module otbn_top_sim (
     .edn_urnd_i                  ( urnd_rsp                   ),
     .edn_urnd_o                  ( urnd_req                   ),
 
+    // Always enable the WFI instruction for this testbench.
     .wfi_enabled_i               ( 1'b1                       ),
     .wfi_pending_o               ( wfi_pending                ),
     .wfi_resume_i                ( wfi_pending_q              ),
 
+    // Always enable the URND control feature for this testbench.
     .urnd_ctrl_enabled_i         ( 1'b1                       ),
 
     .insn_cnt_o                  ( insn_cnt                   ),
@@ -387,7 +389,9 @@ module otbn_top_sim (
     .cmd_i                 ( otbn_pkg::CmdExecute ),
     .cmd_en_i              ( otbn_start ),
 
+    // Match the CTRL configuration bits tied off on u_otbn_core above.
     .wfi_enabled_i         ( 1'b1 ),
+    .urnd_ctrl_enabled_i   ( 1'b1 ),
 
     .lc_escalate_en_i      ( lc_ctrl_pkg::Off ),
     .lc_rma_req_i          ( lc_ctrl_pkg::Off ),

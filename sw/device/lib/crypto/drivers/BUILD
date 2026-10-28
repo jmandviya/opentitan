@@ -2,7 +2,10 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["cryptolib_warnings"],
+)
 
 load("//rules:autogen.bzl", "autogen_cryptolib_build_info")
 load("//rules/opentitan:defs.bzl", "OPENTITAN_CPU")
@@ -145,6 +148,7 @@ cc_library(
         "//hw/top/dt:keymgr_dpe",
         "//sw/device/lib/base:abs_mmio",
         "//sw/device/lib/base:bitfield",
+        "//sw/device/lib/base:hardened",
         "//sw/device/lib/base:hardened_memory",
         "//sw/device/lib/base:macros",
         "//sw/device/lib/crypto/impl:status",
@@ -239,11 +243,13 @@ dual_cc_library(
             "//sw/device/lib/base:abs_mmio",
             "//sw/device/lib/base:bitfield",
             "//sw/device/lib/base:hardened",
+            "//sw/device/lib/base:hardened_memory",
             "//sw/device/lib/base:macros",
             "//sw/device/lib/base:math",
             "//sw/device/lib/base:memory",
         ],
         shared = [
+            "//sw/device/lib/crypto/impl:state",
             "//sw/device/lib/crypto/impl:status",
         ],
     ),
@@ -256,7 +262,11 @@ cc_library(
     deps = [
         ":entropy",
         "//hw/top:csrng_c_regs",
+        "//hw/top:edn_c_regs",
+        "//hw/top:entropy_src_c_regs",
         "//hw/top/dt:csrng",
+        "//hw/top/dt:edn",
+        "//hw/top/dt:entropy_src",
         "//sw/device/lib/base:abs_mmio",
         "//sw/device/lib/base:bitfield",
         "//sw/device/lib/base:macros",
@@ -400,6 +410,7 @@ cc_library(
         "//sw/device/lib/base:hardened",
         "//sw/device/lib/base:lz4",
         "//sw/device/lib/base:random_order",
+        "//sw/device/lib/crypto/impl:state",
         "//sw/device/lib/crypto/impl:status",
     ],
 )
@@ -419,10 +430,13 @@ opentitan_test(
         "//sw/device/lib/base:macros",
         "//sw/device/lib/base:memory",
         "//sw/device/lib/crypto/drivers:entropy",
+        "//sw/device/lib/crypto/impl:config",
+        "//sw/device/lib/crypto/impl:state",
         "//sw/device/lib/crypto/impl:status",
         "//sw/device/lib/testing/test_framework:check",
         "//sw/device/lib/testing/test_framework:ottf_alerts",
         "//sw/device/lib/testing/test_framework:ottf_main",
+        "//sw/device/tests:otbn_randomness_impl",
     ],
 )
 

@@ -9,19 +9,19 @@
 | entropy_src.[`INTR_ENABLE`](#intr_enable)                             | 0x4      |        4 | Interrupt Enable Register                                    |
 | entropy_src.[`INTR_TEST`](#intr_test)                                 | 0x8      |        4 | Interrupt Test Register                                      |
 | entropy_src.[`ALERT_TEST`](#alert_test)                               | 0xc      |        4 | Alert Test Register                                          |
-| entropy_src.[`ME_REGWEN`](#me_regwen)                                 | 0x10     |        4 | Register write enable for module enable register             |
-| entropy_src.[`SW_REGUPD`](#sw_regupd)                                 | 0x14     |        4 | Register write enable for control and threshold registers    |
-| entropy_src.[`REGWEN`](#regwen)                                       | 0x18     |        4 | Register write enable for all control registers              |
-| entropy_src.[`MODULE_ENABLE`](#module_enable)                         | 0x1c     |        4 | Module enable register                                       |
-| entropy_src.[`CONF`](#conf)                                           | 0x20     |        4 | Configuration register                                       |
-| entropy_src.[`ENTROPY_CONTROL`](#entropy_control)                     | 0x24     |        4 | Entropy control register                                     |
-| entropy_src.[`ENTROPY_DATA`](#entropy_data)                           | 0x28     |        4 | Entropy data bits                                            |
-| entropy_src.[`HEALTH_TEST_WINDOWS`](#health_test_windows)             | 0x2c     |        4 | Health test windows register                                 |
-| entropy_src.[`THRESHOLD_ONEWAY`](#threshold_oneway)                   | 0x30     |        4 | Threshold one way control register                           |
-| entropy_src.[`REPCNT_THRESHOLD`](#repcnt_threshold)                   | 0x34     |        4 | Repetition Count Test threshold register                     |
-| entropy_src.[`REPCNTS_THRESHOLD`](#repcnts_threshold)                 | 0x38     |        4 | Repetition Count Symbol Test threshold register              |
-| entropy_src.[`ADAPTP_HI_THRESHOLD`](#adaptp_hi_threshold)             | 0x3c     |        4 | Adaptive proportion test high threshold register             |
-| entropy_src.[`ADAPTP_LO_THRESHOLD`](#adaptp_lo_threshold)             | 0x40     |        4 | Adaptive proportion test low threshold register              |
+| entropy_src.[`SW_REGUPD`](#sw_regupd)                                 | 0x10     |        4 | Register write enable for control and threshold registers    |
+| entropy_src.[`REGWEN`](#regwen)                                       | 0x14     |        4 | Register write enable for all control registers              |
+| entropy_src.[`MODULE_ENABLE`](#module_enable)                         | 0x18     |        4 | Module enable register                                       |
+| entropy_src.[`CONF`](#conf)                                           | 0x1c     |        4 | Configuration register                                       |
+| entropy_src.[`ENTROPY_CONTROL`](#entropy_control)                     | 0x20     |        4 | Entropy control register                                     |
+| entropy_src.[`ENTROPY_DATA`](#entropy_data)                           | 0x24     |        4 | Entropy data bits                                            |
+| entropy_src.[`HEALTH_TEST_WINDOWS`](#health_test_windows)             | 0x28     |        4 | Health test windows register                                 |
+| entropy_src.[`THRESHOLD_ONEWAY`](#threshold_oneway)                   | 0x2c     |        4 | Threshold one way control register                           |
+| entropy_src.[`REPCNT_THRESHOLD`](#repcnt_threshold)                   | 0x30     |        4 | Repetition Count Test threshold register                     |
+| entropy_src.[`REPCNTS_THRESHOLD`](#repcnts_threshold)                 | 0x34     |        4 | Repetition Count Symbol Test threshold register              |
+| entropy_src.[`ADAPTP_HI_THRESHOLD`](#adaptp_hi_threshold)             | 0x38     |        4 | Adaptive Proportion Test high threshold register             |
+| entropy_src.[`ADAPTP_LO_THRESHOLD`](#adaptp_lo_threshold)             | 0x3c     |        4 | Adaptive Proportion Test low threshold register              |
+| entropy_src.[`ADAPTPS_THRESHOLD`](#adaptps_threshold)                 | 0x40     |        4 | Adaptive Proportion Symbol Test threshold register           |
 | entropy_src.[`BUCKET_THRESHOLD`](#bucket_threshold)                   | 0x44     |        4 | Bucket test threshold register                               |
 | entropy_src.[`MARKOV_HI_THRESHOLD`](#markov_hi_threshold)             | 0x48     |        4 | Markov test high threshold register                          |
 | entropy_src.[`MARKOV_LO_THRESHOLD`](#markov_lo_threshold)             | 0x4c     |        4 | Markov test low threshold register                           |
@@ -31,30 +31,31 @@
 | entropy_src.[`HT_WATERMARK`](#ht_watermark)                           | 0x5c     |        4 | Health test watermark register                               |
 | entropy_src.[`REPCNT_TOTAL_FAILS`](#repcnt_total_fails)               | 0x60     |        4 | Repetition Count Test failure counter register               |
 | entropy_src.[`REPCNTS_TOTAL_FAILS`](#repcnts_total_fails)             | 0x64     |        4 | Repetition Count Symbol Test failure counter register        |
-| entropy_src.[`ADAPTP_HI_TOTAL_FAILS`](#adaptp_hi_total_fails)         | 0x68     |        4 | Adaptive proportion high test failure counter register       |
-| entropy_src.[`ADAPTP_LO_TOTAL_FAILS`](#adaptp_lo_total_fails)         | 0x6c     |        4 | Adaptive proportion low test failure counter register        |
-| entropy_src.[`BUCKET_TOTAL_FAILS`](#bucket_total_fails)               | 0x70     |        4 | Bucket test failure counter register                         |
-| entropy_src.[`MARKOV_HI_TOTAL_FAILS`](#markov_hi_total_fails)         | 0x74     |        4 | Markov high test failure counter register                    |
-| entropy_src.[`MARKOV_LO_TOTAL_FAILS`](#markov_lo_total_fails)         | 0x78     |        4 | Markov low test failure counter register                     |
-| entropy_src.[`EXTHT_HI_TOTAL_FAILS`](#extht_hi_total_fails)           | 0x7c     |        4 | External health test high threshold failure counter register |
-| entropy_src.[`EXTHT_LO_TOTAL_FAILS`](#extht_lo_total_fails)           | 0x80     |        4 | External health test low threshold failure counter register  |
-| entropy_src.[`ALERT_THRESHOLD`](#alert_threshold)                     | 0x84     |        4 | Alert threshold register                                     |
-| entropy_src.[`ALERT_SUMMARY_FAIL_COUNTS`](#alert_summary_fail_counts) | 0x88     |        4 | Alert summary failure counts register                        |
-| entropy_src.[`ALERT_FAIL_COUNTS`](#alert_fail_counts)                 | 0x8c     |        4 | Alert failure counts register                                |
-| entropy_src.[`EXTHT_FAIL_COUNTS`](#extht_fail_counts)                 | 0x90     |        4 | External health test alert failure counts register           |
-| entropy_src.[`FW_OV_CONTROL`](#fw_ov_control)                         | 0x94     |        4 | Firmware override control register                           |
-| entropy_src.[`FW_OV_SHA3_START`](#fw_ov_sha3_start)                   | 0x98     |        4 | Firmware override sha3 block start control register          |
-| entropy_src.[`FW_OV_WR_FIFO_FULL`](#fw_ov_wr_fifo_full)               | 0x9c     |        4 | Firmware override FIFO write full status register            |
-| entropy_src.[`FW_OV_RD_FIFO_OVERFLOW`](#fw_ov_rd_fifo_overflow)       | 0xa0     |        4 | Firmware override observe FIFO overflow status               |
-| entropy_src.[`FW_OV_RD_DATA`](#fw_ov_rd_data)                         | 0xa4     |        4 | Firmware override observe FIFO read register                 |
-| entropy_src.[`FW_OV_WR_DATA`](#fw_ov_wr_data)                         | 0xa8     |        4 | Firmware override FIFO write register                        |
-| entropy_src.[`OBSERVE_FIFO_THRESH`](#observe_fifo_thresh)             | 0xac     |        4 | Observe FIFO threshold register                              |
-| entropy_src.[`OBSERVE_FIFO_DEPTH`](#observe_fifo_depth)               | 0xb0     |        4 | Observe FIFO depth register                                  |
-| entropy_src.[`DEBUG_STATUS`](#debug_status)                           | 0xb4     |        4 | Debug status register                                        |
-| entropy_src.[`RECOV_ALERT_STS`](#recov_alert_sts)                     | 0xb8     |        4 | Recoverable alert status register                            |
-| entropy_src.[`ERR_CODE`](#err_code)                                   | 0xbc     |        4 | Hardware detection of error conditions status register       |
-| entropy_src.[`ERR_CODE_TEST`](#err_code_test)                         | 0xc0     |        4 | Test error conditions register                               |
-| entropy_src.[`MAIN_SM_STATE`](#main_sm_state)                         | 0xc4     |        4 | Main state machine state debug register                      |
+| entropy_src.[`ADAPTP_HI_TOTAL_FAILS`](#adaptp_hi_total_fails)         | 0x68     |        4 | Adaptive Proportion high test failure counter register       |
+| entropy_src.[`ADAPTP_LO_TOTAL_FAILS`](#adaptp_lo_total_fails)         | 0x6c     |        4 | Adaptive Proportion low test failure counter register        |
+| entropy_src.[`ADAPTPS_TOTAL_FAILS`](#adaptps_total_fails)             | 0x70     |        4 | Adaptive Proportion Symbol Test failure counter register     |
+| entropy_src.[`BUCKET_TOTAL_FAILS`](#bucket_total_fails)               | 0x74     |        4 | Bucket test failure counter register                         |
+| entropy_src.[`MARKOV_HI_TOTAL_FAILS`](#markov_hi_total_fails)         | 0x78     |        4 | Markov high test failure counter register                    |
+| entropy_src.[`MARKOV_LO_TOTAL_FAILS`](#markov_lo_total_fails)         | 0x7c     |        4 | Markov low test failure counter register                     |
+| entropy_src.[`EXTHT_HI_TOTAL_FAILS`](#extht_hi_total_fails)           | 0x80     |        4 | External health test high threshold failure counter register |
+| entropy_src.[`EXTHT_LO_TOTAL_FAILS`](#extht_lo_total_fails)           | 0x84     |        4 | External health test low threshold failure counter register  |
+| entropy_src.[`ALERT_THRESHOLD`](#alert_threshold)                     | 0x88     |        4 | Alert threshold register                                     |
+| entropy_src.[`ALERT_SUMMARY_FAIL_COUNTS`](#alert_summary_fail_counts) | 0x8c     |        4 | Alert summary failure counts register                        |
+| entropy_src.[`ALERT_FAIL_COUNTS`](#alert_fail_counts)                 | 0x90     |        4 | Alert failure counts register                                |
+| entropy_src.[`EXTHT_FAIL_COUNTS`](#extht_fail_counts)                 | 0x94     |        4 | External health test alert failure counts register           |
+| entropy_src.[`FW_OV_CONTROL`](#fw_ov_control)                         | 0x98     |        4 | Firmware override control register                           |
+| entropy_src.[`FW_OV_SHA3_START`](#fw_ov_sha3_start)                   | 0x9c     |        4 | Firmware override sha3 block start control register          |
+| entropy_src.[`FW_OV_WR_FIFO_FULL`](#fw_ov_wr_fifo_full)               | 0xa0     |        4 | Firmware override FIFO write full status register            |
+| entropy_src.[`FW_OV_RD_FIFO_OVERFLOW`](#fw_ov_rd_fifo_overflow)       | 0xa4     |        4 | Firmware override observe FIFO overflow status               |
+| entropy_src.[`FW_OV_RD_DATA`](#fw_ov_rd_data)                         | 0xa8     |        4 | Firmware override observe FIFO read register                 |
+| entropy_src.[`FW_OV_WR_DATA`](#fw_ov_wr_data)                         | 0xac     |        4 | Firmware override FIFO write register                        |
+| entropy_src.[`OBSERVE_FIFO_THRESH`](#observe_fifo_thresh)             | 0xb0     |        4 | Observe FIFO threshold register                              |
+| entropy_src.[`OBSERVE_FIFO_DEPTH`](#observe_fifo_depth)               | 0xb4     |        4 | Observe FIFO depth register                                  |
+| entropy_src.[`DEBUG_STATUS`](#debug_status)                           | 0xb8     |        4 | Debug status register                                        |
+| entropy_src.[`RECOV_ALERT_STS`](#recov_alert_sts)                     | 0xbc     |        4 | Recoverable alert status register                            |
+| entropy_src.[`ERR_CODE`](#err_code)                                   | 0xc0     |        4 | Hardware detection of error conditions status register       |
+| entropy_src.[`ERR_CODE_TEST`](#err_code_test)                         | 0xc4     |        4 | Test error conditions register                               |
+| entropy_src.[`MAIN_SM_STATE`](#main_sm_state)                         | 0xc8     |        4 | Main state machine state debug register                      |
 
 ## INTR_STATE
 Interrupt State Register
@@ -119,41 +120,25 @@ Interrupt Test Register
 ## ALERT_TEST
 Alert Test Register
 - Offset: `0xc`
-- Reset default: `0x0`
-- Reset mask: `0x3`
+- Reset default: `0x80000000`
+- Reset mask: `0x80000003`
 
 ### Fields
 
 ```wavejson
-{"reg": [{"name": "recov_alert", "bits": 1, "attr": ["wo"], "rotate": -90}, {"name": "fatal_alert", "bits": 1, "attr": ["wo"], "rotate": -90}, {"bits": 30}], "config": {"lanes": 1, "fontsize": 10, "vspace": 130}}
+{"reg": [{"name": "recov_alert", "bits": 1, "attr": ["wo"], "rotate": -90}, {"name": "fatal_alert", "bits": 1, "attr": ["wo"], "rotate": -90}, {"bits": 29}, {"name": "regwen", "bits": 1, "attr": ["rw0c"], "rotate": -90}], "config": {"lanes": 1, "fontsize": 10, "vspace": 130}}
 ```
 
-|  Bits  |  Type  |  Reset  | Name        | Description                                      |
-|:------:|:------:|:-------:|:------------|:-------------------------------------------------|
-|  31:2  |        |         |             | Reserved                                         |
-|   1    |   wo   |   0x0   | fatal_alert | Write 1 to trigger one alert event of this kind. |
-|   0    |   wo   |   0x0   | recov_alert | Write 1 to trigger one alert event of this kind. |
-
-## ME_REGWEN
-Register write enable for module enable register
-- Offset: `0x10`
-- Reset default: `0x1`
-- Reset mask: `0x1`
-
-### Fields
-
-```wavejson
-{"reg": [{"name": "ME_REGWEN", "bits": 1, "attr": ["rw0c"], "rotate": -90}, {"bits": 31}], "config": {"lanes": 1, "fontsize": 10, "vspace": 110}}
-```
-
-|  Bits  |  Type  |  Reset  | Name      | Description                                                                                                  |
-|:------:|:------:|:-------:|:----------|:-------------------------------------------------------------------------------------------------------------|
-|  31:1  |        |         |           | Reserved                                                                                                     |
-|   0    |  rw0c  |   0x1   | ME_REGWEN | When true, the [`MODULE_ENABLE`](#module_enable) register can be modified. When false, it becomes read-only. |
+|  Bits  |  Type  |  Reset  | Name        | Description                                            |
+|:------:|:------:|:-------:|:------------|:-------------------------------------------------------|
+|   31   |  rw0c  |   0x1   | regwen      | Write 0 to disable alert testing until the next reset. |
+|  30:2  |        |         |             | Reserved                                               |
+|   1    |   wo   |   0x0   | fatal_alert | Write 1 to trigger one alert event of this kind.       |
+|   0    |   wo   |   0x0   | recov_alert | Write 1 to trigger one alert event of this kind.       |
 
 ## SW_REGUPD
 Register write enable for control and threshold registers
-- Offset: `0x14`
+- Offset: `0x10`
 - Reset default: `0x1`
 - Reset mask: `0x1`
 
@@ -170,7 +155,7 @@ Register write enable for control and threshold registers
 
 ## REGWEN
 Register write enable for all control registers
-- Offset: `0x18`
+- Offset: `0x14`
 - Reset default: `0x1`
 - Reset mask: `0x1`
 
@@ -191,10 +176,9 @@ When read as false, these registers become read-only.
 
 ## MODULE_ENABLE
 Module enable register
-- Offset: `0x1c`
+- Offset: `0x18`
 - Reset default: `0x9`
 - Reset mask: `0xf`
-- Register enable: [`ME_REGWEN`](#me_regwen)
 
 ### Fields
 
@@ -213,7 +197,7 @@ The modules of the entropy complex may only be enabled and disabled in a specifi
 
 ## CONF
 Configuration register
-- Offset: `0x20`
+- Offset: `0x1c`
 - Reset default: `0x999999`
 - Reset mask: `0xffffffff`
 - Register enable: [`REGWEN`](#regwen)
@@ -240,7 +224,6 @@ If the IP is parameterized for a bus width less than 256 bits, the upper, unused
 
 ### CONF . ENTROPY_DATA_REG_ENABLE
 Setting this field to `kMultiBitBool4True` will enable reading entropy values from the [`ENTROPY_DATA`](#entropy_data) register.
-This function also requires that the otp_en_entropy_src_fw_read input is set to `kMultiBitBool8True`.
 
 ### CONF . THRESHOLD_SCOPE
 This field controls the scope (either by-line or by-sum) of the Adaptive Proportion and the Markov health tests.
@@ -276,7 +259,7 @@ Setting this field to `kMultiBitBool4False` selects the boot-time / bypass mode 
 
 ## ENTROPY_CONTROL
 Entropy control register
-- Offset: `0x24`
+- Offset: `0x20`
 - Reset default: `0x99`
 - Reset mask: `0xff`
 - Register enable: [`REGWEN`](#regwen)
@@ -304,11 +287,10 @@ This enables the bypass / boot-time mode.
 When this field is `kMultiBitBool4False`, the generated entropy will be forwarded out of this module to the hardware interface.
 Setting this field to `kMultiBitBool4True` routes the generated entropy to the [`ENTROPY_DATA`](#entropy_data) register to be read by firmware.
 Note that for [`ENTROPY_DATA`](#entropy_data) to become readable, also [`CONF.ENTROPY_DATA_REG_ENABLE`](#conf) needs to be set to `kMultiBitBool4True`.
-In addition, the otp_en_entropy_src_fw_read input needs to be set to `kMultiBitBool8True`.
 
 ## ENTROPY_DATA
 Entropy data bits
-- Offset: `0x28`
+- Offset: `0x24`
 - Reset default: `0x0`
 - Reset mask: `0xffffffff`
 
@@ -318,18 +300,13 @@ Entropy data bits
 {"reg": [{"name": "ENTROPY_DATA", "bits": 32, "attr": ["ro"], "rotate": 0}], "config": {"lanes": 1, "fontsize": 10, "vspace": 80}}
 ```
 
-|  Bits  |  Type  |  Reset  | Name                                        |
-|:------:|:------:|:-------:|:--------------------------------------------|
-|  31:0  |   ro   |    x    | [ENTROPY_DATA](#entropy_data--entropy_data) |
-
-### ENTROPY_DATA . ENTROPY_DATA
-A read of this register provides generated entropy bits to firmware.
-For this to work also [`CONF.ENTROPY_DATA_REG_ENABLE`](#conf) needs to be set to `kMultiBitBool4True`.
-In addition, the otp_en_entropy_src_fw_read input needs to be set to `kMultiBitBool8True`.
+|  Bits  |  Type  |  Reset  | Name         | Description                                                                                                                                                                 |
+|:------:|:------:|:-------:|:-------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|  31:0  |   ro   |    x    | ENTROPY_DATA | A read of this register provides generated entropy bits to firmware. For this to work also [`CONF.ENTROPY_DATA_REG_ENABLE`](#conf) needs to be set to `kMultiBitBool4True`. |
 
 ## HEALTH_TEST_WINDOWS
 Health test windows register
-- Offset: `0x2c`
+- Offset: `0x28`
 - Reset default: `0x1800200`
 - Reset mask: `0xffffffff`
 - Register enable: [`REGWEN`](#regwen)
@@ -367,7 +344,7 @@ The use of window sizes below 512 samples is thus not recommended as this may no
 
 ## THRESHOLD_ONEWAY
 Threshold one way control register
-- Offset: `0x30`
+- Offset: `0x2c`
 - Reset default: `0x9`
 - Reset mask: `0xf`
 
@@ -377,18 +354,14 @@ Threshold one way control register
 {"reg": [{"name": "THRESHOLD_ONEWAY", "bits": 4, "attr": ["rw1s"], "rotate": -90}, {"bits": 28}], "config": {"lanes": 1, "fontsize": 10, "vspace": 180}}
 ```
 
-|  Bits  |  Type  |  Reset  | Name                                                    |
-|:------:|:------:|:-------:|:--------------------------------------------------------|
-|  31:4  |        |         | Reserved                                                |
-|  3:0   |  rw1s  |   0x9   | [THRESHOLD_ONEWAY](#threshold_oneway--threshold_oneway) |
-
-### THRESHOLD_ONEWAY . THRESHOLD_ONEWAY
-Setting this field to `kMultiBitBool4True` will enable enable the one-way behavior of the health test threshold registers.
-After reset, this field reads as `kMultiBitBool4False` and the health test threshold registers can be configured without limitations.
+|  Bits  |  Type  |  Reset  | Name             | Description                                                                                                                                                                                                                                               |
+|:------:|:------:|:-------:|:-----------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|  31:4  |        |         |                  | Reserved                                                                                                                                                                                                                                                  |
+|  3:0   |  rw1s  |   0x9   | THRESHOLD_ONEWAY | Setting this field to `kMultiBitBool4True` will enable the one-way behavior of the health test threshold registers. After reset, this field reads as `kMultiBitBool4False` and the health test threshold registers can be configured without limitations. |
 
 ## REPCNT_THRESHOLD
 Repetition Count Test threshold register
-- Offset: `0x34`
+- Offset: `0x30`
 - Reset default: `0xffff`
 - Reset mask: `0xffff`
 - Register enable: [`REGWEN`](#regwen)
@@ -412,7 +385,7 @@ This is the threshold for the Repetition Count Test.
 
 ## REPCNTS_THRESHOLD
 Repetition Count Symbol Test threshold register
-- Offset: `0x38`
+- Offset: `0x34`
 - Reset default: `0xffff`
 - Reset mask: `0xffff`
 - Register enable: [`REGWEN`](#regwen)
@@ -435,8 +408,8 @@ This is the threshold for the Repetition Count Symbol Test.
    A read from this register always reflects the current value.
 
 ## ADAPTP_HI_THRESHOLD
-Adaptive proportion test high threshold register
-- Offset: `0x3c`
+Adaptive Proportion Test high threshold register
+- Offset: `0x38`
 - Reset default: `0xffff`
 - Reset mask: `0xffff`
 - Register enable: [`REGWEN`](#regwen)
@@ -459,8 +432,8 @@ This is the threshold for the Adaptive Proportion Test.
    A read from this register always reflects the current value.
 
 ## ADAPTP_LO_THRESHOLD
-Adaptive proportion test low threshold register
-- Offset: `0x40`
+Adaptive Proportion Test low threshold register
+- Offset: `0x3c`
 - Reset default: `0x0`
 - Reset mask: `0xffff`
 - Register enable: [`REGWEN`](#regwen)
@@ -480,6 +453,30 @@ Adaptive proportion test low threshold register
 This is the threshold for the Adaptive Proportion Test.
    This register must be written before the module is enabled.
    If [`THRESHOLD_ONEWAY`](#threshold_oneway) is set to `kMultiBitBool4True`, writing to this register will only update the register if the written value is greater than the current value of this register.
+   A read from this register always reflects the current value.
+
+## ADAPTPS_THRESHOLD
+Adaptive Proportion Symbol Test threshold register
+- Offset: `0x40`
+- Reset default: `0xffff`
+- Reset mask: `0xffff`
+- Register enable: [`REGWEN`](#regwen)
+
+### Fields
+
+```wavejson
+{"reg": [{"name": "ADAPTPS_THRESHOLD", "bits": 16, "attr": ["rw"], "rotate": 0}, {"bits": 16}], "config": {"lanes": 1, "fontsize": 10, "vspace": 80}}
+```
+
+|  Bits  |  Type  |  Reset  | Name                                                       |
+|:------:|:------:|:-------:|:-----------------------------------------------------------|
+| 31:16  |        |         | Reserved                                                   |
+|  15:0  |   rw   | 0xffff  | [ADAPTPS_THRESHOLD](#adaptps_threshold--adaptps_threshold) |
+
+### ADAPTPS_THRESHOLD . ADAPTPS_THRESHOLD
+This is the threshold for the Adaptive Proportion Symbol Test.
+   This register must be written before the module is enabled.
+   If [`THRESHOLD_ONEWAY`](#threshold_oneway) is set to `kMultiBitBool4True`, writing to this register will only update the register if the written value is less than the current value of this register.
    A read from this register always reflects the current value.
 
 ## BUCKET_THRESHOLD
@@ -622,7 +619,7 @@ Health test watermark number register
 
 ### HT_WATERMARK_NUM . HT_WATERMARK_NUM
 The value of this field defines the health test for which the HT_WATERMARK register records the watermark.
-Invalid input values, i.e., values greater than 8 are mapped to 0.
+Invalid input values, i.e., values greater than 9 are mapped to 0.
 
 This register must be written before the module is enabled.
 
@@ -630,13 +627,14 @@ This register must be written before the module is enabled.
 |:--------|:-----------|:---------------------------------------------|
 | 0x0     | REPCNT_HI  | Repetition Count Test high watermark.        |
 | 0x1     | REPCNTS_HI | Repetition Count Symbol Test high watermark. |
-| 0x2     | ADAPTP_HI  | Adaptive proportion test high watermark.     |
-| 0x3     | ADAPTP_LO  | Adaptive proportion test low watermark.      |
-| 0x4     | BUCKET_HI  | Bucket test high watermark.                  |
-| 0x5     | MARKOV_HI  | Markov test high watermark.                  |
-| 0x6     | MARKOV_LO  | Markov test low watermark.                   |
-| 0x7     | EXTHT_HI   | External health test high watermark.         |
-| 0x8     | EXTHT_LO   | External health test low watermark.          |
+| 0x2     | ADAPTP_HI  | Adaptive Proportion Test high watermark.     |
+| 0x3     | ADAPTP_LO  | Adaptive Proportion Test low watermark.      |
+| 0x4     | ADAPTPS_HI | Adaptive Proportion Symbol Test watermark.   |
+| 0x5     | BUCKET_HI  | Bucket test high watermark.                  |
+| 0x6     | MARKOV_HI  | Markov test high watermark.                  |
+| 0x7     | MARKOV_LO  | Markov test low watermark.                   |
+| 0x8     | EXTHT_HI   | External health test high watermark.         |
+| 0x9     | EXTHT_LO   | External health test low watermark.          |
 
 Other values are reserved.
 
@@ -690,7 +688,7 @@ Repetition Count Symbol Test failure counter register
 |  31:0  |   ro   |    x    | REPCNTS_TOTAL_FAILS | This register will hold a running count of test failures observed during normal operation. It will persist until cleared. |
 
 ## ADAPTP_HI_TOTAL_FAILS
-Adaptive proportion high test failure counter register
+Adaptive Proportion high test failure counter register
 - Offset: `0x68`
 - Reset default: `0x0`
 - Reset mask: `0xffffffff`
@@ -706,7 +704,7 @@ Adaptive proportion high test failure counter register
 |  31:0  |   ro   |    x    | ADAPTP_HI_TOTAL_FAILS | This register will hold a running count of test failures observed during normal operation. It will persist until cleared. |
 
 ## ADAPTP_LO_TOTAL_FAILS
-Adaptive proportion low test failure counter register
+Adaptive Proportion low test failure counter register
 - Offset: `0x6c`
 - Reset default: `0x0`
 - Reset mask: `0xffffffff`
@@ -721,9 +719,25 @@ Adaptive proportion low test failure counter register
 |:------:|:------:|:-------:|:----------------------|:--------------------------------------------------------------------------------------------------------------------------|
 |  31:0  |   ro   |    x    | ADAPTP_LO_TOTAL_FAILS | This register will hold a running count of test failures observed during normal operation. It will persist until cleared. |
 
+## ADAPTPS_TOTAL_FAILS
+Adaptive Proportion Symbol Test failure counter register
+- Offset: `0x70`
+- Reset default: `0x0`
+- Reset mask: `0xffffffff`
+
+### Fields
+
+```wavejson
+{"reg": [{"name": "ADAPTPS_TOTAL_FAILS", "bits": 32, "attr": ["ro"], "rotate": 0}], "config": {"lanes": 1, "fontsize": 10, "vspace": 80}}
+```
+
+|  Bits  |  Type  |  Reset  | Name                | Description                                                                                                               |
+|:------:|:------:|:-------:|:--------------------|:--------------------------------------------------------------------------------------------------------------------------|
+|  31:0  |   ro   |    x    | ADAPTPS_TOTAL_FAILS | This register will hold a running count of test failures observed during normal operation. It will persist until cleared. |
+
 ## BUCKET_TOTAL_FAILS
 Bucket test failure counter register
-- Offset: `0x70`
+- Offset: `0x74`
 - Reset default: `0x0`
 - Reset mask: `0xffffffff`
 
@@ -739,7 +753,7 @@ Bucket test failure counter register
 
 ## MARKOV_HI_TOTAL_FAILS
 Markov high test failure counter register
-- Offset: `0x74`
+- Offset: `0x78`
 - Reset default: `0x0`
 - Reset mask: `0xffffffff`
 
@@ -755,7 +769,7 @@ Markov high test failure counter register
 
 ## MARKOV_LO_TOTAL_FAILS
 Markov low test failure counter register
-- Offset: `0x78`
+- Offset: `0x7c`
 - Reset default: `0x0`
 - Reset mask: `0xffffffff`
 
@@ -771,7 +785,7 @@ Markov low test failure counter register
 
 ## EXTHT_HI_TOTAL_FAILS
 External health test high threshold failure counter register
-- Offset: `0x7c`
+- Offset: `0x80`
 - Reset default: `0x0`
 - Reset mask: `0xffffffff`
 
@@ -787,7 +801,7 @@ External health test high threshold failure counter register
 
 ## EXTHT_LO_TOTAL_FAILS
 External health test low threshold failure counter register
-- Offset: `0x80`
+- Offset: `0x84`
 - Reset default: `0x0`
 - Reset mask: `0xffffffff`
 
@@ -812,7 +826,7 @@ In case the configured threshold is reached, firmware needs to disable/re-enable
 Note that when reaching the threshold while running in Firmware Override: Extract & Insert mode, the recoverable alert is not raised nor does the block stop operating.
 In other modes, the generation of the recoverable alert can be disabled by configuring a value of zero.
 The default value is set to two.
-- Offset: `0x84`
+- Offset: `0x88`
 - Reset default: `0xfffd0002`
 - Reset mask: `0xffffffff`
 - Register enable: [`REGWEN`](#regwen)
@@ -841,7 +855,7 @@ If an alert is signaled, the value persists until it is cleared by firmware.
 
 The register is automatically cleared after every passing health test window unless the ENTROPY_SRC is configured in Firmware Override: Extract & Insert mode.
 The register is also cleared after re-enabling the block.
-- Offset: `0x88`
+- Offset: `0x8c`
 - Reset default: `0x0`
 - Reset mask: `0xffff`
 
@@ -865,26 +879,26 @@ Note that if multiple health tests fail for a certain symbol or window, the valu
 
 All fields of this register are automatically cleared after every passing health test window unless the ENTROPY_SRC is configured in Firmware Override: Extract & Insert mode.
 The fields are also cleared after re-enabling the block.
-- Offset: `0x8c`
+- Offset: `0x90`
 - Reset default: `0x0`
-- Reset mask: `0xfffffff0`
+- Reset mask: `0xffffffff`
 
 ### Fields
 
 ```wavejson
-{"reg": [{"bits": 4}, {"name": "REPCNT_FAIL_COUNT", "bits": 4, "attr": ["ro"], "rotate": -90}, {"name": "ADAPTP_HI_FAIL_COUNT", "bits": 4, "attr": ["ro"], "rotate": -90}, {"name": "ADAPTP_LO_FAIL_COUNT", "bits": 4, "attr": ["ro"], "rotate": -90}, {"name": "BUCKET_FAIL_COUNT", "bits": 4, "attr": ["ro"], "rotate": -90}, {"name": "MARKOV_HI_FAIL_COUNT", "bits": 4, "attr": ["ro"], "rotate": -90}, {"name": "MARKOV_LO_FAIL_COUNT", "bits": 4, "attr": ["ro"], "rotate": -90}, {"name": "REPCNTS_FAIL_COUNT", "bits": 4, "attr": ["ro"], "rotate": -90}], "config": {"lanes": 1, "fontsize": 10, "vspace": 220}}
+{"reg": [{"name": "REPCNT_FAIL_COUNT", "bits": 4, "attr": ["ro"], "rotate": -90}, {"name": "REPCNTS_FAIL_COUNT", "bits": 4, "attr": ["ro"], "rotate": -90}, {"name": "ADAPTP_HI_FAIL_COUNT", "bits": 4, "attr": ["ro"], "rotate": -90}, {"name": "ADAPTP_LO_FAIL_COUNT", "bits": 4, "attr": ["ro"], "rotate": -90}, {"name": "ADAPTPS_FAIL_COUNT", "bits": 4, "attr": ["ro"], "rotate": -90}, {"name": "BUCKET_FAIL_COUNT", "bits": 4, "attr": ["ro"], "rotate": -90}, {"name": "MARKOV_HI_FAIL_COUNT", "bits": 4, "attr": ["ro"], "rotate": -90}, {"name": "MARKOV_LO_FAIL_COUNT", "bits": 4, "attr": ["ro"], "rotate": -90}], "config": {"lanes": 1, "fontsize": 10, "vspace": 220}}
 ```
 
 |  Bits  |  Type  |  Reset  | Name                 | Description                                                                                                |
 |:------:|:------:|:-------:|:---------------------|:-----------------------------------------------------------------------------------------------------------|
-| 31:28  |   ro   |    x    | REPCNTS_FAIL_COUNT   | The number of symbols during which this test failed since the last passing health test window.             |
-| 27:24  |   ro   |    x    | MARKOV_LO_FAIL_COUNT | The number of health test windows during which this test failed since the last passing health test window. |
-| 23:20  |   ro   |    x    | MARKOV_HI_FAIL_COUNT | The number of health test windows during which this test failed since the last passing health test window. |
-| 19:16  |   ro   |    x    | BUCKET_FAIL_COUNT    | The number of health test windows during which this test failed since the last passing health test window. |
+| 31:28  |   ro   |    x    | MARKOV_LO_FAIL_COUNT | The number of health test windows during which this test failed since the last passing health test window. |
+| 27:24  |   ro   |    x    | MARKOV_HI_FAIL_COUNT | The number of health test windows during which this test failed since the last passing health test window. |
+| 23:20  |   ro   |    x    | BUCKET_FAIL_COUNT    | The number of health test windows during which this test failed since the last passing health test window. |
+| 19:16  |   ro   |    x    | ADAPTPS_FAIL_COUNT   | The number of health test windows during which this test failed since the last passing health test window. |
 | 15:12  |   ro   |    x    | ADAPTP_LO_FAIL_COUNT | The number of health test windows during which this test failed since the last passing health test window. |
 |  11:8  |   ro   |    x    | ADAPTP_HI_FAIL_COUNT | The number of health test windows during which this test failed since the last passing health test window. |
-|  7:4   |   ro   |    x    | REPCNT_FAIL_COUNT    | The number of symbols during which this test failed since the last passing health test window.             |
-|  3:0   |        |         |                      | Reserved                                                                                                   |
+|  7:4   |   ro   |    x    | REPCNTS_FAIL_COUNT   | The number of symbols during which this test failed since the last passing health test window.             |
+|  3:0   |   ro   |    x    | REPCNT_FAIL_COUNT    | The number of symbols during which this test failed since the last passing health test window.             |
 
 ## EXTHT_FAIL_COUNTS
 External health test alert failure counts register
@@ -895,7 +909,7 @@ Note that if multiple health tests fail for a certain symbol or window, the valu
 
 All fields of this register are automatically cleared after every passing health test window unless the ENTROPY_SRC is configured in Firmware Override: Extract & Insert mode.
 The fields are also cleared after re-enabling the block.
-- Offset: `0x90`
+- Offset: `0x94`
 - Reset default: `0x0`
 - Reset mask: `0xff`
 
@@ -913,7 +927,7 @@ The fields are also cleared after re-enabling the block.
 
 ## FW_OV_CONTROL
 Firmware override control register
-- Offset: `0x94`
+- Offset: `0x98`
 - Reset default: `0x99`
 - Reset mask: `0xff`
 - Register enable: [`REGWEN`](#regwen)
@@ -934,7 +948,6 @@ Firmware override control register
 Setting this field to `kMultiBitBool4True` allows firmware to extract entropy bits by reading the observe FIFO (see [`FW_OV_RD_DATA`](#fw_ov_rd_data)) and insert entropy bits into the entropy flow by writing the [`FW_OV_WR_DATA`](#fw_ov_wr_data) register.
 This is useful e.g. for performing additional health tests and/or firmware-based conditioning.
 For this to work, [`FW_OV_CONTROL.FW_OV_MODE`](#fw_ov_control) needs to be set to `kMultiBitBool4True`.
-In addition, the otp_en_entropy_src_fw_over input needs to be set to `kMultiBitBool8True`.
 
 Firmware can use the hardware conditioning for the inserted entropy bits (see [`FW_OV_SHA3_START`](#fw_ov_sha3_start)).
 
@@ -952,13 +965,12 @@ Setting this field to `kMultiBitBool4True` will put the entropy flow in firmware
 In this mode, firmware can monitor the post-health test entropy by reading
 the observe FIFO (see [`FW_OV_RD_DATA`](#fw_ov_rd_data)).
 This includes the entropy bits used for the startup health testing.
-For this to work, the otp_en_entropy_src_fw_over input needs to be set to `kMultiBitBool8True`.
 
 Note that the post-health test entropy bits collected in the observe FIFO continue to flow through the hardware pipeline and may eventually reach the block hardware interface.
 
 ## FW_OV_SHA3_START
 Firmware override sha3 block start control register
-- Offset: `0x98`
+- Offset: `0x9c`
 - Reset default: `0x9`
 - Reset mask: `0xf`
 
@@ -984,7 +996,7 @@ To avoid this, check that [`FW_OV_WR_FIFO_FULL`](#fw_ov_wr_fifo_full) is clear b
 
 ## FW_OV_WR_FIFO_FULL
 Firmware override FIFO write full status register
-- Offset: `0x9c`
+- Offset: `0xa0`
 - Reset default: `0x0`
 - Reset mask: `0x1`
 
@@ -1001,7 +1013,7 @@ Firmware override FIFO write full status register
 
 ## FW_OV_RD_FIFO_OVERFLOW
 Firmware override observe FIFO overflow status
-- Offset: `0xa0`
+- Offset: `0xa4`
 - Reset default: `0x0`
 - Reset mask: `0x1`
 
@@ -1025,7 +1037,7 @@ If an overflow event occurs, this bit is cleared by hardware as soon as the FIFO
 
 ## FW_OV_RD_DATA
 Firmware override observe FIFO read register
-- Offset: `0xa4`
+- Offset: `0xa8`
 - Reset default: `0x0`
 - Reset mask: `0xffffffff`
 
@@ -1042,12 +1054,11 @@ Firmware override observe FIFO read register
 ### FW_OV_RD_DATA . FW_OV_RD_DATA
 A read of this register pops and returns the top of the observe FIFO.
 For this to work, the [`FW_OV_CONTROL.FW_OV_MODE`](#fw_ov_control) field needs to be set to `kMultiBitBool4True`
-In addition, the otp_en_entropy_src_fw_over input needs to be set to `kMultiBitBool8True`.
 Reading this register while the observe FIFO is empty results in a fatal error with [`ERR_CODE.FIFO_READ_ERR`](#err_code) and [`ERR_CODE.SFIFO_OBSERVE_ERR`](#err_code) going high.
 
 ## FW_OV_WR_DATA
 Firmware override FIFO write register
-- Offset: `0xa8`
+- Offset: `0xac`
 - Reset default: `0x0`
 - Reset mask: `0xffffffff`
 
@@ -1057,18 +1068,13 @@ Firmware override FIFO write register
 {"reg": [{"name": "FW_OV_WR_DATA", "bits": 32, "attr": ["wo"], "rotate": 0}], "config": {"lanes": 1, "fontsize": 10, "vspace": 80}}
 ```
 
-|  Bits  |  Type  |  Reset  | Name                                           |
-|:------:|:------:|:-------:|:-----------------------------------------------|
-|  31:0  |   wo   |    x    | [FW_OV_WR_DATA](#fw_ov_wr_data--fw_ov_wr_data) |
-
-### FW_OV_WR_DATA . FW_OV_WR_DATA
-A write to this register will insert entropy back into the entropy source module flow.
-For this to work, both the [`FW_OV_CONTROL.FW_OV_MODE`](#fw_ov_control) and [`FW_OV_CONTROL.FW_OV_ENTROPY_INSERT`](#fw_ov_control) fields need to be set to `kMultiBitBool4True`.
-In addition, the otp_en_entropy_src_fw_over input needs to be set to `kMultiBitBool8True`.
+|  Bits  |  Type  |  Reset  | Name          | Description                                                                                                                                                                                                                                                              |
+|:------:|:------:|:-------:|:--------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|  31:0  |   wo   |    x    | FW_OV_WR_DATA | A write to this register will insert entropy back into the entropy source module flow. For this to work, both the [`FW_OV_CONTROL.FW_OV_MODE`](#fw_ov_control) and [`FW_OV_CONTROL.FW_OV_ENTROPY_INSERT`](#fw_ov_control) fields need to be set to `kMultiBitBool4True`. |
 
 ## OBSERVE_FIFO_THRESH
 Observe FIFO threshold register
-- Offset: `0xac`
+- Offset: `0xb0`
 - Reset default: `0x10`
 - Reset mask: `0x3f`
 - Register enable: [`REGWEN`](#regwen)
@@ -1086,7 +1092,7 @@ Observe FIFO threshold register
 
 ## OBSERVE_FIFO_DEPTH
 Observe FIFO depth register
-- Offset: `0xb0`
+- Offset: `0xb4`
 - Reset default: `0x0`
 - Reset mask: `0x3f`
 
@@ -1103,7 +1109,7 @@ Observe FIFO depth register
 
 ## DEBUG_STATUS
 Debug status register
-- Offset: `0xb4`
+- Offset: `0xb8`
 - Reset default: `0x10000`
 - Reset mask: `0x303fb`
 
@@ -1129,7 +1135,7 @@ Debug status register
 
 ## RECOV_ALERT_STS
 Recoverable alert status register
-- Offset: `0xb8`
+- Offset: `0xbc`
 - Reset default: `0x0`
 - Reset mask: `0x8007ffbf`
 
@@ -1259,7 +1265,7 @@ Writing a zero resets this status bit.
 
 ## ERR_CODE
 Hardware detection of error conditions status register
-- Offset: `0xbc`
+- Offset: `0xc0`
 - Reset default: `0x0`
 - Reset mask: `0x71f0000f`
 
@@ -1353,7 +1359,7 @@ This bit will stay set until the next reset.
 
 ## ERR_CODE_TEST
 Test error conditions register
-- Offset: `0xc0`
+- Offset: `0xc4`
 - Reset default: `0x0`
 - Reset mask: `0x1f`
 
@@ -1378,7 +1384,7 @@ an interrupt or an alert.
 
 ## MAIN_SM_STATE
 Main state machine state debug register
-- Offset: `0xc4`
+- Offset: `0xc8`
 - Reset default: `0xf5`
 - Reset mask: `0x1ff`
 

@@ -529,9 +529,9 @@ typedef struct otcrypto_unblinded_key {
  */
 typedef struct otcrypto_blinded_key {
   /// Key configuration information.
-  const otcrypto_key_config_t config;
+  otcrypto_key_config_t config;
   /// Length of blinded key material in bytes.
-  const uint32_t keyblob_length;
+  uint32_t keyblob_length;
   /// Implementation specific, storage provided by caller.
   uint32_t *keyblob;
   /// Implementation specific, checksum for this struct.
@@ -580,6 +580,31 @@ typedef struct otcrypto_hash_digest {
   size_t len;
 } otcrypto_hash_digest_t;
 
+/**
+ * Lock state value indicating the cryptolib is locked specifically due to an
+ * entropy source health test failure.
+ *
+ * Unlike a hard lock (`kHardenedByteBoolTrue`), this state allows recovery
+ * by calling `otcrypto_entropy_init()`, which re-executes the RNG startup
+ * tests.
+ */
+enum {
+  kOtcryptoLockStateEntropy = 0xd6,
+};
+
+/**
+ * CMVP service indicator states.
+ */
+typedef enum otcrypto_cmvp_service_indicator {
+  // No service called or indicator cleared.
+  kOtcryptoCmvpNoService = 0,
+  // Approved crypto service.
+  kOtcryptoCmvpApprovedService = 1,
+  // Non-approved crypto service.
+  kOtcryptoCmvpNotApprovedService = 2,
+} otcrypto_cmvp_service_indicator_t;
+
+typedef otcrypto_cmvp_service_indicator_t otcrypto_cmvp_indicator_t;
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

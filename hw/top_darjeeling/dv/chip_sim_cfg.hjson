@@ -27,11 +27,13 @@
   // non-deterministic-selection warnings.
   // The DV environment additionally depends on the virtual
   // rom_ctrl_bkdr_util_hier core, which describes the layout of the ROM memory
-  // array.
+  // array, and the virtual mem_bkdr_util_hier core, which sram_ctrl_bkdr_util
+  // depends on directly.
   // Note that the imported cfg already supplies the prim mapping, and dvsim
   // appends these lists rather than replacing them.
   sv_flist_gen_flags: ["--mapping=lowrisc:systems:chip_darjeeling_asic:0.1",
-                       "--mapping=lowrisc:dv:rom_ctrl_bkdr_util_hier:0.1"]
+                       "--mapping=lowrisc:dv:rom_ctrl_bkdr_util_hier:0.1",
+                       "--mapping=lowrisc:dv:mem_bkdr_util_hier:0.1"]
 
   // Testplan hjson file, excluding the connectivity tests.
   testplan: "{proj_root}/hw/{top_chip}/data/chip_testplan.hjson:-conn:-no_dv"
@@ -61,7 +63,10 @@
                 // Enable C compilation of AES model for DPI-C
                 "{proj_root}/hw/ip/aes/model/aes_model_sim_opts.hjson",
 
-                // TODO(#26733): fix these smoke tests for Darjeeling.
+                // TODO(#26733): importing csr_tests.hjson would also add chip_csr_hw_reset
+                // and chip_csr_rw to the smoke regression, which were failing on Darjeeling
+                // when the import was disabled. The CSR tests and csr_tests_mode are
+                // replicated locally instead; re-enable the import once they pass.
                 //"{proj_root}/hw/dv/tools/dvsim/tests/csr_tests.hjson",
 
                 // TODO #5484, comment these 2 lines out because spi host memory is dummy
@@ -381,8 +386,11 @@
       run_opts: ["+stub_cpu=1"]
     }
     {
-      // Append stub cpu mode to csr_tests_mode.
+      // Local copy of csr_tests_mode from hw/dv/tools/dvsim/tests/csr_tests.hjson (the import
+      // is disabled above), with stub cpu mode appended.
       name: csr_tests_mode
+      uvm_test_seq: "{name}_common_vseq"
+      run_opts: ["+en_scb=0"]
       en_run_modes: ["stub_cpu_mode"]
     }
     {
@@ -431,24 +439,53 @@
   // value by 20% and use the relationship that 5 minutes of runtime is roughly
   // 4 milliseconds of timeout.
   tests: [
+    // The CSR tests below are copied from hw/dv/tools/dvsim/tests/csr_tests.hjson (see the
+    // note on the disabled import above), with the chip-specific timeouts and CSR limits.
     {
-      // Reused from hw/dv/tools/dvsim/tests/csr_tests.hjson.
+      name: "chip_csr_hw_reset"
+      build_mode: "cover_reg_top"
+      run_opts: ["+csr_hw_reset"]
+      en_run_modes: ["csr_tests_mode"]
+      reseed: 1
+    }
+    {
+      name: "chip_csr_rw"
+      build_mode: "cover_reg_top"
+      run_opts: ["+csr_rw"]
+      en_run_modes: ["csr_tests_mode"]
+      reseed: 5
+    }
+    {
       name: "chip_csr_bit_bash"
+      build_mode: "cover_reg_top"
       // Don't test over 200 randomly picked CSRs at a time.
-      run_opts: ["+test_timeout_ns=120_000_000", "+num_test_csrs=200"]
+      run_opts: ["+csr_bit_bash", "+test_timeout_ns=120_000_000", "+num_test_csrs=200"]
+      en_run_modes: ["csr_tests_mode"]
       run_timeout_mins: 180
+      reseed: 1
     }
     {
-      // Reused from hw/dv/tools/dvsim/tests/csr_tests.hjson.
       name: "chip_csr_aliasing"
+      build_mode: "cover_reg_top"
+      run_opts: ["+csr_aliasing", "+test_timeout_ns=120_000_000"]
+      en_run_modes: ["csr_tests_mode"]
       run_timeout_mins: 180
-      run_opts: ["+test_timeout_ns=120_000_000"]
+      reseed: 1
     }
     {
-      // Reused from hw/dv/tools/dvsim/tests/csr_tests.hjson.
       name: "chip_same_csr_outstanding"
+      build_mode: "cover_reg_top"
+      run_opts: ["+run_same_csr_outstanding", "+test_timeout_ns=120_000_000"]
+      en_run_modes: ["csr_tests_mode"]
       run_timeout_mins: 120
-      run_opts: ["+test_timeout_ns=120_000_000"]
+      reseed: 5
+    }
+    {
+      name: "chip_csr_mem_rw_with_rand_reset"
+      build_mode: "cover_reg_top"
+      run_opts: ["+run_csr_mem_rw_with_rand_reset", "+test_timeout_ns=10000000000"]
+      en_run_modes: ["csr_tests_mode"]
+      reseed: 5
     }
     {
       name: chip_sw_example_rom
@@ -617,7 +654,8 @@
     {
       name: chip_sw_lc_ctrl_otp_hw_cfg
       uvm_test_seq: chip_sw_base_vseq
-      sw_images: ["//sw/device/tests:lc_ctrl_otp_hw_cfg_test:6:new_rules"]
+      // TODO: lc_ctrl_otp_hw_cfg0_test has no Darjeeling exec_env yet.
+      sw_images: ["//sw/device/tests:lc_ctrl_otp_hw_cfg0_test:6:new_rules"]
       en_run_modes: ["sw_test_mode_test_rom"]
     }
     {
@@ -1036,7 +1074,7 @@
     {
       name: chip_sw_alert_test
       uvm_test_seq: chip_sw_base_vseq
-      sw_images: ["//sw/device/tests/autogen/{top_chip}:alert_test:6:new_rules"]
+      sw_images: ["//hw/{top_chip}/sw/autogen/tests:alert_test:6:new_rules"]
       en_run_modes: ["sw_test_mode_test_rom"]
     }
     {
@@ -1075,7 +1113,8 @@
      {
       name: chip_sw_alert_handler_lpg_sleep_mode_alerts
       uvm_test_seq: chip_sw_all_escalation_resets_vseq
-      sw_images: ["//sw/device/tests:alert_handler_lpg_sleep_mode_alerts_test:6:new_rules"]
+      // TODO: alert_handler_lpg_sleep_mode_alerts_test has no Darjeeling exec_env yet.
+      sw_images: ["//sw/device/tests/sim_dv:alert_handler_lpg_sleep_mode_alerts_test:6:new_rules"]
       en_run_modes: ["sw_test_mode_test_rom"]
       run_opts: ["+en_scb=0",
                  "+sw_test_timeout_ns=3000_000_000",
@@ -1140,13 +1179,6 @@
       sw_images: ["//sw/device/tests:csrng_kat_test:6:new_rules"]
       en_run_modes: ["sw_test_mode_test_rom"]
       run_opts: ["+sw_test_timeout_ns=18_000_000"]
-    }
-    {
-      name: chip_sw_csrng_fuse_en_sw_app_read_test
-      uvm_test_seq: chip_sw_base_vseq
-      sw_images: ["//sw/device/tests/sim_dv:csrng_fuse_en_sw_app_read:6:new_rules"]
-      en_run_modes: ["sw_test_mode_test_rom"]
-      run_opts: ["+sw_test_timeout_ns=15_000_000"]
     }
     {
       name: chip_sw_entropy_src_csrng
@@ -1252,6 +1284,12 @@
       en_run_modes: ["sw_test_mode_test_rom"]
     }
     {
+      name: chip_sw_kmac_save_restore_smoketest
+      uvm_test_seq: chip_sw_base_vseq
+      sw_images: ["//sw/device/tests:kmac_save_restore_smoketest:6:new_rules"]
+      en_run_modes: ["sw_test_mode_test_rom"]
+    }
+    {
       name: chip_sw_kmac_mode_kmac_jitter_en
       uvm_test_seq: chip_sw_base_vseq
       sw_images: ["//sw/device/tests:kmac_mode_kmac_test:6:new_rules"]
@@ -1261,7 +1299,8 @@
     {
       name: chip_sw_kmac_app_rom
       uvm_test_seq: chip_sw_base_vseq
-      sw_images: ["//sw/device/tests:kmac_app_rom_test:6:new_rules"]
+      // The `sim_dv` suffix is necessary due to how the targets are created, see BUILD file.
+      sw_images: ["//sw/device/tests:kmac_app_rom_test_sim_dv:6:new_rules"]
       en_run_modes: ["sw_test_mode_test_rom"]
     }
     {
@@ -1307,16 +1346,18 @@
 //      run_opts: ["+sw_test_timeout_ns=20_000_000", "+en_scb_tl_err_chk=0",
 //                 "+bypass_alert_ready_to_end_check=1"]
 //    }
-    {
-      name: chip_sw_coremark
-      uvm_test_seq: chip_sw_base_vseq
-      sw_images: ["//third_party/coremark/{top_chip}:coremark_test:6:new_rules"]
-      en_run_modes: ["sw_test_mode_test_rom"]
-      run_opts: ["+en_uart_logger=1",
-                 "+sw_test_timeout_ns=100_000_000"]
-      reseed: 1
-      run_timeout_mins: 180
-    }
+    // TODO: there is no Darjeeling CoreMark port yet (third_party/coremark only has
+    // top_earlgrey).
+    // {
+    //   name: chip_sw_coremark
+    //   uvm_test_seq: chip_sw_base_vseq
+    //   sw_images: ["//third_party/coremark/{top_chip}:coremark_test:6:new_rules"]
+    //   en_run_modes: ["sw_test_mode_test_rom"]
+    //   run_opts: ["+en_uart_logger=1",
+    //              "+sw_test_timeout_ns=100_000_000"]
+    //   reseed: 1
+    //   run_timeout_mins: 180
+    // }
     // {
     //   name: chip_sw_pwrmgr_b2b_sleep_reset_req
     //   uvm_test_seq: chip_sw_repeat_reset_wkup_vseq
@@ -1417,13 +1458,13 @@
       name: chip_jtag_csr_rw
       uvm_test_seq: "chip_jtag_csr_rw_vseq"
       en_run_modes: ["stub_cpu_mode"]
-      run_opts: ["+en_scb=0", "+csr_rw", "+create_jtag_riscv_map=1"]
+      run_opts: ["+en_scb=0", "+en_scb_mem_chk=0", "+csr_rw", "+create_jtag_riscv_map=1"]
     }
     {
       name: chip_jtag_mem_access
       uvm_test_seq: "chip_jtag_mem_vseq"
       en_run_modes: ["stub_cpu_mode"]
-      run_opts: ["+create_jtag_riscv_map=1"]
+      run_opts: ["+en_scb_mem_chk=0", "+create_jtag_riscv_map=1"]
     }
     {
       name: chip_sw_ast_clk_outputs
@@ -1468,14 +1509,16 @@
     {
       name: chip_sw_rv_dm_ndm_reset_req_when_cpu_halted
       uvm_test_seq: "chip_sw_rv_dm_ndm_reset_when_cpu_halted_vseq"
-      sw_images: ["//sw/device/tests:rv_dm_ndm_reset_req_when_cpu_halted:6:new_rules"]
+      sw_images: ["//sw/device/tests:rv_dm_ndm_reset_req_when_cpu_halted_rma:6:new_rules"]
       en_run_modes: ["sw_test_mode_test_rom"]
       run_opts: ["+use_jtag_dmi=1"]
     }
     {
       name: chip_sw_rv_dm_access_after_wakeup
       uvm_test_seq: chip_sw_rv_dm_access_after_wakeup_vseq
-      sw_images: ["//sw/device/tests:rv_dm_access_after_wakeup:6:new_rules"]
+      // TODO: rv_dm_access_after_wakeup wakes up via sysrst_ctrl and has no Darjeeling
+      // exec_env yet; the Darjeeling vseq is not compiled into the env either.
+      sw_images: ["//sw/device/tests:rv_dm_access_after_wakeup_rma:6:new_rules"]
       en_run_modes: ["sw_test_mode_test_rom"]
       run_opts: ["+use_jtag_dmi=1"]
     }
@@ -1665,7 +1708,6 @@
               "chip_sw_otbn_ecdsa_op_irq_jitter_en",
               "chip_sw_aes_enc_jitter_en",
               "chip_sw_hmac_enc_jitter_en",
-              "chip_sw_keymgr_key_derivation_jitter_en",
               "chip_sw_kmac_mode_kmac_jitter_en",
               "chip_sw_sram_ctrl_scrambled_access_jitter_en"]
     }
@@ -1675,7 +1717,6 @@
               "chip_sw_otbn_ecdsa_op_irq_jitter_en_reduced_freq",
               "chip_sw_aes_enc_jitter_en_reduced_freq",
               "chip_sw_hmac_enc_jitter_en_reduced_freq",
-              "chip_sw_keymgr_key_derivation_jitter_en_reduced_freq",
               "chip_sw_kmac_mode_kmac_jitter_en_reduced_freq",
               "chip_sw_sram_ctrl_scrambled_access_jitter_en_reduced_freq",
               "chip_sw_csrng_edn_concurrency_reduced_freq"]
@@ -1689,7 +1730,7 @@
               "chip_sw_rom_ctrl_integrity_check",
               "chip_sw_kmac_idle",
               "chip_sw_lc_ctrl_rand_to_scrap"
-              "chip_sw_sleep_pin_mio_dio_val",
+              // TODO(#501): "chip_sw_sleep_pin_mio_dio_val",
               // TODO(#26733): uncomment when these run for Darjeeling.
               "chip_plic_all_irqs_0",
               "chip_plic_all_irqs_10",

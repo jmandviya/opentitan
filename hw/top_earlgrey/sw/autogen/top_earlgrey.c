@@ -16,7 +16,7 @@
  * `top_earlgrey_alert_peripheral_t`.
  */
 const top_earlgrey_alert_peripheral_t
-    top_earlgrey_alert_for_peripheral[66] = {
+    top_earlgrey_alert_for_peripheral[68] = {
   [kTopEarlgreyAlertIdUart0FatalFault] = kTopEarlgreyAlertPeripheralUart0,
   [kTopEarlgreyAlertIdUart1FatalFault] = kTopEarlgreyAlertPeripheralUart1,
   [kTopEarlgreyAlertIdUart2FatalFault] = kTopEarlgreyAlertPeripheralUart2,
@@ -26,6 +26,8 @@ const top_earlgrey_alert_peripheral_t
   [kTopEarlgreyAlertIdI2c0FatalFault] = kTopEarlgreyAlertPeripheralI2c0,
   [kTopEarlgreyAlertIdI2c1FatalFault] = kTopEarlgreyAlertPeripheralI2c1,
   [kTopEarlgreyAlertIdI2c2FatalFault] = kTopEarlgreyAlertPeripheralI2c2,
+  [kTopEarlgreyAlertIdI3c0FatalFault] = kTopEarlgreyAlertPeripheralI3c0,
+  [kTopEarlgreyAlertIdI3c1FatalFault] = kTopEarlgreyAlertPeripheralI3c1,
   [kTopEarlgreyAlertIdRvTimerFatalFault] = kTopEarlgreyAlertPeripheralRvTimer,
   [kTopEarlgreyAlertIdOtpCtrlFatalMacroError] = kTopEarlgreyAlertPeripheralOtpCtrl,
   [kTopEarlgreyAlertIdOtpCtrlFatalCheckError] = kTopEarlgreyAlertPeripheralOtpCtrl,
@@ -81,7 +83,7 @@ const top_earlgrey_alert_peripheral_t
   [kTopEarlgreyAlertIdRvCoreIbexRecovSwErr] = kTopEarlgreyAlertPeripheralRvCoreIbex,
   [kTopEarlgreyAlertIdRvCoreIbexFatalHwErr] = kTopEarlgreyAlertPeripheralRvCoreIbex,
   [kTopEarlgreyAlertIdRvCoreIbexRecovHwErr] = kTopEarlgreyAlertPeripheralRvCoreIbex,
-  [kTopEarlgreyAlertIdCheriotFatalFault] = kTopEarlgreyAlertPeripheralCheriot,
+  [kTopEarlgreyAlertIdCheriotMemSysFatalFault] = kTopEarlgreyAlertPeripheralCheriotMemSys,
   [kTopEarlgreyAlertIdSramCtrlMetaFatalError] = kTopEarlgreyAlertPeripheralSramCtrlMeta,
 };
 
@@ -92,7 +94,7 @@ const top_earlgrey_alert_peripheral_t
  * `top_earlgrey_plic_peripheral_t`.
  */
 const top_earlgrey_plic_peripheral_t
-    top_earlgrey_plic_interrupt_for_peripheral[184] = {
+    top_earlgrey_plic_interrupt_for_peripheral[190] = {
   [kTopEarlgreyPlicIrqIdNone] = kTopEarlgreyPlicPeripheralUnknown,
   [kTopEarlgreyPlicIrqIdUart0TxWatermark] = kTopEarlgreyPlicPeripheralUart0,
   [kTopEarlgreyPlicIrqIdUart0RxWatermark] = kTopEarlgreyPlicPeripheralUart0,
@@ -215,6 +217,10 @@ const top_earlgrey_plic_peripheral_t
   [kTopEarlgreyPlicIrqIdI2c2AcqStretch] = kTopEarlgreyPlicPeripheralI2c2,
   [kTopEarlgreyPlicIrqIdI2c2UnexpStop] = kTopEarlgreyPlicPeripheralI2c2,
   [kTopEarlgreyPlicIrqIdI2c2HostTimeout] = kTopEarlgreyPlicPeripheralI2c2,
+  [kTopEarlgreyPlicIrqIdI3c0Hci] = kTopEarlgreyPlicPeripheralI3c0,
+  [kTopEarlgreyPlicIrqIdI3c0Targ] = kTopEarlgreyPlicPeripheralI3c0,
+  [kTopEarlgreyPlicIrqIdI3c1Hci] = kTopEarlgreyPlicPeripheralI3c1,
+  [kTopEarlgreyPlicIrqIdI3c1Targ] = kTopEarlgreyPlicPeripheralI3c1,
   [kTopEarlgreyPlicIrqIdRvTimerTimerExpiredHart0Timer0] = kTopEarlgreyPlicPeripheralRvTimer,
   [kTopEarlgreyPlicIrqIdOtpCtrlOtpOperationDone] = kTopEarlgreyPlicPeripheralOtpCtrl,
   [kTopEarlgreyPlicIrqIdOtpCtrlOtpError] = kTopEarlgreyPlicPeripheralOtpCtrl,
@@ -256,7 +262,8 @@ const top_earlgrey_plic_peripheral_t
   [kTopEarlgreyPlicIrqIdRramCtrlRdFull] = kTopEarlgreyPlicPeripheralRramCtrl,
   [kTopEarlgreyPlicIrqIdRramCtrlRdLvl] = kTopEarlgreyPlicPeripheralRramCtrl,
   [kTopEarlgreyPlicIrqIdRramCtrlOpDone] = kTopEarlgreyPlicPeripheralRramCtrl,
-  [kTopEarlgreyPlicIrqIdRramCtrlCorrErr] = kTopEarlgreyPlicPeripheralRramCtrl,
+  [kTopEarlgreyPlicIrqIdRramCtrlCorr1Err] = kTopEarlgreyPlicPeripheralRramCtrl,
+  [kTopEarlgreyPlicIrqIdRramCtrlCorr2Err] = kTopEarlgreyPlicPeripheralRramCtrl,
   [kTopEarlgreyPlicIrqIdHmacHmacDone] = kTopEarlgreyPlicPeripheralHmac,
   [kTopEarlgreyPlicIrqIdHmacFifoEmpty] = kTopEarlgreyPlicPeripheralHmac,
   [kTopEarlgreyPlicIrqIdHmacHmacErr] = kTopEarlgreyPlicPeripheralHmac,
@@ -277,4 +284,5 @@ const top_earlgrey_plic_peripheral_t
   [kTopEarlgreyPlicIrqIdEdn0EdnFatalErr] = kTopEarlgreyPlicPeripheralEdn0,
   [kTopEarlgreyPlicIrqIdEdn1EdnCmdReqDone] = kTopEarlgreyPlicPeripheralEdn1,
   [kTopEarlgreyPlicIrqIdEdn1EdnFatalErr] = kTopEarlgreyPlicPeripheralEdn1,
+  [kTopEarlgreyPlicIrqIdCheriotMemSysTbreDone] = kTopEarlgreyPlicPeripheralCheriotMemSys,
 };

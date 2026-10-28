@@ -64,6 +64,18 @@ OPTIONAL_FIELDS = {
         "register name should be given here. empty-string for no register "
         "write protection"
     ],
+    'reinit': [
+        's', "reinit signal that restores the content of the register to its "
+        "reset state, e.g., at the request of software."
+    ],
+    'inregwen': [
+        's', "if the writable fields of this register are write-protected by a "
+        "single-bit field *within the same register*, that field name should "
+        "be given here. The named control field is stored inside the register "
+        "block (even when the register is hwext) and gates the write-enable "
+        "(and hence the 'qe' strobe) of all other writable fields. empty-string "
+        "for no in-register write protection"
+    ],
     'resval': ['d', "reset value of full register (default 0)"],
     'tags': [
         's',
@@ -100,6 +112,7 @@ class Register(RegBase):
     update_err_alert: str | None = None
     storage_err_alert: str | None = None
     writes_ignore_errors: bool = False
+    inregwen: str | None = None
     resval: int = field(init=False)
     resmask: int = field(init=False)
     name_to_field: dict[str, Field] = field(init=False)
@@ -132,9 +145,39 @@ class Register(RegBase):
                     f'{fld.name}.')
             self.name_to_field[fld.name] = fld
 
+        # Validate an in-register write-enable ("inregwen"), if present.
+        if self.inregwen is not None:
+            if self.inregwen not in self.name_to_field:
+                raise ValueError(
+                    f'Register {self.name} names {self.inregwen} as its '
+                    'inregwen, but it has no such field.')
+            ctrl = self.name_to_field[self.inregwen]
+            if ctrl.bits.width() != 1:
+                raise ValueError(
+                    f'The inregwen field {self.inregwen} of register '
+                    f'{self.name} must be a single bit, not '
+                    f'{ctrl.bits.width()} bits.')
+            # The control bit is stored inside the reg block and must not be
+            # exposed to HW and it must be SW-writable so software can engage the lock.
+            if ctrl.hwaccess.key != 'none':
+                raise ValueError(
+                    f'The inregwen field {self.inregwen} of register '
+                    f'{self.name} must have hwaccess "none" (it is stored in '
+                    f'the reg block), not "{ctrl.hwaccess.key}".')
+            if not ctrl.sw_writable():
+                raise ValueError(
+                    f'The inregwen field {self.inregwen} of register '
+                    f'{self.name} must be writable by software (mode '
+                    f'{ctrl.swaccess.key}).')
+
         # Check that fields have compatible access types if we are hwext
         if self.hwext:
             for fld in self.fields:
+                # An inregwen control field is intentionally stored inside the
+                # reg block, so it is exempt from the hwext field
+                # constraints below.
+                if self.inregwen is not None and fld.name == self.inregwen:
+                    continue
                 if fld.hwaccess.key == 'hro' and fld.sw_readable():
                     raise ValueError(
                         f'The {self.name} register has hwext set, but field '
@@ -286,11 +329,38 @@ class Register(RegBase):
         hwre = check_bool(rd.get('hwre', False),
                           f'hwre flag for {name} register')
 
+        reinit = rd.get('reinit')
+        reinit_str: str | None = None
+        if reinit is not None:
+            if sync_clk is not None or async_clk is not None:
+                raise ValueError(f'{name} register has special clocking requirements '
+                                 'and does not support reinit.')
+            if hwext and not hwaccess.allows_read():
+                raise ValueError(f'{name} register cannot support reinit because it '
+                                 'is external and does not support hw reads.')
+            reinit_str = str(reinit)
+
         raw_regwen = rd.get('regwen', '')
         if not raw_regwen:
             regwen = None
         else:
             regwen = check_name(raw_regwen, f'regwen for {name} register')
+
+        raw_inregwen = rd.get('inregwen', '')
+        if not raw_inregwen:
+            inregwen = None
+        else:
+            inregwen = check_name(raw_inregwen,
+                                  f'inregwen for {name} register')
+
+        # Registers that are protected by a REGWEN do not support software reinit,
+        # because that could undermine the security model.
+        if regwen is not None and reinit is not None:
+            raise ValueError(f'{name} register is protected by a regwen and '
+                             'does not support reinit.')
+        if inregwen is not None and reinit is not None:
+            raise ValueError(f'{name} register is protected by an inregwen and '
+                             'does not support reinit.')
 
         raw_resval = rd.get('resval')
         if raw_resval is None:
@@ -305,6 +375,9 @@ class Register(RegBase):
 
         shadowed = check_bool(rd.get('shadowed', False),
                               f'shadowed flag for {name} register')
+
+        if shadowed and reinit is not None:
+            raise ValueError('reinit is not supported for shadowed registers.')
 
         raw_fields = check_list(rd['fields'], f'fields for {name} register')
         if not raw_fields:
@@ -332,8 +405,7 @@ class Register(RegBase):
             overlap_bits = used_bits & field.bits.bitmask()
             if overlap_bits:
                 raise ValueError(f'Field {field.name} uses bits '
-                                 f'{overlap_bits:#x} that appear in other '
-                                 f'fields.')
+                                 f'{overlap_bits:#x} that appear in other fields.')
 
             used_bits |= field.bits.bitmask()
             fields.append(field)
@@ -357,25 +429,34 @@ class Register(RegBase):
                        'writes_ignore_errors flag for {} register'
                        .format(name))
 
-        return Register(name, offset, async_clk, sync_clk, alias_target,
-                        desc, fields, hwext, hwqe, hwre, regwen,
-                        tags, resval, shadowed,
+        return Register(name, offset, async_clk, sync_clk, reinit_str,
+                        alias_target, desc, fields, hwext, hwqe, hwre,
+                        regwen, tags, resval, shadowed,
                         update_err_alert, storage_err_alert,
-                        writes_ignore_errors)
+                        writes_ignore_errors, inregwen=inregwen)
 
     def next_offset(self, addrsep: int) -> int:
         return self.offset + addrsep
 
     def get_n_bits(self, bittype: List[str]) -> int:
-        return sum(
+        reinit_width = 0 if self.reinit is None or 'reinit' not in bittype else 1
+        return (reinit_width + sum(
             field.get_n_bits(self.hwext, self.hwre, bittype)
-            for field in self.fields)
+            for field in self.fields))
 
     def get_field_list(self) -> List[Field]:
         return self.fields
 
-    def is_homogeneous(self) -> bool:
-        return len(self.fields) == 1
+    def is_homogeneous(self, inregwen: bool = False) -> bool:
+        '''True if the register has a single field.
+
+        When inregwen is True, the inregwen control field is ignored so that
+        this bit does not affect the number of fields in a register.
+        '''
+        fields = self.fields
+        if inregwen and self.inregwen is not None:
+            fields = [fld for fld in fields if fld.name != self.inregwen]
+        return len(fields) == 1
 
     def is_hw_writable(self) -> bool:
         '''Returns true if any field in this register can be modified by HW'''
@@ -447,6 +528,12 @@ class Register(RegBase):
             if fld.swaccess.key == 'rc':
                 return True
 
+            # An inregwen control field is stored inside the reg block (not
+            # external), so its read does not need a read-enable even though the
+            # register is hwext.
+            if self.inregwen is not None and fld.name == self.inregwen:
+                continue
+
             if self.hwext and fld.swaccess.allows_read():
                 return True
 
@@ -456,6 +543,7 @@ class Register(RegBase):
     def collect_registers(offset: int,
                           name: str,
                           regs: List[Tuple['Register', int]],
+                          reinit: Optional[str],
                           alias_target: Optional[str],
                           regwen: Optional[str],
                           field_desc_override: Optional[str],
@@ -547,7 +635,7 @@ class Register(RegBase):
         new_resval = None
 
         return Register(name, offset,
-                        reg0.async_clk, reg0.sync_clk, alias_target,
+                        reg0.async_clk, reg0.sync_clk, reinit, alias_target,
                         reg0.desc, fields,
                         reg0.hwext, reg0.hwqe, reg0.hwre, regwen,
                         reg0.tags, new_resval, reg0.shadowed,
@@ -562,6 +650,12 @@ class Register(RegBase):
         if self.async_clk is not None:
             raise ValueError(
                 f'Regwen {self.name} cannot be declared as async.')
+
+        # REGWEN registers do not offer support for software reinit signals.
+        # Doing so would allow software to unlock the controlled registers.
+        if self.reinit is not None:
+            raise ValueError(
+                f'Regwen {self.name} does not support software reinit.')
 
         # A REGWEN register should have a single field that's just bit zero.
         if len(self.fields) != 1:
@@ -642,10 +736,14 @@ class Register(RegBase):
         }  # type: Dict[str, object]
         if self.regwen is not None:
             rd['regwen'] = self.regwen
+        if self.inregwen is not None:
+            rd['inregwen'] = self.inregwen
         if self.update_err_alert is not None:
             rd['update_err_alert'] = self.update_err_alert
         if self.storage_err_alert is not None:
             rd['storage_err_alert'] = self.storage_err_alert
+        if self.reinit is not None:
+            rd['reinit'] = self.reinit
         if self.alias_target is not None:
             rd['alias_target'] = self.alias_target
 

@@ -12,6 +12,8 @@ package i3c_reg_pkg;
   parameter int unsigned MaxTargets = 4;
   parameter int unsigned MaxGroups = 8;
   parameter int NumAlerts = 1;
+  parameter int NumAlertsPrimary = 1;
+  parameter int NumAlertsSecondary = 0;
 
   // Address widths within the block
   parameter int BlockAw = 13;
@@ -63,6 +65,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_alert_test_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic [3:0]  q;
     } ce3;
@@ -78,10 +81,11 @@ package i3c_reg_pkg;
   } i3c_reg2hw_ctrl_error_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
       logic        qe;
-    } reset;
+    } sw_reset;
     struct packed {
       logic        q;
       logic        qe;
@@ -112,6 +116,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_status_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
       logic        qe;
@@ -267,6 +272,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_interval_time1_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } ctrl_direct_drive_en;
@@ -458,6 +464,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_async_config_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
       logic        qe;
@@ -531,6 +538,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_reset_control_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } sched_cmd_missed_tick_stat;
@@ -549,6 +557,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_intr_status_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } sched_cmd_missed_tick_stat_en;
@@ -567,6 +576,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_intr_status_enable_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } sched_cmd_missed_tick_signal_en;
@@ -585,6 +595,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_intr_signal_enable_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
       logic        qe;
@@ -615,6 +626,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_dct_section_offset_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } notify_ibi_rejected;
@@ -627,6 +639,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_ibi_notify_ctrl_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } ibi_data_abort_mon;
@@ -642,6 +655,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_ibi_data_abort_ctrl_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic [7:0]  q;
     } ibi_status_thld;
@@ -657,6 +671,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_queue_thld_ctrl_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic [2:0]  q;
     } rx_start_thld;
@@ -672,6 +687,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_data_buffer_thld_ctrl_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } transfer_err_stat;
@@ -696,6 +712,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_pio_intr_status_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } transfer_err_stat_en;
@@ -720,6 +737,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_pio_intr_status_enable_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } transfer_err_signal_en;
@@ -744,6 +762,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_pio_intr_signal_enable_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
       logic        qe;
@@ -775,6 +794,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_pio_intr_force_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } abort;
@@ -806,6 +826,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_dbr_engage_reg_t;
 
   typedef struct packed {
+    logic reinit;
     logic [7:0]  q;
     logic        re;
   } i3c_reg2hw_mx_error_counters_reg_t;
@@ -878,10 +899,6 @@ package i3c_reg_pkg;
 
   typedef struct packed {
     struct packed {
-      logic [2:0]  q;
-      logic        qe;
-    } bcr_fixed;
-    struct packed {
       logic [4:0]  q;
       logic        qe;
     } bcr_var;
@@ -901,6 +918,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_stby_cr_device_pid_lo_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } ccc_fatal_rstdaa_err_stat;
@@ -943,6 +961,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_stby_cr_intr_status_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } ccc_fatal_rstdaa_err_signal_en;
@@ -985,6 +1004,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_stby_cr_intr_signal_enable_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
       logic        qe;
@@ -1054,6 +1074,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_stby_cr_ccc_config_rstact_params_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } te_stat;
@@ -1105,6 +1126,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_intr_status_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } te_stat_en;
@@ -1156,6 +1178,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_intr_status_enable_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } te_signal_en;
@@ -1207,6 +1230,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_intr_signal_enable_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
       logic        qe;
@@ -1274,6 +1298,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_intr_force_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic [3:0]  q;
       logic        qe;
@@ -1293,10 +1318,11 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_pio_control_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
       logic        qe;
-    } reset;
+    } queue_reset;
     struct packed {
       logic        q;
       logic        qe;
@@ -1332,6 +1358,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_async_evt_control_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic [3:0]  q;
     } dbr;
@@ -1359,6 +1386,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_error_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic [7:0]  q;
     } ibi_status_thld;
@@ -1368,6 +1396,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_queue_thld_ctrl_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic [2:0]  q;
     } rx_start_thld;
@@ -1377,6 +1406,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_buf_thld_ctrl_reg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic [15:0] q;
     } mwl;
@@ -1386,10 +1416,12 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_rw_len_mreg_t;
 
   typedef struct packed {
+    logic reinit;
     logic [7:0]  q;
   } i3c_reg2hw_targ_ibi_len_mreg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } enhj;
@@ -1402,10 +1434,12 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_event_enable_mreg_t;
 
   typedef struct packed {
+    logic reinit;
     logic        q;
   } i3c_reg2hw_targ_enable_mreg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic [3:0]  q;
     } targets;
@@ -1415,6 +1449,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_group_mreg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic [3:0]  q;
     } tx_start_thld;
@@ -1427,6 +1462,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_tx_thld_ctrl_mreg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } dynamic_addr_valid;
@@ -1442,6 +1478,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_addr_mreg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic [7:0]  q;
     } bcr;
@@ -1454,10 +1491,12 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_char_mreg_t;
 
   typedef struct packed {
+    logic reinit;
     logic [31:0] q;
   } i3c_reg2hw_targ_pid_lo_mreg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic [1:0]  q;
     } vtcap2_bus_ctx;
@@ -1479,6 +1518,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_caps_mreg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic        q;
     } endxfer_cand_crc_early;
@@ -1500,6 +1540,7 @@ package i3c_reg_pkg;
   } i3c_reg2hw_targ_info_mreg_t;
 
   typedef struct packed {
+    logic reinit;
     struct packed {
       logic [3:0]  q;
     } rdturn_scale;
@@ -1582,13 +1623,16 @@ package i3c_reg_pkg;
     } active;
     struct packed {
       logic        d;
+    } connected;
+    struct packed {
+      logic        d;
     } protocol_error;
     struct packed {
       logic        d;
     } vtm;
     struct packed {
-      logic        d;
-    } rstact_virt_targ_det;
+      logic [2:0]  d;
+    } num_targets;
     struct packed {
       logic [7:0]  d;
     } rstact;
@@ -2679,103 +2723,103 @@ package i3c_reg_pkg;
 
   // Register -> HW type
   typedef struct packed {
-    i3c_reg2hw_intr_state_reg_t intr_state; // [2223:2222]
-    i3c_reg2hw_intr_enable_reg_t intr_enable; // [2221:2220]
-    i3c_reg2hw_intr_test_reg_t intr_test; // [2219:2216]
-    i3c_reg2hw_alert_test_reg_t alert_test; // [2215:2214]
-    i3c_reg2hw_ctrl_error_reg_t ctrl_error; // [2213:2198]
-    i3c_reg2hw_targ_control_reg_t targ_control; // [2197:2189]
-    i3c_reg2hw_targ_status_reg_t targ_status; // [2188:2171]
-    i3c_reg2hw_targ_sink_control_reg_t targ_sink_control; // [2170:2155]
-    i3c_reg2hw_reset_det_ctrl_reg_t reset_det_ctrl; // [2154:2147]
-    i3c_reg2hw_ctrl_time_sp_reg_t ctrl_time_sp; // [2146:2127]
-    i3c_reg2hw_ctrl_time_od_reg_t ctrl_time_od; // [2126:2107]
-    i3c_reg2hw_ctrl_time_pp_reg_t ctrl_time_pp; // [2106:2086]
-    i3c_reg2hw_ctrl_time_sdr0_reg_t ctrl_time_sdr0; // [2085:2066]
-    i3c_reg2hw_ctrl_time_sdr1_reg_t ctrl_time_sdr1; // [2065:2046]
-    i3c_reg2hw_ctrl_time_sdr2_reg_t ctrl_time_sdr2; // [2045:2026]
-    i3c_reg2hw_ctrl_time_sdr3_reg_t ctrl_time_sdr3; // [2025:2006]
-    i3c_reg2hw_ctrl_time_sdr4_reg_t ctrl_time_sdr4; // [2005:1986]
-    i3c_reg2hw_ctrl_time_fmp_reg_t ctrl_time_fmp; // [1985:1966]
-    i3c_reg2hw_ctrl_time_fm_reg_t ctrl_time_fm; // [1965:1946]
-    i3c_reg2hw_interval_time0_reg_t interval_time0; // [1945:1914]
-    i3c_reg2hw_interval_time1_reg_t interval_time1; // [1913:1882]
-    i3c_reg2hw_phy_config_reg_t phy_config; // [1881:1872]
-    i3c_reg2hw_blocked_addr_reg_t blocked_addr; // [1871:1844]
-    i3c_reg2hw_buffer_ctrl_reg_t buffer_ctrl; // [1843:1839]
-    i3c_reg2hw_ctrl_txbuf_config_reg_t ctrl_txbuf_config; // [1838:1816]
-    i3c_reg2hw_ctrl_rxbuf_config_reg_t ctrl_rxbuf_config; // [1815:1793]
-    i3c_reg2hw_command_queue_config_reg_t command_queue_config; // [1792:1765]
-    i3c_reg2hw_response_queue_config_reg_t response_queue_config; // [1764:1737]
-    i3c_reg2hw_ibi_config_reg_t ibi_config; // [1736:1709]
-    i3c_reg2hw_ibi_stat_config_reg_t ibi_stat_config; // [1708:1689]
-    i3c_reg2hw_targ_txbuf_config_mreg_t [3:0] targ_txbuf_config; // [1688:1609]
-    i3c_reg2hw_targ_rxbuf_config_reg_t targ_rxbuf_config; // [1608:1589]
-    i3c_reg2hw_targ_ibi_config_reg_t targ_ibi_config; // [1588:1569]
-    i3c_reg2hw_targ_txdesc_config_mreg_t [3:0] targ_txdesc_config; // [1568:1489]
-    i3c_reg2hw_targ_rxdesc_config_reg_t targ_rxdesc_config; // [1488:1469]
-    i3c_reg2hw_targ_ibidesc_config_reg_t targ_ibidesc_config; // [1468:1449]
-    i3c_reg2hw_targ_async_config_reg_t targ_async_config; // [1448:1429]
-    i3c_reg2hw_hc_control_reg_t hc_control; // [1428:1413]
-    i3c_reg2hw_controller_device_addr_reg_t controller_device_addr; // [1412:1403]
-    i3c_reg2hw_reset_control_reg_t reset_control; // [1402:1391]
-    i3c_reg2hw_intr_status_reg_t intr_status; // [1390:1386]
-    i3c_reg2hw_intr_status_enable_reg_t intr_status_enable; // [1385:1381]
-    i3c_reg2hw_intr_signal_enable_reg_t intr_signal_enable; // [1380:1376]
-    i3c_reg2hw_intr_force_reg_t intr_force; // [1375:1366]
-    i3c_reg2hw_dct_section_offset_reg_t dct_section_offset; // [1365:1360]
-    i3c_reg2hw_ibi_notify_ctrl_reg_t ibi_notify_ctrl; // [1359:1357]
-    i3c_reg2hw_ibi_data_abort_ctrl_reg_t ibi_data_abort_ctrl; // [1356:1343]
-    i3c_reg2hw_queue_thld_ctrl_reg_t queue_thld_ctrl; // [1342:1311]
-    i3c_reg2hw_data_buffer_thld_ctrl_reg_t data_buffer_thld_ctrl; // [1310:1299]
-    i3c_reg2hw_pio_intr_status_reg_t pio_intr_status; // [1298:1292]
-    i3c_reg2hw_pio_intr_status_enable_reg_t pio_intr_status_enable; // [1291:1285]
-    i3c_reg2hw_pio_intr_signal_enable_reg_t pio_intr_signal_enable; // [1284:1278]
-    i3c_reg2hw_pio_intr_force_reg_t pio_intr_force; // [1277:1264]
-    i3c_reg2hw_pio_control_reg_t pio_control; // [1263:1261]
-    i3c_reg2hw_dbr_engage_reg_t dbr_engage; // [1260:1241]
-    i3c_reg2hw_mx_error_counters_reg_t mx_error_counters; // [1240:1232]
-    i3c_reg2hw_stby_cr_control_reg_t stby_cr_control; // [1231:1203]
-    i3c_reg2hw_stby_cr_device_addr_reg_t stby_cr_device_addr; // [1202:1193]
-    i3c_reg2hw_stby_cr_device_char_reg_t stby_cr_device_char; // [1192:1158]
-    i3c_reg2hw_stby_cr_device_pid_lo_reg_t stby_cr_device_pid_lo; // [1157:1125]
-    i3c_reg2hw_stby_cr_intr_status_reg_t stby_cr_intr_status; // [1124:1112]
-    i3c_reg2hw_stby_cr_intr_signal_enable_reg_t stby_cr_intr_signal_enable; // [1111:1099]
-    i3c_reg2hw_stby_cr_intr_force_reg_t stby_cr_intr_force; // [1098:1081]
-    i3c_reg2hw_stby_cr_ccc_config_getcaps_reg_t stby_cr_ccc_config_getcaps; // [1080:1072]
+    i3c_reg2hw_intr_state_reg_t intr_state; // [2296:2295]
+    i3c_reg2hw_intr_enable_reg_t intr_enable; // [2294:2293]
+    i3c_reg2hw_intr_test_reg_t intr_test; // [2292:2289]
+    i3c_reg2hw_alert_test_reg_t alert_test; // [2288:2287]
+    i3c_reg2hw_ctrl_error_reg_t ctrl_error; // [2286:2270]
+    i3c_reg2hw_targ_control_reg_t targ_control; // [2269:2260]
+    i3c_reg2hw_targ_status_reg_t targ_status; // [2259:2242]
+    i3c_reg2hw_targ_sink_control_reg_t targ_sink_control; // [2241:2225]
+    i3c_reg2hw_reset_det_ctrl_reg_t reset_det_ctrl; // [2224:2217]
+    i3c_reg2hw_ctrl_time_sp_reg_t ctrl_time_sp; // [2216:2197]
+    i3c_reg2hw_ctrl_time_od_reg_t ctrl_time_od; // [2196:2177]
+    i3c_reg2hw_ctrl_time_pp_reg_t ctrl_time_pp; // [2176:2156]
+    i3c_reg2hw_ctrl_time_sdr0_reg_t ctrl_time_sdr0; // [2155:2136]
+    i3c_reg2hw_ctrl_time_sdr1_reg_t ctrl_time_sdr1; // [2135:2116]
+    i3c_reg2hw_ctrl_time_sdr2_reg_t ctrl_time_sdr2; // [2115:2096]
+    i3c_reg2hw_ctrl_time_sdr3_reg_t ctrl_time_sdr3; // [2095:2076]
+    i3c_reg2hw_ctrl_time_sdr4_reg_t ctrl_time_sdr4; // [2075:2056]
+    i3c_reg2hw_ctrl_time_fmp_reg_t ctrl_time_fmp; // [2055:2036]
+    i3c_reg2hw_ctrl_time_fm_reg_t ctrl_time_fm; // [2035:2016]
+    i3c_reg2hw_interval_time0_reg_t interval_time0; // [2015:1984]
+    i3c_reg2hw_interval_time1_reg_t interval_time1; // [1983:1952]
+    i3c_reg2hw_phy_config_reg_t phy_config; // [1951:1941]
+    i3c_reg2hw_blocked_addr_reg_t blocked_addr; // [1940:1913]
+    i3c_reg2hw_buffer_ctrl_reg_t buffer_ctrl; // [1912:1908]
+    i3c_reg2hw_ctrl_txbuf_config_reg_t ctrl_txbuf_config; // [1907:1885]
+    i3c_reg2hw_ctrl_rxbuf_config_reg_t ctrl_rxbuf_config; // [1884:1862]
+    i3c_reg2hw_command_queue_config_reg_t command_queue_config; // [1861:1834]
+    i3c_reg2hw_response_queue_config_reg_t response_queue_config; // [1833:1806]
+    i3c_reg2hw_ibi_config_reg_t ibi_config; // [1805:1778]
+    i3c_reg2hw_ibi_stat_config_reg_t ibi_stat_config; // [1777:1758]
+    i3c_reg2hw_targ_txbuf_config_mreg_t [3:0] targ_txbuf_config; // [1757:1678]
+    i3c_reg2hw_targ_rxbuf_config_reg_t targ_rxbuf_config; // [1677:1658]
+    i3c_reg2hw_targ_ibi_config_reg_t targ_ibi_config; // [1657:1638]
+    i3c_reg2hw_targ_txdesc_config_mreg_t [3:0] targ_txdesc_config; // [1637:1558]
+    i3c_reg2hw_targ_rxdesc_config_reg_t targ_rxdesc_config; // [1557:1538]
+    i3c_reg2hw_targ_ibidesc_config_reg_t targ_ibidesc_config; // [1537:1518]
+    i3c_reg2hw_targ_async_config_reg_t targ_async_config; // [1517:1498]
+    i3c_reg2hw_hc_control_reg_t hc_control; // [1497:1481]
+    i3c_reg2hw_controller_device_addr_reg_t controller_device_addr; // [1480:1471]
+    i3c_reg2hw_reset_control_reg_t reset_control; // [1470:1459]
+    i3c_reg2hw_intr_status_reg_t intr_status; // [1458:1453]
+    i3c_reg2hw_intr_status_enable_reg_t intr_status_enable; // [1452:1447]
+    i3c_reg2hw_intr_signal_enable_reg_t intr_signal_enable; // [1446:1441]
+    i3c_reg2hw_intr_force_reg_t intr_force; // [1440:1430]
+    i3c_reg2hw_dct_section_offset_reg_t dct_section_offset; // [1429:1424]
+    i3c_reg2hw_ibi_notify_ctrl_reg_t ibi_notify_ctrl; // [1423:1420]
+    i3c_reg2hw_ibi_data_abort_ctrl_reg_t ibi_data_abort_ctrl; // [1419:1405]
+    i3c_reg2hw_queue_thld_ctrl_reg_t queue_thld_ctrl; // [1404:1372]
+    i3c_reg2hw_data_buffer_thld_ctrl_reg_t data_buffer_thld_ctrl; // [1371:1359]
+    i3c_reg2hw_pio_intr_status_reg_t pio_intr_status; // [1358:1351]
+    i3c_reg2hw_pio_intr_status_enable_reg_t pio_intr_status_enable; // [1350:1343]
+    i3c_reg2hw_pio_intr_signal_enable_reg_t pio_intr_signal_enable; // [1342:1335]
+    i3c_reg2hw_pio_intr_force_reg_t pio_intr_force; // [1334:1320]
+    i3c_reg2hw_pio_control_reg_t pio_control; // [1319:1316]
+    i3c_reg2hw_dbr_engage_reg_t dbr_engage; // [1315:1296]
+    i3c_reg2hw_mx_error_counters_reg_t mx_error_counters; // [1295:1286]
+    i3c_reg2hw_stby_cr_control_reg_t stby_cr_control; // [1285:1257]
+    i3c_reg2hw_stby_cr_device_addr_reg_t stby_cr_device_addr; // [1256:1247]
+    i3c_reg2hw_stby_cr_device_char_reg_t stby_cr_device_char; // [1246:1216]
+    i3c_reg2hw_stby_cr_device_pid_lo_reg_t stby_cr_device_pid_lo; // [1215:1183]
+    i3c_reg2hw_stby_cr_intr_status_reg_t stby_cr_intr_status; // [1182:1169]
+    i3c_reg2hw_stby_cr_intr_signal_enable_reg_t stby_cr_intr_signal_enable; // [1168:1155]
+    i3c_reg2hw_stby_cr_intr_force_reg_t stby_cr_intr_force; // [1154:1136]
+    i3c_reg2hw_stby_cr_ccc_config_getcaps_reg_t stby_cr_ccc_config_getcaps; // [1135:1127]
     i3c_reg2hw_stby_cr_ccc_config_rstact_params_reg_t
-        stby_cr_ccc_config_rstact_params; // [1071:1043]
-    i3c_reg2hw_targ_intr_status_reg_t targ_intr_status; // [1042:1027]
-    i3c_reg2hw_targ_intr_status_enable_reg_t targ_intr_status_enable; // [1026:1011]
-    i3c_reg2hw_targ_intr_signal_enable_reg_t targ_intr_signal_enable; // [1010:995]
-    i3c_reg2hw_targ_intr_force_reg_t targ_intr_force; // [994:963]
-    i3c_reg2hw_targ_pio_control_reg_t targ_pio_control; // [962:949]
-    i3c_reg2hw_targ_async_evt_control_reg_t targ_async_evt_control; // [948:931]
-    i3c_reg2hw_targ_error_reg_t targ_error; // [930:899]
-    i3c_reg2hw_targ_queue_thld_ctrl_reg_t targ_queue_thld_ctrl; // [898:883]
-    i3c_reg2hw_targ_buf_thld_ctrl_reg_t targ_buf_thld_ctrl; // [882:868]
-    i3c_reg2hw_targ_rw_len_mreg_t [3:0] targ_rw_len; // [867:740]
-    i3c_reg2hw_targ_ibi_len_mreg_t [3:0] targ_ibi_len; // [739:708]
-    i3c_reg2hw_targ_event_enable_mreg_t [3:0] targ_event_enable; // [707:696]
-    i3c_reg2hw_targ_enable_mreg_t [3:0] targ_enable; // [695:692]
-    i3c_reg2hw_targ_group_mreg_t [7:0] targ_group; // [691:604]
-    i3c_reg2hw_targ_tx_thld_ctrl_mreg_t [3:0] targ_tx_thld_ctrl; // [603:508]
-    i3c_reg2hw_targ_addr_mreg_t [3:0] targ_addr; // [507:444]
-    i3c_reg2hw_targ_char_mreg_t [3:0] targ_char; // [443:316]
-    i3c_reg2hw_targ_pid_lo_mreg_t [3:0] targ_pid_lo; // [315:188]
-    i3c_reg2hw_targ_caps_mreg_t [3:0] targ_caps; // [187:148]
-    i3c_reg2hw_targ_info_mreg_t [3:0] targ_info; // [147:124]
-    i3c_reg2hw_targ_max_rdwr_mreg_t [3:0] targ_max_rdwr; // [123:0]
+        stby_cr_ccc_config_rstact_params; // [1126:1098]
+    i3c_reg2hw_targ_intr_status_reg_t targ_intr_status; // [1097:1081]
+    i3c_reg2hw_targ_intr_status_enable_reg_t targ_intr_status_enable; // [1080:1064]
+    i3c_reg2hw_targ_intr_signal_enable_reg_t targ_intr_signal_enable; // [1063:1047]
+    i3c_reg2hw_targ_intr_force_reg_t targ_intr_force; // [1046:1014]
+    i3c_reg2hw_targ_pio_control_reg_t targ_pio_control; // [1013:999]
+    i3c_reg2hw_targ_async_evt_control_reg_t targ_async_evt_control; // [998:980]
+    i3c_reg2hw_targ_error_reg_t targ_error; // [979:947]
+    i3c_reg2hw_targ_queue_thld_ctrl_reg_t targ_queue_thld_ctrl; // [946:930]
+    i3c_reg2hw_targ_buf_thld_ctrl_reg_t targ_buf_thld_ctrl; // [929:914]
+    i3c_reg2hw_targ_rw_len_mreg_t [3:0] targ_rw_len; // [913:782]
+    i3c_reg2hw_targ_ibi_len_mreg_t [3:0] targ_ibi_len; // [781:746]
+    i3c_reg2hw_targ_event_enable_mreg_t [3:0] targ_event_enable; // [745:730]
+    i3c_reg2hw_targ_enable_mreg_t [3:0] targ_enable; // [729:722]
+    i3c_reg2hw_targ_group_mreg_t [7:0] targ_group; // [721:626]
+    i3c_reg2hw_targ_tx_thld_ctrl_mreg_t [3:0] targ_tx_thld_ctrl; // [625:526]
+    i3c_reg2hw_targ_addr_mreg_t [3:0] targ_addr; // [525:458]
+    i3c_reg2hw_targ_char_mreg_t [3:0] targ_char; // [457:326]
+    i3c_reg2hw_targ_pid_lo_mreg_t [3:0] targ_pid_lo; // [325:194]
+    i3c_reg2hw_targ_caps_mreg_t [3:0] targ_caps; // [193:150]
+    i3c_reg2hw_targ_info_mreg_t [3:0] targ_info; // [149:122]
+    i3c_reg2hw_targ_max_rdwr_mreg_t [3:0] targ_max_rdwr; // [121:-6]
   } i3c_reg2hw_t;
 
   // HW -> register type
   typedef struct packed {
-    i3c_hw2reg_intr_state_reg_t intr_state; // [2036:2033]
-    i3c_hw2reg_info_reg_t info; // [2032:2004]
-    i3c_hw2reg_ctrl_status_reg_t ctrl_status; // [2003:2003]
-    i3c_hw2reg_ctrl_error_reg_t ctrl_error; // [2002:1983]
-    i3c_hw2reg_targ_control_reg_t targ_control; // [1982:1981]
-    i3c_hw2reg_targ_status_reg_t targ_status; // [1980:1952]
+    i3c_hw2reg_intr_state_reg_t intr_state; // [2039:2036]
+    i3c_hw2reg_info_reg_t info; // [2035:2007]
+    i3c_hw2reg_ctrl_status_reg_t ctrl_status; // [2006:2006]
+    i3c_hw2reg_ctrl_error_reg_t ctrl_error; // [2005:1986]
+    i3c_hw2reg_targ_control_reg_t targ_control; // [1985:1984]
+    i3c_hw2reg_targ_status_reg_t targ_status; // [1983:1952]
     i3c_hw2reg_targ_sink_status_reg_t targ_sink_status; // [1951:1939]
     i3c_hw2reg_reset_det_status_reg_t reset_det_status; // [1938:1931]
     i3c_hw2reg_buffer_ctrl_reg_t buffer_ctrl; // [1930:1929]
@@ -3046,8 +3090,9 @@ package i3c_reg_pkg;
   parameter logic [1:0] I3C_INTR_TEST_RESVAL = 2'h 0;
   parameter logic [0:0] I3C_INTR_TEST_HCI_RESVAL = 1'h 0;
   parameter logic [0:0] I3C_INTR_TEST_TARG_RESVAL = 1'h 0;
-  parameter logic [0:0] I3C_ALERT_TEST_RESVAL = 1'h 0;
+  parameter logic [31:0] I3C_ALERT_TEST_RESVAL = 32'h 80000000;
   parameter logic [0:0] I3C_ALERT_TEST_FATAL_FAULT_RESVAL = 1'h 0;
+  parameter logic [0:0] I3C_ALERT_TEST_REGWEN_RESVAL = 1'h 1;
   parameter logic [28:0] I3C_INFO_RESVAL = 29'h fffff10;
   parameter logic [3:0] I3C_INFO_REVISION_RESVAL = 4'h 0;
   parameter logic [3:0] I3C_INFO_VERSION_RESVAL = 4'h 1;
@@ -3056,13 +3101,14 @@ package i3c_reg_pkg;
   parameter logic [10:0] I3C_INFO_BUF_DWORD_MAX_RESVAL = 11'h 3ff;
   parameter logic [31:0] I3C_CTRL_STATUS_RESVAL = 32'h 80000000;
   parameter logic [0:0] I3C_CTRL_STATUS_PRESENT_RESVAL = 1'h 1;
-  parameter logic [31:0] I3C_TARG_STATUS_RESVAL = 32'h 80000000;
+  parameter logic [31:0] I3C_TARG_STATUS_RESVAL = 32'h 82000000;
   parameter logic [14:0] I3C_TARG_STATUS_EXT_INFO_RESVAL = 15'h 0;
   parameter logic [0:0] I3C_TARG_STATUS_EXT_PRESENT_RESVAL = 1'h 0;
   parameter logic [7:0] I3C_TARG_STATUS_RSTACT_RESVAL = 8'h 0;
-  parameter logic [0:0] I3C_TARG_STATUS_RSTACT_VIRT_TARG_DET_RESVAL = 1'h 0;
+  parameter logic [2:0] I3C_TARG_STATUS_NUM_TARGETS_RESVAL = 3'h 2;
   parameter logic [0:0] I3C_TARG_STATUS_VTM_RESVAL = 1'h 0;
   parameter logic [0:0] I3C_TARG_STATUS_PROTOCOL_ERROR_RESVAL = 1'h 0;
+  parameter logic [0:0] I3C_TARG_STATUS_CONNECTED_RESVAL = 1'h 0;
   parameter logic [0:0] I3C_TARG_STATUS_ACTIVE_RESVAL = 1'h 0;
   parameter logic [0:0] I3C_TARG_STATUS_PRESENT_RESVAL = 1'h 1;
   parameter logic [26:0] I3C_TARG_SINK_STATUS_RESVAL = 27'h 0;
@@ -3188,9 +3234,9 @@ package i3c_reg_pkg;
   parameter logic [31:0] I3C_CONTROLLER_DEVICE_ADDR_RESVAL = 32'h 0;
   parameter logic [6:0] I3C_CONTROLLER_DEVICE_ADDR_DYNAMIC_ADDR_RESVAL = 7'h 0;
   parameter logic [0:0] I3C_CONTROLLER_DEVICE_ADDR_DYNAMIC_ADDR_VALID_RESVAL = 1'h 0;
-  parameter logic [30:0] I3C_HC_CAPABILITIES_RESVAL = 31'h 440;
+  parameter logic [30:0] I3C_HC_CAPABILITIES_RESVAL = 31'h 448;
   parameter logic [0:0] I3C_HC_CAPABILITIES_COMBO_COMMAND_RESVAL = 1'h 0;
-  parameter logic [0:0] I3C_HC_CAPABILITIES_AUTO_COMMAND_RESVAL = 1'h 0;
+  parameter logic [0:0] I3C_HC_CAPABILITIES_AUTO_COMMAND_RESVAL = 1'h 1;
   parameter logic [0:0] I3C_HC_CAPABILITIES_STANDBY_CR_CAP_RESVAL = 1'h 0;
   parameter logic [0:0] I3C_HC_CAPABILITIES_HDR_DDR_EN_RESVAL = 1'h 1;
   parameter logic [0:0] I3C_HC_CAPABILITIES_HDR_TS_EN_RESVAL = 1'h 0;
@@ -3232,9 +3278,9 @@ package i3c_reg_pkg;
   parameter logic [15:0] I3C_PIO_SECTION_OFFSET_SECTION_OFFSET_RESVAL = 16'h 80;
   parameter logic [15:0] I3C_EXT_CAPS_SECTION_OFFSET_RESVAL = 16'h 120;
   parameter logic [15:0] I3C_EXT_CAPS_SECTION_OFFSET_SECTION_OFFSET_RESVAL = 16'h 120;
-  parameter logic [15:0] I3C_INT_CTRL_CMDS_EN_RESVAL = 16'h 61;
+  parameter logic [15:0] I3C_INT_CTRL_CMDS_EN_RESVAL = 16'h 20f5;
   parameter logic [0:0] I3C_INT_CTRL_CMDS_EN_ICC_SUPPORT_RESVAL = 1'h 1;
-  parameter logic [14:0] I3C_INT_CTRL_CMDS_EN_MIPI_CMDS_SUPPORTED_RESVAL = 15'h 30;
+  parameter logic [14:0] I3C_INT_CTRL_CMDS_EN_MIPI_CMDS_SUPPORTED_RESVAL = 15'h 107a;
   parameter logic [31:0] I3C_DEV_CTX_BASE_LO_RESVAL = 32'h 0;
   parameter logic [31:0] I3C_DEV_CTX_BASE_LO_BASE_LO_RESVAL = 32'h 0;
   parameter logic [31:0] I3C_DEV_CTX_BASE_HI_RESVAL = 32'h 0;
@@ -3242,8 +3288,8 @@ package i3c_reg_pkg;
   parameter logic [31:0] I3C_DEV_CTX_SG_RESVAL = 32'h 0;
   parameter logic [15:0] I3C_DEV_CTX_SG_LIST_SIZE_RESVAL = 16'h 0;
   parameter logic [0:0] I3C_DEV_CTX_SG_BLP_RESVAL = 1'h 0;
-  parameter logic [31:0] I3C_QUEUE_SIZE_RESVAL = 32'h 6061408;
-  parameter logic [7:0] I3C_QUEUE_SIZE_CR_QUEUE_SIZE_RESVAL = 8'h 8;
+  parameter logic [31:0] I3C_QUEUE_SIZE_RESVAL = 32'h 6061410;
+  parameter logic [7:0] I3C_QUEUE_SIZE_CR_QUEUE_SIZE_RESVAL = 8'h 10;
   parameter logic [7:0] I3C_QUEUE_SIZE_IBI_STATUS_SIZE_RESVAL = 8'h 14;
   parameter logic [7:0] I3C_QUEUE_SIZE_RX_DATA_BUFFER_SIZE_RESVAL = 8'h 6;
   parameter logic [7:0] I3C_QUEUE_SIZE_TX_DATA_BUFFER_SIZE_RESVAL = 8'h 6;
@@ -3362,7 +3408,8 @@ package i3c_reg_pkg;
   parameter logic [27:0] I3C_TARG_QUEUE_STATUS_LEVEL_RESVAL = 28'h 0;
   parameter logic [7:0] I3C_TARG_QUEUE_STATUS_LEVEL_RX_DESC_LVL_RESVAL = 8'h 0;
   parameter logic [11:0] I3C_TARG_QUEUE_STATUS_LEVEL_ASYNC_EVT_LVL_RESVAL = 12'h 0;
-  parameter logic [27:0] I3C_TARG_BUF_STATUS_LEVEL_RESVAL = 28'h 0;
+  parameter logic [27:0] I3C_TARG_BUF_STATUS_LEVEL_RESVAL = 28'h 400000;
+  parameter logic [11:0] I3C_TARG_BUF_STATUS_LEVEL_IBI_FREE_LVL_RESVAL = 12'h 40;
   parameter logic [31:0] I3C_TARG_STATE_DEBUG_RESVAL = 32'h 3;
   parameter logic [0:0] I3C_TARG_STATE_DEBUG_SCL_LINE_SIGNAL_LEVEL_RESVAL = 1'h 1;
   parameter logic [0:0] I3C_TARG_STATE_DEBUG_SDA_LINE_SIGNAL_LEVEL_RESVAL = 1'h 1;
@@ -3371,18 +3418,18 @@ package i3c_reg_pkg;
   parameter logic [3:0] I3C_TARG_STATE_DEBUG_BUS_MODE_RESVAL = 4'h 0;
   parameter logic [7:0] I3C_TARG_STATE_DEBUG_FSM_STATE_RESVAL = 8'h 0;
   parameter logic [7:0] I3C_TARG_STATE_DEBUG_TRX_STATE_RESVAL = 8'h 0;
-  parameter logic [23:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_0_RESVAL = 24'h 0;
-  parameter logic [11:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_0_TX_BUF_FREE_LVL_0_RESVAL = 12'h 0;
-  parameter logic [7:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_0_TX_DESC_FREE_LVL_0_RESVAL = 8'h 0;
-  parameter logic [23:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_1_RESVAL = 24'h 0;
-  parameter logic [11:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_1_TX_BUF_FREE_LVL_1_RESVAL = 12'h 0;
-  parameter logic [7:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_1_TX_DESC_FREE_LVL_1_RESVAL = 8'h 0;
-  parameter logic [23:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_2_RESVAL = 24'h 0;
-  parameter logic [11:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_2_TX_BUF_FREE_LVL_2_RESVAL = 12'h 0;
-  parameter logic [7:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_2_TX_DESC_FREE_LVL_2_RESVAL = 8'h 0;
-  parameter logic [23:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_3_RESVAL = 24'h 0;
-  parameter logic [11:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_3_TX_BUF_FREE_LVL_3_RESVAL = 12'h 0;
-  parameter logic [7:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_3_TX_DESC_FREE_LVL_3_RESVAL = 8'h 0;
+  parameter logic [23:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_0_RESVAL = 24'h 80040;
+  parameter logic [11:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_0_TX_BUF_FREE_LVL_0_RESVAL = 12'h 40;
+  parameter logic [7:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_0_TX_DESC_FREE_LVL_0_RESVAL = 8'h 8;
+  parameter logic [23:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_1_RESVAL = 24'h 80040;
+  parameter logic [11:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_1_TX_BUF_FREE_LVL_1_RESVAL = 12'h 40;
+  parameter logic [7:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_1_TX_DESC_FREE_LVL_1_RESVAL = 8'h 8;
+  parameter logic [23:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_2_RESVAL = 24'h 80040;
+  parameter logic [11:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_2_TX_BUF_FREE_LVL_2_RESVAL = 12'h 40;
+  parameter logic [7:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_2_TX_DESC_FREE_LVL_2_RESVAL = 8'h 8;
+  parameter logic [23:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_3_RESVAL = 24'h 80040;
+  parameter logic [11:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_3_TX_BUF_FREE_LVL_3_RESVAL = 12'h 40;
+  parameter logic [7:0] I3C_TARG_TX_QUEUE_STATUS_LEVEL_3_TX_DESC_FREE_LVL_3_RESVAL = 8'h 8;
   parameter logic [23:0] I3C_TARGEXT_EXTCAP_HEADER_RESVAL = 24'h 1c0;
   parameter logic [7:0] I3C_TARGEXT_EXTCAP_HEADER_CAP_ID_RESVAL = 8'h c0;
   parameter logic [15:0] I3C_TARGEXT_EXTCAP_HEADER_CAP_LENGTH_RESVAL = 16'h 1;
@@ -3604,7 +3651,7 @@ package i3c_reg_pkg;
     4'b 0001, // index[  0] I3C_INTR_STATE
     4'b 0001, // index[  1] I3C_INTR_ENABLE
     4'b 0001, // index[  2] I3C_INTR_TEST
-    4'b 0001, // index[  3] I3C_ALERT_TEST
+    4'b 1111, // index[  3] I3C_ALERT_TEST
     4'b 1111, // index[  4] I3C_INFO
     4'b 1111, // index[  5] I3C_CTRL_STATUS
     4'b 0011, // index[  6] I3C_CTRL_ERROR

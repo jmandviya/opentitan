@@ -41,7 +41,7 @@ typedef enum otcrypto_aes_gcm_tag_len {
 typedef struct otcrypto_aes_gcm_context {
   // TODO: update the size and the restore and save context functions.
   /// AES-GCM internal context.
-  uint32_t data[196];
+  uint32_t data[198];
 } otcrypto_aes_gcm_context_t;
 
 /**
@@ -189,7 +189,10 @@ otcrypto_status_t otcrypto_aes_gcm_decrypt_init(
  *
  * @param ctx Context object for the operation, updated in place.
  * @param aad Additional authenticated data.
- * @return Result of the update operation.
+ * @return Result of the update operation. Returns `kOtcryptoStatusValueOk` on
+ * success, `kOtcryptoStatusValueBadArgs` if arguments or context state are
+ * invalid, or `kOtcryptoStatusValueFatalError` if an internal hardware or
+ * integrity check fails.
  */
 otcrypto_status_t otcrypto_aes_gcm_update_aad(
     otcrypto_aes_gcm_context_t *ctx, const otcrypto_const_byte_buf_t *aad);
@@ -220,7 +223,10 @@ otcrypto_status_t otcrypto_aes_gcm_update_aad(
  * @param input Plaintext for encryption, ciphertext for decryption.
  * @param[out] output Ciphertext for encryption, plaintext for decryption.
  * @param[out] output_bytes_written Number of bytes written to `output`.
- * @return Result of the update operation.
+ * @return Result of the update operation. Returns `kOtcryptoStatusValueOk` on
+ * success, `kOtcryptoStatusValueBadArgs` if arguments or buffer lengths are
+ * invalid, or `kOtcryptoStatusValueFatalError` if an internal hardware or
+ * integrity check fails.
  */
 otcrypto_status_t otcrypto_aes_gcm_update_encrypted_data(
     otcrypto_aes_gcm_context_t *ctx, const otcrypto_const_byte_buf_t *input,

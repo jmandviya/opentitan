@@ -17,10 +17,17 @@ OUTPUT_ARCH(riscv)
 __DYNAMIC = 0;
 
 /**
- * Symbols to be used in the setup of the address translation for ROM_EXT.
+ * Symbols to be used in the setup of the address translation for the Owner
+ * stage and for checking virtual flash address ranges in `flash_exc_handler.S`.
  */
+_rom_ext_virtual_start_address = ORIGIN(rom_ext_virtual);
+_rom_ext_virtual_size = LENGTH(rom_ext_virtual);
+ASSERT((_rom_ext_virtual_size <= (LENGTH(nvm) / 2)),
+  "Error: rom ext flash is bigger than slot.");
 _owner_virtual_start_address = ORIGIN(owner_virtual);
 _owner_virtual_size = LENGTH(owner_virtual);
+ASSERT((_owner_virtual_size <= (LENGTH(nvm) / 2)),
+  "Error: owner flash is bigger than slot.");
 
 /**
  * Marking the entry point correctly for the ELF file. The signer tool will
@@ -46,7 +53,7 @@ _manifest_code_end = _text_end - _rom_ext_start_address;
  * The location of the entry point relative to the beginning of the associated
  * slot for use in the manifest.
  */
-_manifest_entry_point = _rom_ext_start_boot - _rom_ext_start_address;
+_manifest_entry_point = ABSOLUTE(_rom_ext_start_boot - _rom_ext_start_address);
 /*
  * The value kHardenedBoolFalse (0x1d4) is selected if the code is linked in
  * the NVM region.  Otherwise, the value kHardenedBoolTrue (0x739) is

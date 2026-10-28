@@ -491,6 +491,7 @@
         }
       }
       outgoing_alert: englishbreakfast
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_div4_peri
@@ -563,7 +564,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: uart1
@@ -582,6 +582,7 @@
         }
       }
       outgoing_alert: englishbreakfast
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_div4_peri
@@ -654,7 +655,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: gpio
@@ -679,6 +679,7 @@
       }
       attr: ipgen
       outgoing_alert: englishbreakfast
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_div4_peri
@@ -783,7 +784,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: spi_device
@@ -803,6 +803,7 @@
         }
       }
       outgoing_alert: englishbreakfast
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_div4_peri
@@ -930,7 +931,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: spi_host0
@@ -949,6 +949,7 @@
         }
       }
       outgoing_alert: englishbreakfast
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_peri
@@ -1045,7 +1046,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: rv_timer
@@ -1064,6 +1064,7 @@
         }
       }
       outgoing_alert: englishbreakfast
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_div4_timers
@@ -1122,7 +1123,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: usbdev
@@ -1147,6 +1147,7 @@
         }
       }
       outgoing_alert: englishbreakfast
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_usb_peri
@@ -1429,7 +1430,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: pwrmgr
@@ -3003,6 +3003,7 @@
         }
       }
       attr: reggen_only
+      domain: Main
       clock_connections:
       {
         clk_ast_tlul_i: clkmgr_clocks_i.clk_io_div4_secure
@@ -3036,7 +3037,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: flash_ctrl
@@ -3103,6 +3103,7 @@
       }
       attr: ipgen
       outgoing_alert: englishbreakfast
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -3407,7 +3408,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: rv_plic
@@ -3432,6 +3432,7 @@
         rv_core_ibex
       ]
       outgoing_alert: englishbreakfast
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_secure
@@ -3501,7 +3502,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: aes
@@ -3532,6 +3532,7 @@
         SecSBoxImpl: aes_pkg::SBoxImplDom
       }
       outgoing_alert: englishbreakfast
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_aes
@@ -3681,7 +3682,7 @@
         {
           name: keymgr_key
           struct: hw_key_req
-          package: keymgr_pkg
+          package: keymgr_dpe_pkg
           type: uni
           act: rcv
           width: 1
@@ -3711,7 +3712,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: sram_ctrl_main
@@ -3762,6 +3762,7 @@
         }
       }
       outgoing_alert: englishbreakfast
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_secure
@@ -3843,6 +3844,15 @@
           local: "false"
           expose: "true"
           name_top: SramCtrlMainEccCorrection
+        }
+        {
+          name: SecZeroInit
+          desc: Initialize the memory with zeros instead of pseudo-random data.
+          type: bit
+          default: "0"
+          local: "false"
+          expose: "true"
+          name_top: SecSramCtrlMainZeroInit
         }
       ]
       inter_signal_list:
@@ -3977,7 +3987,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: rom_ctrl
@@ -4022,6 +4031,7 @@
         SecDisableScrambling: 1'b1
       }
       outgoing_alert: englishbreakfast
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -4146,7 +4156,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: rv_core_ibex
@@ -4212,6 +4221,7 @@
         }
       }
       outgoing_alert: englishbreakfast
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -4771,20 +4781,6 @@
           index: -1
         }
         {
-          name: fpga_info
-          struct: logic
-          type: uni
-          act: rcv
-          width: 32
-          inst_name: rv_core_ibex
-          default: ""
-          package: ""
-          external: true
-          conn_type: false
-          index: -1
-          top_signame: fpga_info
-        }
-        {
           name: corei_tl_h
           struct: tl
           package: tlul_pkg
@@ -4833,7 +4829,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
   ]
   port:
@@ -5118,7 +5113,6 @@
       rstmgr.por_n: por_n
       rstmgr.resets: ""
       rstmgr.rst_en: ""
-      rv_core_ibex.fpga_info: fpga_info
       usbdev.usb_rx_d: ""
       usbdev.usb_tx_d: ""
       usbdev.usb_tx_se0: ""
@@ -5153,12 +5147,12 @@
           domain: Main
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_main_i: clkmgr_clocks_i.clk_main_infra
         clk_fixed_i: clkmgr_clocks_i.clk_io_div4_infra
       }
-      domain: Main
       connections:
       {
         rv_core_ibex.corei:
@@ -5656,13 +5650,13 @@
           domain: Main
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_peri_i: clkmgr_clocks_i.clk_io_div4_infra
         clk_spi_host0_i: clkmgr_clocks_i.clk_io_infra
         clk_usb_i: clkmgr_clocks_i.clk_usb_infra
       }
-      domain: Main
       connections:
       {
         main:
@@ -7893,10 +7887,6 @@
           usbdev.usb_ref_pulse:
           {
             signal: usb_ref_pulse
-          }
-          rv_core_ibex.fpga_info:
-          {
-            unused: true
           }
         }
       }
@@ -12000,7 +11990,7 @@
       {
         name: keymgr_key
         struct: hw_key_req
-        package: keymgr_pkg
+        package: keymgr_dpe_pkg
         type: uni
         act: rcv
         width: 1
@@ -12443,20 +12433,6 @@
         width: 1
         inst_name: rv_core_ibex
         index: -1
-      }
-      {
-        name: fpga_info
-        struct: logic
-        type: uni
-        act: rcv
-        width: 32
-        inst_name: rv_core_ibex
-        default: ""
-        package: ""
-        external: true
-        conn_type: false
-        index: -1
-        top_signame: fpga_info
       }
       {
         name: corei_tl_h
@@ -13908,25 +13884,6 @@
         conn_type: true
         index: -1
         netname: rstmgr_rst_en
-      }
-      {
-        package: ""
-        struct: logic
-        domain: Main
-        inter_pd: false
-        signame: fpga_info_i
-        signame_chip:
-        {
-          cw305: fpga_info
-          verilator: "'0"
-        }
-        width: 32
-        type: uni
-        default: ""
-        direction: in
-        conn_type: false
-        index: -1
-        netname: fpga_info
       }
       {
         package: ""

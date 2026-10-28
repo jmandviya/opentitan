@@ -17,6 +17,10 @@ module tb;
   import mem_bkdr_util_pkg::*;
   import rom_ctrl_bkdr_util_pkg::*;
   import sram_ctrl_bkdr_util_pkg::*;
+  import prim_secded_pkg::get_ecc_data_width;
+  import prim_secded_pkg::get_ecc_parity_width;
+  import prim_secded_pkg::SecdedInv_39_32;
+  import prim_secded_pkg::SecdedInv_28_22;
 
   // macro includes
   `include "uvm_macros.svh"
@@ -80,7 +84,7 @@ module tb;
 
   // TODO: Absorb this functionality into chip_if.
   bind dut ast_supply_if ast_supply_if (
-    .clk(ast_base_clks.clk_aon),
+    .clk(top_earlgrey.earlgrey_pd_aon.ast_clk_src_aon),
 `ifdef GATE_LEVEL
     .core_sleeping_trigger(0),
     .low_power_trigger(0)
@@ -94,8 +98,8 @@ module tb;
   bind dut ast_ext_clk_if ast_ext_clk_if ();
 
   // TODO: Absorb this functionality into chip_if.
-  alert_esc_if alert_if[NUM_ALERTS](.clk  (`ALERT_HANDLER_HIER.clk_i),
-                                    .rst_n(`ALERT_HANDLER_HIER.rst_ni));
+  alert_if alert_if[NUM_ALERTS](.clk  (`ALERT_HANDLER_HIER.clk_i),
+                                .rst_n(`ALERT_HANDLER_HIER.rst_ni));
   for (genvar i = 0; i < NUM_ALERTS; i++) begin : gen_connect_alert_rx
     assign alert_if[i].alert_rx = `ALERT_HANDLER_HIER.alert_rx_o[i];
   end
@@ -124,6 +128,7 @@ module tb;
     .CC1(dut.chip_if.dios[top_earlgrey_pkg::DioPadCc1]),
     .CC2(dut.chip_if.dios[top_earlgrey_pkg::DioPadCc2]),
 `endif
+    .RRAM_ANALOG(dut.chip_if.dios[top_earlgrey_pkg::DioPadRramAnalog]),
     .SPI_HOST_D0(dut.chip_if.dios[top_earlgrey_pkg::DioPadSpiHostD0]),
     .SPI_HOST_D1(dut.chip_if.dios[top_earlgrey_pkg::DioPadSpiHostD1]),
     .SPI_HOST_D2(dut.chip_if.dios[top_earlgrey_pkg::DioPadSpiHostD2]),
@@ -437,6 +442,13 @@ module tb;
     uvm_config_db#(virtual tb_dpi_if)::set(
         null, "*.env", "tb_dpi_vif", u_tb_dpi_if);
 
+    // Number of Virtual Targets that each I3C instance implements. The CSRs describe
+    // `i3c_reg_pkg::MaxTargets` of them, so the RAL has to know which ones the RTL ties off.
+    uvm_config_db#(int unsigned)::set(
+        null, "uvm_test_top", "i3c0_num_targets", dut.top_earlgrey.I3c0NumTargets);
+    uvm_config_db#(int unsigned)::set(
+        null, "uvm_test_top", "i3c1_num_targets", dut.top_earlgrey.I3c1NumTargets);
+
     // Format time in microseconds losing no precision. The added "." makes it easier to determine
     // the order of magnitude without counting digits, as is needed if it was formatted as ps or ns.
     $timeformat(-6, 6, " us", 13);
@@ -447,8 +459,8 @@ module tb;
 
   for (genvar i = 0; i < NUM_ALERTS; i++) begin : gen_alert_vif
     initial begin
-      uvm_config_db#(virtual alert_esc_if)::set(null, $sformatf("*.env.m_alert_agent_%0s",
-          LIST_OF_ALERTS[i]), "vif", alert_if[i]);
+      automatic string agent_path = $sformatf("*.env.m_alert_agent_%0s", LIST_OF_ALERTS[i]);
+      uvm_config_db#(virtual alert_if)::set(null, agent_path, "vif", alert_if[i]);
     end
   end
 
@@ -549,8 +561,8 @@ module tb;
 
       // Connect rom_ctrl's alert interface to the passive environment (which will instantiate an
       // extra alert agent and run it in passive mode).
-      uvm_config_db#(virtual alert_esc_if)::set(null, {EnvPath, ".m_alert_agent_fatal"},
-                                                "vif", alert_if[TopEarlgreyAlertIdRomCtrlFatal]);
+      uvm_config_db#(virtual alert_if)::set(null, {EnvPath, ".m_alert_agent_fatal"},
+                                            "vif", alert_if[TopEarlgreyAlertIdRomCtrlFatal]);
 
       // Pass a flag that tells the environment whether to expect rom_ctrl_fsm_vif.
       uvm_config_db#(bit)::set(null, EnvPath,
@@ -573,6 +585,14 @@ module tb;
       rom_ctrl_bkdr_util rom;
       chip_mem_e    mem;
       mem_bkdr_util m_mem_bkdr_util[chip_mem_e];
+
+      // Width of an ECC-protected word under each err_detection_scheme used below (data bits plus
+      // integrity bits), for memories whose logical word width can't be derived via $bits() (which
+      // would give the wrong, physical rather than logical, answer once folded).
+      localparam int unsigned EccWordWidth39_32 =
+          get_ecc_data_width(SecdedInv_39_32) + get_ecc_parity_width(SecdedInv_39_32);
+      localparam int unsigned EccWordWidth28_22 =
+          get_ecc_data_width(SecdedInv_28_22) + get_ecc_parity_width(SecdedInv_28_22);
 
       `uvm_info("tb.sv", "Creating mem_bkdr_util instance for RRAM data", UVM_MEDIUM)
       // The last pages are reserved for OTP storage and are excluded from depth and n_bits.
@@ -604,40 +624,46 @@ module tb;
       `uvm_info("tb.sv", "Creating mem_bkdr_util instance for I cache way 0 tag", UVM_MEDIUM)
       m_mem_bkdr_util[ICacheWay0Tag] = new(
           .name  ("mem_bkdr_util[ICacheWay0Tag]"),
-          .path  (`DV_STRINGIFY(`ICACHE0_TAG_MEM_HIER)),
-          .depth ($size(`ICACHE0_TAG_MEM_HIER)),
-          .n_bits($bits(`ICACHE0_TAG_MEM_HIER)),
-          .err_detection_scheme(mem_bkdr_util_pkg::EccInv_28_22));
-      `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[ICacheWay0Tag], `ICACHE0_TAG_MEM_HIER)
+          .path  (`DV_STRINGIFY(`ICACHE0_TAG_MEM_INST_HIER.`ICACHE_TAG_MEM_TILE_PATH)),
+          .depth (`ICACHE0_TAG_MEM_DEPTH),
+          .n_bits(`ICACHE0_TAG_MEM_DEPTH * EccWordWidth28_22),
+          .err_detection_scheme(mem_bkdr_util_pkg::EccInv_28_22),
+          .words_per_row(`ICACHE_TAG_MEM_WORDS_PER_ROW));
+      `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[ICacheWay0Tag],
+                             `ICACHE0_TAG_MEM_INST_HIER.`ICACHE_TAG_MEM_TILE_PATH)
 
       `uvm_info("tb.sv", "Creating mem_bkdr_util instance for I cache way 1 tag", UVM_MEDIUM)
       m_mem_bkdr_util[ICacheWay1Tag] = new(
           .name  ("mem_bkdr_util[ICacheWay1Tag]"),
-          .path  (`DV_STRINGIFY(`ICACHE1_TAG_MEM_HIER)),
-          .depth ($size(`ICACHE1_TAG_MEM_HIER)),
-          .n_bits($bits(`ICACHE1_TAG_MEM_HIER)),
-          .err_detection_scheme(mem_bkdr_util_pkg::EccInv_28_22));
-      `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[ICacheWay1Tag], `ICACHE1_TAG_MEM_HIER)
+          .path  (`DV_STRINGIFY(`ICACHE1_TAG_MEM_INST_HIER.`ICACHE_TAG_MEM_TILE_PATH)),
+          .depth (`ICACHE1_TAG_MEM_DEPTH),
+          .n_bits(`ICACHE1_TAG_MEM_DEPTH * EccWordWidth28_22),
+          .err_detection_scheme(mem_bkdr_util_pkg::EccInv_28_22),
+          .words_per_row(`ICACHE_TAG_MEM_WORDS_PER_ROW));
+      `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[ICacheWay1Tag],
+                             `ICACHE1_TAG_MEM_INST_HIER.`ICACHE_TAG_MEM_TILE_PATH)
 
       `uvm_info("tb.sv", "Creating mem_bkdr_util instance for I cache way 0 data", UVM_MEDIUM)
       m_mem_bkdr_util[ICacheWay0Data] = new(
           .name  ("mem_bkdr_util[ICacheWay0Data]"),
-          .path  (`DV_STRINGIFY(`ICACHE0_DATA_MEM_HIER)),
-          .depth ($size(`ICACHE0_DATA_MEM_HIER)),
-          .n_bits($bits(`ICACHE0_DATA_MEM_HIER)),
-          // The line size is 2x 32 bits and ECC is applied separately at the 32-bit word level.
-          .err_detection_scheme(mem_bkdr_util_pkg::EccInv_39_32));
-      `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[ICacheWay0Data], `ICACHE0_DATA_MEM_HIER)
+          .path  (`DV_STRINGIFY(`ICACHE0_DATA_MEM_INST_HIER.`ICACHE_DATA_MEM_TILE_PATH)),
+          .depth (`ICACHE0_DATA_MEM_DEPTH),
+          .n_bits(`ICACHE0_DATA_MEM_DEPTH * ibex_pkg::IC_LINE_BEATS * EccWordWidth39_32),
+          .err_detection_scheme(mem_bkdr_util_pkg::EccInv_39_32),
+          .words_per_row(`ICACHE_DATA_MEM_WORDS_PER_ROW));
+      `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[ICacheWay0Data],
+                             `ICACHE0_DATA_MEM_INST_HIER.`ICACHE_DATA_MEM_TILE_PATH)
 
       `uvm_info("tb.sv", "Creating mem_bkdr_util instance for I cache way 1 data", UVM_MEDIUM)
       m_mem_bkdr_util[ICacheWay1Data] = new(
           .name  ("mem_bkdr_util[ICacheWay1Data]"),
-          .path  (`DV_STRINGIFY(`ICACHE1_DATA_MEM_HIER)),
-          .depth ($size(`ICACHE1_DATA_MEM_HIER)),
-          .n_bits($bits(`ICACHE1_DATA_MEM_HIER)),
-          // The line size is 2x 32 bits and ECC is applied separately at the 32-bit word level.
-          .err_detection_scheme(mem_bkdr_util_pkg::EccInv_39_32));
-      `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[ICacheWay1Data], `ICACHE1_DATA_MEM_HIER)
+          .path  (`DV_STRINGIFY(`ICACHE1_DATA_MEM_INST_HIER.`ICACHE_DATA_MEM_TILE_PATH)),
+          .depth (`ICACHE1_DATA_MEM_DEPTH),
+          .n_bits(`ICACHE1_DATA_MEM_DEPTH * ibex_pkg::IC_LINE_BEATS * EccWordWidth39_32),
+          .err_detection_scheme(mem_bkdr_util_pkg::EccInv_39_32),
+          .words_per_row(`ICACHE_DATA_MEM_WORDS_PER_ROW));
+      `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[ICacheWay1Data],
+                             `ICACHE1_DATA_MEM_INST_HIER.`ICACHE_DATA_MEM_TILE_PATH)
 
       `uvm_info("tb.sv", "Creating mem_bkdr_util instance for OTP (in RRAM)", UVM_MEDIUM)
       otp = new(
@@ -651,27 +677,40 @@ module tb;
       `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[Otp], `RRAM_DATA_MEM_HIER)
 
       `uvm_info("tb.sv", "Creating mem_bkdr_util instance for RAM", UVM_MEDIUM)
+      // The ECC word width (32 data bits + 7 integrity bits, matching mem_bkdr_util_pkg::
+      // EccInv_39_32 below) is the same regardless of which prim_ram_1p implementation is mapped
+      // in, so it is not one of the macros in mem_bkdr_util_hier.svh.
       ram_main0 = new(
           .name  ("mem_bkdr_util[RamMain0]"),
-          .path  (`DV_STRINGIFY(`RAM_MAIN_MEM_HIER)),
-          .depth ($size(`RAM_MAIN_MEM_HIER)),
-          .n_bits($bits(`RAM_MAIN_MEM_HIER)),
+          .path  (`RAM_MAIN_MEM_PATH),
+          .depth (`RAM_MAIN_MEM_NUM_TILES * `RAM_MAIN_MEM_TILE_DEPTH),
+          .n_bits(`RAM_MAIN_MEM_NUM_TILES * `RAM_MAIN_MEM_TILE_DEPTH * EccWordWidth39_32),
           .err_detection_scheme(mem_bkdr_util_pkg::EccInv_39_32),
           .num_prince_rounds_half(2),
-          .system_base_addr    (top_earlgrey_pkg::TOP_EARLGREY_SRAM_CTRL_MAIN_RAM_BASE_ADDR));
+          .system_base_addr     (top_earlgrey_pkg::TOP_EARLGREY_SRAM_CTRL_MAIN_RAM_BASE_ADDR),
+          .tiling_path          (`RAM_MAIN_MEM_TILING_PATH),
+          .tiling_suffix_fmt_str(`RAM_MAIN_MEM_TILING_FMT),
+          .tile_depth           (`RAM_MAIN_MEM_TILE_DEPTH),
+          .words_per_row        (`RAM_MAIN_MEM_WORDS_PER_ROW));
       m_mem_bkdr_util[RamMain0] = ram_main0;
-      `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[RamMain0], `RAM_MAIN_MEM_HIER)
+      `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[RamMain0], `RAM_MAIN_MEM_TILE_HIER)
 
       `uvm_info("tb.sv", "Creating mem_bkdr_util instance for RAM RET", UVM_MEDIUM)
+      // Never tiled, so unlike RAM_MAIN this needs no tiling_path/tiling_suffix_fmt_str/tile_depth.
+      // The word width (EccWordWidth39_32, computed above) is the same regardless of which
+      // prim_ram_1p implementation is mapped in, so, as for RAM_MAIN, it is used directly here
+      // rather than derived via $bits() (which would give the wrong answer once folded: $bits() on
+      // a folded implementation's physical row array is its physical width, not the logical one).
       ram_ret0 = new(
           .name  ("mem_bkdr_util[RamRet0]"),
-          .path  (`DV_STRINGIFY(`RAM_RET_MEM_HIER)),
-          .depth ($size(`RAM_RET_MEM_HIER)),
-          .n_bits($bits(`RAM_RET_MEM_HIER)),
+          .path  (`DV_STRINGIFY(`RAM_RET_MEM_INST_HIER.`RAM_RET_MEM_TILE_PATH)),
+          .depth (`RAM_RET_MEM_DEPTH),
+          .n_bits(`RAM_RET_MEM_DEPTH * EccWordWidth39_32),
           .err_detection_scheme(mem_bkdr_util_pkg::EccInv_39_32),
-          .system_base_addr    (top_earlgrey_pkg::TOP_EARLGREY_SRAM_CTRL_RET_RAM_BASE_ADDR));
+          .system_base_addr    (top_earlgrey_pkg::TOP_EARLGREY_SRAM_CTRL_RET_RAM_BASE_ADDR),
+          .words_per_row        (`RAM_RET_MEM_WORDS_PER_ROW));
       m_mem_bkdr_util[RamRet0] = ram_ret0;
-      `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[RamRet0], `RAM_RET_MEM_HIER)
+      `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[RamRet0], `RAM_RET_MEM_INST_HIER.`RAM_RET_MEM_TILE_PATH)
 
       `uvm_info("tb.sv", "Creating mem_bkdr_util instance for ROM", UVM_MEDIUM)
       rom = new(
@@ -703,26 +742,43 @@ module tb;
 
       `uvm_info("tb.sv", "Creating mem_bkdr_util instance for OTBN IMEM", UVM_MEDIUM)
       m_mem_bkdr_util[OtbnImem] = new(.name  ("mem_bkdr_util[OtbnImem]"),
-                                      .path  (`DV_STRINGIFY(`OTBN_IMEM_HIER)),
-                                      .depth ($size(`OTBN_IMEM_HIER)),
-                                      .n_bits($bits(`OTBN_IMEM_HIER)),
-                                      .err_detection_scheme(mem_bkdr_util_pkg::EccInv_39_32));
-      `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[OtbnImem], `OTBN_IMEM_HIER)
+                                      .path  (`DV_STRINGIFY(`OTBN_IMEM_MEM_INST_HIER.`OTBN_IMEM_MEM_TILE_PATH)),
+                                      .depth (`OTBN_IMEM_MEM_DEPTH),
+                                      .n_bits(`OTBN_IMEM_MEM_DEPTH * EccWordWidth39_32),
+                                      .err_detection_scheme(mem_bkdr_util_pkg::EccInv_39_32),
+                                      .words_per_row(`OTBN_IMEM_MEM_WORDS_PER_ROW));
+      `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[OtbnImem],
+                             `OTBN_IMEM_MEM_INST_HIER.`OTBN_IMEM_MEM_TILE_PATH)
 
+      // OTBN_DMEM may be bit-sliced across two macro instances sharing one address (see
+      // mem_bkdr_util_hier.svh), so its path needs the bit-slice-aware OTBN_DMEM_MEM_BKDR_PATH
+      // macro-function, not a plain stringify. Its logical word width is otbn_pkg::ExtWLEN
+      // (WLEN plus integrity bits), unlike the other memories' EccWordWidth39_32 above.
       `uvm_info("tb.sv", "Creating mem_bkdr_util instance for OTBN DMEM", UVM_MEDIUM)
-      m_mem_bkdr_util[OtbnDmem0] = new(.name  ("mem_bkdr_util[OtbnDmem0]"),
-                                       .path  (`DV_STRINGIFY(`OTBN_DMEM_HIER)),
-                                       .depth ($size(`OTBN_DMEM_HIER)),
-                                       .n_bits($bits(`OTBN_DMEM_HIER)),
-                                       .err_detection_scheme(mem_bkdr_util_pkg::EccInv_39_32));
-      `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[OtbnDmem0], `OTBN_DMEM_HIER)
+      m_mem_bkdr_util[OtbnDmem0] = new(
+          .name  ("mem_bkdr_util[OtbnDmem0]"),
+          .path  (`OTBN_DMEM_MEM_BKDR_PATH(`OTBN_DMEM_MEM_INST_HIER)),
+          .depth (`OTBN_DMEM_MEM_DEPTH),
+          .n_bits(`OTBN_DMEM_MEM_DEPTH * otbn_pkg::ExtWLEN),
+          .err_detection_scheme(mem_bkdr_util_pkg::EccInv_39_32),
+          .words_per_row(`OTBN_DMEM_MEM_WORDS_PER_ROW),
+          .num_bit_slices(`OTBN_DMEM_MEM_NUM_BIT_SLICES),
+          .bit_slice_tiling_path(`OTBN_DMEM_MEM_BIT_SLICE_TILING_PATH),
+          .bit_slice_tiling_suffix_fmt_str(`OTBN_DMEM_MEM_BIT_SLICE_TILING_FMT));
+      if (!m_mem_bkdr_util[OtbnDmem0].is_tiled() &&
+          !m_mem_bkdr_util[OtbnDmem0].is_bit_sliced()) begin
+        `MEM_BKDR_UTIL_FILE_OP(m_mem_bkdr_util[OtbnDmem0],
+                               `OTBN_DMEM_MEM_INST_HIER.`OTBN_DMEM_MEM_TILE_PATH)
+      end
 
       `uvm_info("tb.sv", "Creating mem_bkdr_util instance for USBDEV BUFFER", UVM_MEDIUM)
-      m_mem_bkdr_util[UsbdevBuf] = new(.name  ("mem_bkdr_util[UsbdevBuf]"),
-                                       .path  (`DV_STRINGIFY(`USBDEV_BUF_HIER)),
-                                       .depth ($size(`USBDEV_BUF_HIER)),
-                                       .n_bits($bits(`USBDEV_BUF_HIER)),
-                                       .err_detection_scheme(mem_bkdr_util_pkg::ErrDetectionNone));
+      m_mem_bkdr_util[UsbdevBuf] = new(
+          .name  ("mem_bkdr_util[UsbdevBuf]"),
+          .path  (`DV_STRINGIFY(`USBDEV_BUF_MEM_INST_HIER.`USBDEV_BUF_MEM_TILE_PATH)),
+          .depth (`USBDEV_BUF_MEM_DEPTH),
+          .n_bits(`USBDEV_BUF_MEM_DEPTH * TL_DW),
+          .err_detection_scheme(mem_bkdr_util_pkg::ErrDetectionNone),
+          .words_per_row(`USBDEV_BUF_MEM_WORDS_PER_ROW));
 
       mem = mem.first();
       do begin
@@ -774,7 +830,7 @@ module tb;
           $assertoff(0, dut.top_earlgrey.earlgrey_pd_main.u_i2c0);
           $assertoff(0, dut.top_earlgrey.earlgrey_pd_main.u_i2c1);
           $assertoff(0, dut.top_earlgrey.earlgrey_pd_main.u_i2c2);
-          $assertoff(0, dut.top_earlgrey.earlgrey_pd_main.u_pinmux);
+          $assertoff(0, dut.top_earlgrey.earlgrey_pd_aon.u_pinmux);
           $assertoff(0, dut.top_earlgrey.earlgrey_pd_main.u_spi_device);
           $assertoff(0, dut.top_earlgrey.earlgrey_pd_main.u_spi_host0);
           $assertoff(0, dut.top_earlgrey.earlgrey_pd_main.u_spi_host1);
@@ -790,7 +846,7 @@ module tb;
           $asserton(0, dut.top_earlgrey.earlgrey_pd_main.u_i2c0);
           $asserton(0, dut.top_earlgrey.earlgrey_pd_main.u_i2c1);
           $asserton(0, dut.top_earlgrey.earlgrey_pd_main.u_i2c2);
-          $asserton(0, dut.top_earlgrey.earlgrey_pd_main.u_pinmux);
+          $asserton(0, dut.top_earlgrey.earlgrey_pd_aon.u_pinmux);
           $asserton(0, dut.top_earlgrey.earlgrey_pd_main.u_spi_device);
           $asserton(0, dut.top_earlgrey.earlgrey_pd_main.u_spi_host0);
           $asserton(0, dut.top_earlgrey.earlgrey_pd_main.u_spi_host1);

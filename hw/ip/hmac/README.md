@@ -2,7 +2,7 @@
 <!-- BEGIN CMDGEN util/mdbook_regression_links.py --hjson hw/ip/hmac/data/hmac.hjson --top earlgrey -->
 | Regression | Version | [Stages](https://opentitan.org/book/doc/project_governance/development_stages.html) | Results |
 |-|-|-|-|
- [`hmac`](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/dashboard.html) | 2.0.2 | D1, V1 | ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/hmac/test.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/hmac/passing.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/hmac/functional.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/hmac/code.svg) |
+ [`hmac`](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/dashboard.html) | 2.1.0 | D1, V1 | ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/hmac/test.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/hmac/passing.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/hmac/functional.svg) ![](https://dashboard.reports.lowrisc.org/opentitan/earlgrey/badge/hmac/code.svg) |
 
 This IP has been taped out in Earl Grey 1.0.0. The corresponding documentation and regression results can be found [here](https://opentitan.org/earlgrey_1.0.0/book/hw/ip/hmac/index.html).
 
@@ -20,6 +20,7 @@ See that document for integration overview within the broader OpenTitan top leve
 - Two modes: SHA-2 | HMAC based on SHA-2
 - Multiple digest sizes supported (for both modes): SHA-2 256/384/512 hashing algorithm
 - Configurable key length up to 1024-bit secret key for HMAC mode
+- Secret key can be sideloaded from the key manager instead of being provided by software
 - Support for context switching (via saving and restoring) across multiple message streams
 - 32 x 32-bit message FIFO buffer
 
@@ -41,6 +42,9 @@ The digest size required is configured in [`CFG.digest_size`](doc/registers.md#c
 The message to authenticate is written to [`MSG_FIFO`](doc/registers.md#msg_fifo) and the HMAC generates a 256/384/512-bit digest value (depending on the digest size configuration provided) which can be read from [`DIGEST_0-DIGEST_7`](doc/registers.md#digest) for SHA-2 256, or from [`DIGEST_0-DIGEST_12`](doc/registers.md#digest) for SHA-2 384, or from [`DIGEST_0-DIGEST_15`](doc/registers.md#digest) for SHA-2 512.
 The `hmac_done` interrupt is raised to report to software that the final digest is available.
 
+Alternatively, the secret key can be sideloaded from the key manager by setting [`CFG.sideload`](doc/registers.md#cfg--sideload), in which case the [`KEY_0-KEY_31`](doc/registers.md#key) registers are ignored and the key is never exposed to software.
+Some restrictions apply in this mode; please check the [Programmer's Guide](doc/programmers_guide.md#using-a-sideloaded-key) for more information.
+
 This module allows software to save and restore the hashing context so that different message streams can be interleaved; please check the [Programmer's Guide](doc/programmers_guide.md#saving-and-restoring-the-context) for more information.
 
 The HMAC IP can run in SHA-2 only mode, whose purpose is to check the correctness of the received message.
@@ -59,5 +63,4 @@ The internal variables and secret key will be reset to the written value.
 For SHA-2 384/512 modes that operate on 64-bit words, the 32-bit random value is replicated and concatenated to create the 64-bit value.
 This version of the HMAC does not have an internal pseudo-random number generator to derive the random number from the written seed number.
 
-A later update may provide an interface for external hardware IPs, such as a key manager, to update the secret key.
-It will also have the ability to send the digest directly to a shared internal bus.
+A later update may provide the ability to send the digest directly to a shared internal bus.

@@ -59,8 +59,8 @@ class OtbnModel {
 
   // Set or unset the two keys from keymgr. Returns 0 on success or -1
   // on error.
-  int set_keymgr_value(svLogicVecVal *key0 /* logic [383:0] */,
-                       svLogicVecVal *key1 /* logic [383:0] */,
+  int set_keymgr_value(svLogicVecVal *key0 /* logic [511:0] */,
+                       svLogicVecVal *key1 /* logic [511:0] */,
                        unsigned char valid);
 
   // Step once in the model. Returns 1 if the model has finished, 0 if not and
@@ -103,6 +103,10 @@ class OtbnModel {
 
   // Set wfi_enabled bit in ISS model. Returns 0 on success; -1 on failure.
   int set_wfi_enabled(unsigned char new_val);
+
+  // Set urnd_ctrl_enabled bit in ISS model. Returns 0 on success; -1 on
+  // failure.
+  int set_urnd_ctrl_enabled(unsigned char new_val);
 
   // Resume a paused wfi instruction. Returns 0 on success; -1 on failure.
   int wfi_resume();

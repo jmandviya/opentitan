@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 
 from reggen.alert import Alert
 from reggen.access import SWAccess, HWAccess
+from reggen.bits import Bits
 from reggen.bus_interfaces import BusInterfaces
 from reggen.clocking import Clocking, ClockingItem
 from reggen.field import Field
@@ -29,6 +30,7 @@ class RegBlock:
     _addrsep: int = field(init=False)
     name: str = ""
     clocks: dict[str, ClockingItem] = field(default_factory=dict)
+    reinit_list: list[Signal] = field(default_factory=list)
     offset: int = 0
     multiregs: list[MultiRegister] = field(default_factory=list)
     registers: list[Register] = field(default_factory=list)
@@ -71,7 +73,7 @@ class RegBlock:
 
     @staticmethod
     def build_blocks(block: 'RegBlock', raw: object, bus: BusInterfaces,
-                     clocks: Clocking,
+                     clocks: Clocking, reinit_list: list[Signal],
                      is_alias: bool) -> dict[str | None, 'RegBlock']:
         '''Build a dictionary of blocks for a 'registers' field in the hjson
 
@@ -108,6 +110,10 @@ class RegBlock:
         for idx, (r_key, r_val) in enumerate(raw.items()):
             if idx > 0:
                 block = RegBlock(block._reg_width, block._params)
+                # The intersection of IP blocks employing reinit signals and
+                # those with multiple blocks will likely be small; keep it simple
+                # and use one set of signals.
+                block.add_reinits(reinit_list)
 
             rb_key = check_str(
                 r_key, 'the key for item {} of '
@@ -226,6 +232,16 @@ class RegBlock:
             assert isinstance(clk, ClockingItem)
             self.clocks[name] = clk
 
+    def _validate_reinit(self, name_reg: str, name_reinit: str | None) -> None:
+        '''Check that the reinitialization input is known.
+        '''
+        if name_reinit is not None:
+            reinits = [signal.name for signal in self.reinit_list]
+            if name_reinit not in reinits:
+                raise ValueError(
+                    f"The {name_reg} register specifies a reinitialization input "
+                    f"that is not present in 'reinit_list': {reinits}")
+
     def _handle_register(self, where: str, body: object, clocks: Clocking,
                          is_alias: bool) -> None:
         reg = Register.from_raw(self._reg_width, self.offset, self._params,
@@ -233,6 +249,7 @@ class RegBlock:
 
         self._validate_async(reg.async_clk)
         self._validate_sync(reg.sync_clk)
+        self._validate_reinit(reg.name, reg.reinit)
 
         self.add_register(reg)
 
@@ -301,6 +318,8 @@ class RegBlock:
         # validate async schemes
         self._validate_async(mr.async_clk)
         self._validate_sync(mr.sync_clk)
+
+        self._validate_reinit(mr.name, mr.reinit)
 
         for reg in mr.cregs:
             lname = reg.name.lower()
@@ -372,6 +391,10 @@ class RegBlock:
         # Remove old key and reinsert register with new key name.
         self.name_to_flat_reg[new_lname] = self.name_to_flat_reg.pop(old_lname)
         self.name_to_offset[new_lname] = self.name_to_offset.pop(old_lname)
+
+    def add_reinits(self, reinits: list[Signal]) -> None:
+        '''Extend the list of reinit inputs to these registers'''
+        self.reinit_list.extend(reinits)
 
     def add_window(self, window: Window) -> None:
         if window.name is not None:
@@ -475,6 +498,7 @@ class RegBlock:
                                    self.offset,
                                    async_clk=None,
                                    sync_clk=None,
+                                   reinit=None,
                                    alias_target=None,
                                    desc=reg_desc,
                                    fields=fields,
@@ -544,6 +568,7 @@ class RegBlock:
                 self.offset,
                 async_clk=None,
                 sync_clk=None,
+                reinit=None,
                 alias_target=None,
                 desc='Interrupt State Register',
                 fields=fields,
@@ -577,11 +602,63 @@ class RegBlock:
 
     def make_alert_regs(self, alerts: list[Alert]) -> None:
         assert alerts
-        assert len(alerts) < self._reg_width
-        self._add_intr_alert_reg(alerts, 'ALERT_TEST', 'Alert Test Register',
-                                 ('Write 1 to trigger '
-                                  'one alert event of this kind.'), 'wo',
-                                 'hro', True, [])
+        # The alert-test fields occupy bits [0 .. len(alerts)-1]; a single-bit
+        # in-register write-enable, `regwen`, is placed at the MSB. Make sure they
+        # do not overlap.
+        msb = self._reg_width - 1
+        assert len(alerts) <= msb
+
+        alert_sw = SWAccess('RegBlock.make_alert_regs()', 'wo')
+        alert_hw = HWAccess('RegBlock.make_alert_regs()', 'hro')
+        # rw0c, reset 1: alert testing is enabled out of reset; software writes 0
+        # to this bit to disable it until the next reset.
+        lock_sw = SWAccess('RegBlock.make_alert_regs()', 'rw0c')
+        lock_hw = HWAccess('RegBlock.make_alert_regs()', 'none')
+
+        fields = []
+        for alert in alerts:
+            fields.append(
+                Field(
+                    alert.name,
+                    None,  # no alias target
+                    'Write 1 to trigger one alert event of this kind.',
+                    tags=[],
+                    swaccess=alert_sw,
+                    hwaccess=alert_hw,
+                    hwqe=True,
+                    bits=alert.bits,
+                    resval=0,
+                    enum=None,
+                    mubi=False,
+                    auto_split=False))
+
+        fields.append(
+            Field(
+                'regwen',
+                None,  # no alias target
+                'Write 0 to disable alert testing until the next reset.',
+                tags=[],
+                swaccess=lock_sw,
+                hwaccess=lock_hw,
+                hwqe=False,
+                bits=Bits(msb, msb),
+                resval=1,
+                enum=None,
+                mubi=False,
+                auto_split=False))
+
+        self.add_register(Register('ALERT_TEST',
+                                   self.offset,
+                                   async_clk=None,
+                                   sync_clk=None,
+                                   reinit=None,
+                                   alias_target=None,
+                                   desc='Alert Test Register',
+                                   fields=fields,
+                                   hwext=True,
+                                   hwqe=True,
+                                   inregwen='regwen',
+                                   tags=[]))
 
     def get_addr_width(self) -> int:
         '''Calculate the number of bits to address every byte of the block'''

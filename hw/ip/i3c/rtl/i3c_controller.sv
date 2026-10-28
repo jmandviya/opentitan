@@ -122,9 +122,6 @@ module i3c_controller
   // Timing parameters; Target- and transfer-invariant.
   output         [TmCycW-1:0] tcas_d2_o,
   output         [TmCycW-1:0] tcbp_d2_o,
-  output         [TmCycW-1:0] todch_d2_o,
-  output         [TmCycW-1:0] todcl_d2_o,
-  output                      enable_hc_scl_o,
 
   // Retrying of NACKed commands.
   output                      cmd_nacked_o,
@@ -139,7 +136,6 @@ module i3c_controller
   input                       trx_avalid_i,
   input  i3c_ctrl_trx_arb_t   trx_arb_i,
   output                      trx_aready_o,
-  output                      trx_arb_nack_o,
 
   // Read data from the transceiver.
   input                       trx_rdvalid_i,
@@ -200,9 +196,6 @@ module i3c_controller
     .clk_i       (clk_i),
     .rst_ni      (rst_ni),
 
-    // Control inputs.
-    .sw_reset_i  (sw_reset_i),
-
     // Configuration settings; software-initiated state changes.
     .reg2hw_i    (reg2hw_i),
 
@@ -229,24 +222,26 @@ module i3c_controller
   // Controller enable that includes Standby Controller mode too.
   // - we must keep the IBI Queue and associated logic operational in Standby Controller mode, so
   //   that Broadcast CCC notifications can be presented to the software driver.
-  // TODO: This may require refinement when Secondary/Standby Controller role is supported.
+  // TODO(#31308): This may require refinement when Secondary/Standby Controller role is supported.
   assign enabled_stby = enabled | stby_cr_enabled_i;
 
   // Software writes to the DAT must update entries in the DAT cache; writes are narrower than the
-  // DAT entry, but fortunately the required information all lies within a single bus word (the
-  // first within the DAT entry).
-  //
+  // DAT entry.
   // Note: The `i3c_dat` memory will grant the software write only when the DAT is _not_ being read
   // by the Controller FSM hardware.
   i3c_datc_wdata_t sw_datc_wdata;
   i3c_dat_entry_t sw_dat_entry;
-  wire sw_datc_we = &{sw_dat_req_i, sw_dat_gnt_o, sw_dat_we_i, !sw_dat_addr_i[0]};  // Lowest word.
+  // The upper word of the DAT entry conveys the `AUTOCMD_MODE` field (bus signaling speed), whilst
+  // the lower word conveys the other fields.
+  wire [1:0] sw_datc_we = {2{sw_dat_req_i & sw_dat_gnt_o & sw_dat_we_i}} &
+                          {sw_dat_addr_i[0], !sw_dat_addr_i[0]};
   wire [DATAddrW-1:0] sw_datc_widx = sw_dat_addr_i[DATAddrW:1];  // Entry index.
   assign sw_dat_entry = i3c_dat_entry_t'({2{sw_dat_wdata_i}});   // Reinterpret write data.
-  assign sw_datc_wdata.dyn_addr    = sw_dat_entry.dynamic_address;
-  assign sw_datc_wdata.ibi_payload = sw_dat_entry.ibi_payload;
-  assign sw_datc_wdata.ibi_reject  = sw_dat_entry.ibi_reject;
-  assign sw_datc_wdata.crr_reject  = sw_dat_entry.crr_reject;
+  assign sw_datc_wdata.dyn_addr     = sw_dat_entry.dynamic_address[22:16];  // No parity bit.
+  assign sw_datc_wdata.ibi_payload  = sw_dat_entry.ibi_payload;
+  assign sw_datc_wdata.ibi_reject   = sw_dat_entry.ibi_reject;
+  assign sw_datc_wdata.crr_reject   = sw_dat_entry.crr_reject;
+  assign sw_datc_wdata.autocmd_mode = i3c_xfer_mode_e'(sw_dat_entry.autocmd_mode);
 
   // Core state machine for Command/Response processing.
   i3c_controller_fsm #(
@@ -348,11 +343,6 @@ module i3c_controller
     // Timing parameterss; target- and transfer-invariant.
     .tcas_d2_o         (tcas_d2_o),
     .tcbp_d2_o         (tcbp_d2_o),
-    .todch_d2_o        (todch_d2_o),
-    .todcl_d2_o        (todcl_d2_o),
-
-    // Configuration signals to the transceiver logic.
-    .enable_hc_scl_o   (enable_hc_scl_o),
 
     // Retrying of NACKed commands.
     .cmd_nacked_o      (cmd_nacked_o),
@@ -367,7 +357,6 @@ module i3c_controller
     .trx_avalid_i      (trx_avalid_i),
     .trx_arb_i         (trx_arb_i),
     .trx_aready_o      (trx_aready_o),
-    .trx_arb_nack_o    (trx_arb_nack_o),
 
     // Read data from the transceiver.
     .trx_rdvalid_i     (trx_rdvalid_i),
@@ -446,7 +435,7 @@ module i3c_controller
     .dct_cfg_o
   );
 
-  // TODO: This will need revisiting when Standby Controller operation is fully implemented.
+  // TODO(#31308): This will need revisiting when Standby Controller operation is fully implemented.
   assign ac_current_own_o = enabled;
 
   // Interrupt-generating thresholds on Rx and Tx Data Buffers.
@@ -475,23 +464,25 @@ module i3c_controller
 
   // Interrupt generation.
   always_comb begin
-    intr_hc_o = '0;  // TODO: Error-related interrupts yet to be implemented; no scheduled cmds.
+    // TODO(#31305): Error-related interrupts yet to be implemented; no scheduled cmds.
+    intr_hc_o = '0;
     intr_pio_o = '0;
-    intr_stby_cr_o = '0;  // TODO: Standby Controller role deferred.
+    intr_stby_cr_o = '0;  // TODO(#31308): Standby Controller role deferred.
 
     // FIFO-state threshold interrupt signals.
     // Note: These threshold values are programmed as entry counts; for the Command Queue an entry
     //       is equivalent to 2 DWORDs.
-    // TODO: Transfer errors and aborts are not yet properly reported here; placeholder drivers.
+    // TODO(#31305): Transfer errors and aborts are not yet properly reported here; placeholder
+    // drivers.
     intr_pio_o.transfer_err    = suspending;
     intr_pio_o.transfer_abort  = transfer_aborted;
     intr_pio_o.resp_ready      = |reg2hw_i.queue_thld_ctrl.resp_buf_thld.q &&  // Field valid?
-                                 (rsp_desc_wused_i >= resp_buf_thld);
+                                 (32'(rsp_desc_wused_i) >= 32'(resp_buf_thld));
     intr_pio_o.cmd_queue_ready = |reg2hw_i.queue_thld_ctrl.cmd_empty_buf_thld.q &&  // Field valid?
-                                 (cmd_desc_ravail_i[FIFODepthW:1] >= cmd_empty_buf_thld);
+                                 (32'(cmd_desc_ravail_i[FIFODepthW:1]) >= 32'(cmd_empty_buf_thld));
     // Note that this is comparing the number of IBI Status Descriptors.
     intr_pio_o.ibi_status_thld = |reg2hw_i.queue_thld_ctrl.ibi_status_thld.q &&  // Field valid?
-             (ibi_stat_wused_i >= reg2hw_i.queue_thld_ctrl.ibi_status_thld.q);
+             (32'(ibi_stat_wused_i) >= 32'(reg2hw_i.queue_thld_ctrl.ibi_status_thld.q));
     intr_pio_o.rx_thld = rx_thld;
     intr_pio_o.tx_thld = tx_thld;
   end
@@ -500,6 +491,7 @@ module i3c_controller
   logic [7:0] ce2_error_cnt;
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) ce2_error_cnt <= 'b0;  // CE2 (4.3.8.2.3) count.
+    else if (reg2hw_i.mx_error_counters.reinit) ce2_error_cnt <= 'b0;
     else if (reg2hw_i.mx_error_counters.re | ctrl_error_o[2]) begin
       // Reading from the CE2_ERROR_COUNT field clears this saturating counter of CE2 errors.
       // - the sw read data path is combinational w.r.t. 're' assertion; cleared in the next cycle.
@@ -522,5 +514,18 @@ module i3c_controller
   if ($bits(i3c_xfer_cmd_intern_ctrl_t) != 64) $fatal(1, "Intn Ctrl Command has incorrect size.");
   if ($bits(i3c_xfer_rsp_t) != 32)             $fatal(1, "Response Descriptor has incorrect size.");
   if ($bits(i3c_ibi_status_t) != 32)           $fatal(1, "IBI Descriptor has incorrect size.");
+
+  // Signals that the logic does not use (yet).
+  // - the DAT cache holds only the DAT fields that the Controller logic needs.
+  logic unused_sw_dat_entry;
+  assign unused_sw_dat_entry = ^{sw_dat_entry.autocmd_hdr_code, sw_dat_entry.autocmd_mask,
+                                 sw_dat_entry.autocmd_value, sw_dat_entry.dev_nack_retry_cnt,
+                                 sw_dat_entry.device, sw_dat_entry.dynamic_address[23],
+                                 sw_dat_entry.reserved0, sw_dat_entry.reserved1,
+                                 sw_dat_entry.reserved2, sw_dat_entry.ring_id,
+                                 sw_dat_entry.static_address, sw_dat_entry.ts};
+  // - the thresholds compare against levels in units of two DWORDs.
+  logic unused_lvl_lsbs;
+  assign unused_lvl_lsbs = ^{cmd_desc_ravail_i[0], rxbuf_wused_i[0], txbuf_ravail_i[0]};
 
 endmodule

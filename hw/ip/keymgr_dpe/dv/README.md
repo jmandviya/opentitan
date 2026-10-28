@@ -10,7 +10,7 @@
 ## Current status
 * [Design & verification stage](../../../README.md)
   * [HW development stages](../../../../doc/project_governance/development_stages.md)
-* [Simulation results](https://reports.opentitan.org/integrated/hw/ip/keymgr/dv/latest/report.html)
+* [Simulation results](https://reports.opentitan.org/integrated/hw/ip/keymgr_dpe/dv/latest/report.html)
 
 ## Design features
 For detailed information on KEYMGR_DPE design features, please see the [KEYMGR_DPE HWIP technical specification](../README.md).
@@ -28,7 +28,7 @@ In addition, it instantiates the following interfaces, connects them to the DUT 
 * [TileLink host interface](../../../dv/sv/tl_agent/README.md)
 * KEYMGR_DPE IOs (`keymgr_dpe_if`)
 * Interrupts ([`pins_if`](../../../dv/sv/common_ifs/README.md))
-* Alerts ([`alert_esc_if`](../../../dv/sv/alert_esc_agent/README.md))
+* [Alert interface](../../../dv/sv/alert_agent/README.md))
 
 ### Common DV utility components
 The following utilities provide generic helper tasks and functions to perform activities that are common across the project:
@@ -92,7 +92,7 @@ It creates the following analysis ports to retrieve the data monitored by corres
 #### Assertions
 * TLUL assertions: The `tb/keymgr_dpe_bind.sv` binds the `tlul_assert` [assertions](../../tlul/doc/TlulProtocolChecker.md) to the IP to ensure TileLink interface protocol compliance.
 * Unknown checks on DUT outputs: The RTL has assertions to ensure all outputs are initialized to known values after coming out of reset.
-* Check(Kmac|Aes|Otbn)Key: Check keys on the 3 sideload interfaces.
+* Check(Kmac|Aes|Otbn|Hmac)Key: Check keys on the 4 sideload interfaces.
 * CheckEdn1stReq / CheckEdn2ndReq: Check KEYMGR_DPE sends 2 EDN request periodically based on the CSR `reseed_interval`.
 
 ## Building and running tests

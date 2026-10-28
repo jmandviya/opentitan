@@ -19,6 +19,7 @@ module kmac_app
 #(
   // App specific configs are defined in kmac_pkg
   parameter  bit          EnMasking          = 1'b0,
+  parameter  bit          EnFullKmac         = 1'b1,
   localparam int          Share              = (EnMasking) ? 2 : 1, // derived parameter
   parameter  bit          SecIdleAcceptSwMsg = 1'b0,
   parameter  int unsigned NumAppIntf         = 4,
@@ -47,7 +48,7 @@ module kmac_app
   output logic         sw_ready_o,
 
   // KeyMgr Sideload Key interface
-  input keymgr_pkg::hw_key_req_t keymgr_key_i,
+  input keymgr_dpe_pkg::hw_key_req_t keymgr_key_i,
 
   // Application Message in/ Digest out interface + control signals
   input  app_req_t [NumAppIntf-1:0] app_i,
@@ -83,6 +84,13 @@ module kmac_app
   // zero.
   output logic                        reg_state_valid_o,
   output logic [sha3_pkg::StateW-1:0] reg_state_o[Share],
+
+  // The keccak state can be written by software once the StateWrite command has been issued.
+  output logic reg_state_write_en_o,
+
+  // Pulsed when SW claims the KMAC HWIP with the StateWrite command and when it releases the
+  // block again with the Done command.
+  output prim_mubi_pkg::mubi4_t state_clear_o,
 
   // Controls for SW whether to take the key from the KeyMgr sideload interface or registers. For
   // KMAC operations initiated by an app interface, we always take the sideloaded key.
@@ -226,9 +234,8 @@ module kmac_app
   app_mux_sel_e mux_sel_buf_err_check;
   app_mux_sel_e mux_sel_buf_kmac;
 
-  // Tracking and error signals
+  // Error signals
   kmac_pkg::err_t fsm_err, mux_err;
-  logic err_sha3_during_app_set, err_sha3_during_app_d, err_sha3_during_app_q;
 
   /////////////////////////////
   // Application arbitration //
@@ -334,9 +341,9 @@ module kmac_app
       sha3_mode_d       = app_ses_cfg_pending.mode == AppSHA3  ? sha3_pkg::Sha3  :
                           app_ses_cfg_pending.mode == AppShake ? sha3_pkg::Shake : sha3_pkg::CShake;
       keccak_strength_d = app_ses_cfg_pending.kstrength;
-    end else if (st == StIdle) begin
-      // In idle always propagate the latest CSR values as there is no latch trigger when SW starts
-      // a hashing operation.
+    end else if (st inside {StIdle, StStateWrite}) begin
+      // In idle/write always propagate the latest CSR values as there is no latch trigger when SW
+      // starts a hashing operation.
       app_ses_cfg_d     = AppSesCfgDefault;
       kmac_en_d         = reg_kmac_en_i;
       sha3_mode_d       = reg_sha3_mode_i;
@@ -358,7 +365,15 @@ module kmac_app
     end
   end
 
-  assign kmac_en_o         = kmac_en_q;
+  // Keyed MAC is not available if the full KMAC is disabled.
+  if (EnFullKmac) begin : gen_kmac_en_oup
+    assign kmac_en_o = kmac_en_q;
+  end else begin : gen_no_kmac_en_oup
+    assign kmac_en_o = 1'b0;
+
+    logic unused_kmac_en_q;
+    assign unused_kmac_en_q = kmac_en_q;
+  end
   assign sha3_mode_o       = sha3_mode_q;
   assign keccak_strength_o = keccak_strength_q;
 
@@ -400,8 +415,9 @@ module kmac_app
   // Ignore the mode and strength check if app allows unsupported combinations.
   assign valid_app_mode_strength = valid_app_mode_strength_raw || app_cfg.en_unsup_comb;
 
-  assign valid_app_kmac_cfg = app_cfg.session_cfg.mode == AppKMAC ?
-                              prim_mubi_pkg::mubi4_test_true_strict(entropy_ready_i) : 1'b1;
+  assign valid_app_kmac_cfg =
+      app_cfg.session_cfg.mode == AppKMAC ?
+      EnFullKmac && prim_mubi_pkg::mubi4_test_true_strict(entropy_ready_i) : 1'b1;
 
   // XOF operation is not supported for SHA3 or KMAC.
   assign valid_en_xof_cfg = app_cfg.session_cfg.mode inside {AppSHA3, AppKMAC} ?
@@ -428,14 +444,14 @@ module kmac_app
   // to accept messages and control requests during the error handling.
   // Similarly, there are three response generators. One drives digest responses, one the finish
   // response and one the error responses.
+  // Any SHA3 core error results in a fatal alert but we still raise the error flag to ensure the
+  // current response gets invalidated.
   assign app_rsp = '{
     req_ready:  app_data_ready | app_error_req_ready | app_req_ready,
     rsp_valid:  app_digest_valid | app_finish_rsp_valid | app_error_rsp_valid,
     digest_s0:  app_digest[0],
     digest_s1:  app_digest[1],
-    error:      app_error_rsp_valid | app_finish_rsp_is_error |
-                // Must use _d as error is relevant in cycle the digest is returned.
-                (err_sha3_during_app_d & app_cfg.if_type == AppStatic),
+    error:      app_error_rsp_valid | app_finish_rsp_is_error | error_i,
     rsp_finish: app_finish_rsp_valid
   };
 
@@ -458,6 +474,8 @@ module kmac_app
   // FSM //
   /////////
   logic clear_app_trackers;
+
+  logic state_write_allowed;
 
   logic any_request_outstanding;
   logic last_req_pending;
@@ -528,7 +546,6 @@ module kmac_app
     sparse_fsm_error_o             = 1'b0;
     clear_after_error_o            = prim_mubi_pkg::MuBi4False;
     service_rejected_error_set     = 1'b0;
-    err_sha3_during_app_set        = 1'b0;
     err_key_used_but_invalid_clear = 1'b0;
     process_cmd_sent_set           = 1'b0;
     last_msg_part_received_set     = 1'b0;
@@ -536,6 +553,8 @@ module kmac_app
     clear_app_trackers             = 1'b0;
     app_error_req_ready            = 1'b0;
     app_error_rsp_valid            = 1'b0;
+    state_write_allowed            = 1'b0;
+    state_clear_o                  = prim_mubi_pkg::MuBi4False;
 
     disable_entropy_fast_process = 1'b0;
 
@@ -548,9 +567,13 @@ module kmac_app
           st_d = StAppCfg;
           set_appid = 1'b1;
         end else if (sw_cmd_i == CmdStart) begin
-          // Software initiates the sequence
+          // Software initiates the sequence from scratch.
           st_d = StSw;
           cmd_o = CmdStart;
+        end else if (sw_cmd_i == CmdStateWrite) begin
+          // Software claims the block to restore a previously saved context.
+          st_d          = StStateWrite;
+          state_clear_o = prim_mubi_pkg::MuBi4True;
         end
       end
 
@@ -585,25 +608,34 @@ module kmac_app
         last_msg_part_received_set = last_req_hs;
 
         if (last_req_hs) begin
-          if (app_cfg.session_cfg.mode == AppKMAC) begin
-            st_d = StAppOutLen;
+          // The StAppOutLen transition only exists if the full KMAC is enabled.
+          if (EnFullKmac) begin
+            if (app_cfg.session_cfg.mode == AppKMAC) begin
+              st_d = StAppOutLen;
+            end else begin
+              st_d = StAppProcess;
+            end
           end else begin
+            // With KMAC disabled the next state is StAppProcess.
             st_d = StAppProcess;
           end
-        end else if (err_sha3_during_app_q) begin
-          // Handshaking last message part has priority as this error is also checked afterwards.
-          st_d = StErrorAwaitMsg;
         end
       end
 
       StAppOutLen: begin
-        mux_sel            = SelOutLen;
-        kmac_bypass_fifo_o = app_cfg.masked;
+        if (EnFullKmac) begin
+          mux_sel            = SelOutLen;
+          kmac_bypass_fifo_o = app_cfg.masked;
 
-        if (kmac_valid_o && kmac_ready_i) begin
-          st_d = StAppProcess;
+          if (kmac_valid_o && kmac_ready_i) begin
+            st_d = StAppProcess;
+          end else begin
+            st_d = StAppOutLen;
+          end
         end else begin
-          st_d = StAppOutLen;
+          // If KMAC is disabled, this state should never be reached.
+          st_d = StTerminalError;
+          sparse_fsm_error_o = 1'b 1;
         end
       end
 
@@ -637,18 +669,14 @@ module kmac_app
 
         if (app_cfg.if_type == AppStatic) begin
           if (app_rsp.rsp_valid && app_req.rsp_ready) begin
-            // Must be on _d signal to capture the error in the same cycle.
-            st_d = err_sha3_during_app_d ? StErrorAwaitSw : StAppFinish;
+            st_d = StAppFinish;
           end
         end else begin
-          // Ending a session by handshaking the request takes priority over 1) handling a SHA3
-          // error as it is checked for when sending the response and 2) squeezing to avoid
+          // Ending a session by handshaking the request takes priority over squeezing to avoid
           // starting an obsolete squeeze operation.
           if (last_req_pending) begin
             st_d          = StAppFinish;
             app_req_ready = 1'b1;
-          end else if (err_sha3_during_app_q) begin
-            st_d = StErrorPush;
           end else if (squeeze_again && !pending_digest_rsp_d) begin
             // Trigger a squeeze if there should be sent more digest parts. Ensure that there
             // is no pending response which would be 'killed' when changing the state.
@@ -670,21 +698,34 @@ module kmac_app
           app_push_digest     = pending_digest_rsp_q;
           app_error_rsp_valid = pending_error_rsp_q;
           if (!pending_digest_rsp_q && !pending_error_rsp_q) begin
-            // We now can send the finish response. Send again the error flag to cover the case the
-            // error occurred whilst the last digest response was pending.
-            app_finish_rsp_valid    = 1'b1;
-            app_finish_rsp_is_error = err_sha3_during_app_q;
+            // We now can send the finish response.
+            app_finish_rsp_valid = 1'b1;
 
             // Once the finish response is handshaked the session can be terminated.
             if (app_finish_rsp_valid && app_req.rsp_ready) begin
               st_d      = StIdle;
               cmd_o     = CmdDone;
               clr_appid = 1'b1;
-              if (err_sha3_during_app_q) begin
-                clear_after_error_o = prim_mubi_pkg::MuBi4True;
-              end
             end
          end
+        end
+      end
+
+      StStateWrite: begin
+        // SW has claimed the interface to restore the state. Any app interface cannot claim the
+        // KMAC HWIP anymore.
+        state_write_allowed = 1'b 1;
+
+        if (sw_cmd_i == CmdContinue) begin
+          st_d  = StSw;
+          cmd_o = CmdContinue;
+        end else if (sw_cmd_i == CmdDone) begin
+          // The Done command always clears the Keccak state, also when SW releases the block
+          // without restoring a context.
+          st_d          = StIdle;
+          state_clear_o = prim_mubi_pkg::MuBi4True;
+        end else begin
+          st_d = StStateWrite;
         end
       end
 
@@ -760,13 +801,12 @@ module kmac_app
         // For service-rejected errors, return to idle without SW interaction.
         // For other errors, wait for SW to acknowledge the error.
 
-        // A SHA3 error can occur after the service rejected error is latched. Thus only send an
-        // error-free finish response if the only error case is a service rejected error.
+        // Only send an error-free finish response if a service rejected error occurred.
         app_finish_rsp_valid    = app_cfg.if_type == AppDynamic;
-        app_finish_rsp_is_error = !service_rejected_error_q || err_sha3_during_app_q;
+        app_finish_rsp_is_error = !service_rejected_error_q;
 
         if ((app_finish_rsp_valid && app_req.rsp_ready) || (app_cfg.if_type == AppStatic)) begin
-          if (!app_finish_rsp_is_error) begin
+          if (service_rejected_error_q) begin
             clr_appid           = 1'b1;
             clear_after_error_o = prim_mubi_pkg::MuBi4True;
             st_d                = StIdle;
@@ -810,24 +850,6 @@ module kmac_app
         end
       end
 
-      StErrorPush: begin
-        // State for dynamic interfaces only.
-        // An error occurred while pushing digest parts. Keep sending error responses until the
-        // app sends a termination request. Then close the session normally.
-
-        // Continue sending pending response to adhere to valid locked-in principle.
-        if (pending_digest_rsp_q) begin
-          app_push_digest = 1'b1;
-        end else begin
-          // Now continuously send error responses until termination request arrives.
-          app_error_rsp_valid = 1'b1;
-          if (app_req.req_valid && app_req.req_last) begin
-            app_req_ready = 1'b1;
-            st_d          = StAppFinish;
-          end
-        end
-      end
-
       StTerminalError: begin
         // this state is terminal
         st_d = st;
@@ -854,10 +876,13 @@ module kmac_app
       err_during_sw_set = st == StSw;
     end
 
-    // Track whether a hashing engine error occurred.
-    err_sha3_during_app_set =
-        error_i &&
-        (st inside {StAppCfg, StAppMsg, StAppOutLen, StAppProcess, StAppWait, StAppPushDigest});
+    // Detect if a hashing engine error occurred whilst an app was active. This can only happen if
+    // a wrong command order is issued or control signals are faulted. As the app interface per
+    // design never violates the command order, we treat this as a fatal alert.
+    if (error_i && (st inside {StAppCfg, StAppMsg, StAppOutLen, StAppProcess, StAppWait,
+                               StAppPushDigest, StAppFinish})) begin
+      st_d = StTerminalError;
+    end
 
     // Enforce the entropy_fast_process bit is set to 0 for the duration of the error handling.
     // This ensures the hashing updates the PRNG and hence the masking is fully enabled. This
@@ -871,6 +896,11 @@ module kmac_app
     // Unconditionally jump into the terminal error state if the life cycle controller triggers an
     // escalation.
     if (lc_ctrl_pkg::lc_tx_test_true_loose(lc_escalate_en_i)) begin
+      st_d = StTerminalError;
+    end
+
+    // Ensure we stay in this state.
+    if (st == StTerminalError) begin
       st_d = StTerminalError;
     end
   end
@@ -906,11 +936,6 @@ module kmac_app
                            err_during_sw_set  ? 1'b1 : // set
                            err_during_sw_q;            // hold
 
-  // Track hashing engine errors
-  assign err_sha3_during_app_d = clear_app_trackers      ? 1'b0 : // clear
-                                 err_sha3_during_app_set ? 1'b1 : // set
-                                 err_sha3_during_app_q;           // hold
-
   // Track key invalid errors
   assign err_key_used_but_invalid_d = clear_app_trackers             ? 1'b0 : // clear
                                       err_key_used_but_invalid_clear ? 1'b0 : // clear when handled
@@ -935,7 +960,6 @@ module kmac_app
       service_rejected_error_q   <= 1'b0;
       err_processed_q            <= 1'b0;
       err_during_sw_q            <= 1'b0;
-      err_sha3_during_app_q      <= 1'b0;
       err_key_used_but_invalid_q <= 1'b0;
     end else begin
       last_msg_part_received_q   <= last_msg_part_received_d;
@@ -945,14 +969,13 @@ module kmac_app
       service_rejected_error_q   <= service_rejected_error_d;
       err_processed_q            <= err_processed_d;
       err_during_sw_q            <= err_during_sw_d;
-      err_sha3_during_app_q      <= err_sha3_during_app_d;
       err_key_used_but_invalid_q <= err_key_used_but_invalid_d;
     end
   end
 
   // Check that dynamic app only states are never entered for a static app.
   `ASSERT(InvalidStateForStaticApp_A,
-          st inside {StErrorPush, StErrorAwaitTermination} |-> (app_cfg.if_type == AppDynamic),
+          st inside {StErrorAwaitTermination} |-> (app_cfg.if_type == AppDynamic),
           clk_i, rst_ni)
 
   //////////////
@@ -1011,10 +1034,17 @@ module kmac_app
       end
 
       SelOutLen: begin
-        // Write encoded output length value as unmasked data (share 1 = '0).
-        kmac_valid_o   = 1'b1; // always write
-        kmac_data_o[0] = MsgWidth'(encoded_outlen);
-        kmac_strb_o    = MsgWidth'(encoded_outlen_strb);
+        if (EnFullKmac) begin
+          // Write encoded output length value as unmasked data (share 1 = '0).
+          kmac_valid_o   = 1'b1; // always write
+          kmac_data_o[0] = MsgWidth'(encoded_outlen);
+          kmac_strb_o    = MsgWidth'(encoded_outlen_strb);
+        end else begin
+          // If KMAC is disabled, this state should never be reached.
+          kmac_valid_o   = 1'b0;
+          kmac_data_o[0] = '0;
+          kmac_strb_o    = '0;
+        end
       end
 
       SelSw: begin
@@ -1048,8 +1078,9 @@ module kmac_app
         code: ErrSwPushedMsgFifo,
         info: 24'({8'h 00, 8'(st), 8'(mux_sel_buf_err_check)})
       };
-    end else if (app_active_o && sw_cmd_i != CmdNone) begin
-      // If SW issues command except start
+    end else if ((app_active_o || (st == StIdle && arb_valid)) && sw_cmd_i != CmdNone) begin
+      // If SW issues a command while an app is active, or in the same cycle an app wins the
+      // arbitration in the Idle state. The command is dropped in both cases.
       mux_err = '{
         valid: 1'b 1,
         code: ErrSwIssuedCmdInAppActive,
@@ -1100,6 +1131,19 @@ module kmac_app
     .out_o(reg_state_valid_o)
   );
 
+  // SEC_CM: LOGIC.INTEGRITY
+  logic reg_state_write_en;
+  prim_sec_anchor_buf #(
+    .Width(1)
+  ) u_prim_buf_state_write_en (
+    .in_i(reg_state_write_en),
+    .out_o(reg_state_write_en_o)
+  );
+
+  // Software can write the keccak state while it holds the block. Gate on exception.
+  assign reg_state_write_en = state_write_allowed &&
+                              lc_ctrl_pkg::lc_tx_test_false_strict(lc_escalate_en_i);
+
   // Keccak state Demux
   // The state is only exposed to the registers if SW is active.
   always_comb begin
@@ -1112,16 +1156,18 @@ module kmac_app
       reg_state_o     = keccak_state_i;
       // If key is sideloaded and KMAC is SW initiated hide the capacity from SW by zeroing.
       // See https://github.com/lowRISC/opentitan/issues/17508.
-      if (keymgr_key_en_i) begin
-        for (int i = 0; i < Share; i++) begin
-          unique case (keccak_strength_q)
-            L128: reg_state_o[i][sha3_pkg::StateW-1-:KeccakBitCapacity[L128]] = '0;
-            L224: reg_state_o[i][sha3_pkg::StateW-1-:KeccakBitCapacity[L224]] = '0;
-            L256: reg_state_o[i][sha3_pkg::StateW-1-:KeccakBitCapacity[L256]] = '0;
-            L384: reg_state_o[i][sha3_pkg::StateW-1-:KeccakBitCapacity[L384]] = '0;
-            L512: reg_state_o[i][sha3_pkg::StateW-1-:KeccakBitCapacity[L512]] = '0;
-            default: reg_state_o[i] = '0;
-          endcase
+      if (EnFullKmac) begin
+        if (keymgr_key_en_i) begin
+          for (int i = 0; i < Share; i++) begin
+            unique case (keccak_strength_q)
+              L128: reg_state_o[i][sha3_pkg::StateW-1-:KeccakBitCapacity[L128]] = '0;
+              L224: reg_state_o[i][sha3_pkg::StateW-1-:KeccakBitCapacity[L224]] = '0;
+              L256: reg_state_o[i][sha3_pkg::StateW-1-:KeccakBitCapacity[L256]] = '0;
+              L384: reg_state_o[i][sha3_pkg::StateW-1-:KeccakBitCapacity[L384]] = '0;
+              L512: reg_state_o[i][sha3_pkg::StateW-1-:KeccakBitCapacity[L512]] = '0;
+              default: reg_state_o[i] = '0;
+            endcase
+          end
         end
       end
     end
@@ -1278,14 +1324,17 @@ module kmac_app
   // Combine share keys into unpacked array for logic below to assign easily.
   // SEC_CM: KEY.SIDELOAD
   logic [MaxKeyLen-1:0] keymgr_key[Share];
-  if (EnMasking == 1) begin : g_masked_key
+  // If KMAC is disabled, keymgr_key is not used.
+  if (!EnFullKmac) begin : g_key_unused
+    assign keymgr_key = '{default: '0};
+  end else if (EnMasking == 1) begin : g_masked_key
     for (genvar i = 0; i < Share; i++) begin : gen_key_pad
       assign keymgr_key[i] =  {(MaxKeyLen-KeyMgrKeyW)'(0), keymgr_key_i.key[i]};
     end
   end else begin : g_unmasked_key
     always_comb begin
       keymgr_key[0] = '0;
-      for (int i = 0; i < keymgr_pkg::Shares; i++) begin
+      for (int i = 0; i < keymgr_dpe_pkg::Shares; i++) begin
         keymgr_key[0][KeyMgrKeyW-1:0] ^= keymgr_key_i.key[i];
       end
     end
@@ -1294,58 +1343,81 @@ module kmac_app
   // Sideloaded key expose control
   assign err_key_used_but_invalid_set = keymgr_key_used && !keymgr_key_i.valid;
 
-  always_comb begin
-    keymgr_key_used = 1'b0;
-    key_len_o = reg_key_len_i;
-    for (int i = 0; i < Share; i++) begin
-      key_data_o[i] = reg_key_data_i[i];
-    end
-    // The key is considered invalid in all cases that are not listed below (which includes idle and
-    // error states).
-    key_valid_o = 1'b0;
-
-    unique case (st)
-      StAppMsg, StAppOutLen, StAppProcess, StAppWait: begin
-        // The key from KeyMgr is used if the current HW app interface does *keyed* MAC. This
-        // module does not know the precise timing related to when the kmac_core module uses the
-        // key during processing. To be on the safe side, we check that the key remains valid
-        // directly after latching the configuration and throughout the entire processing until the
-        // digest is received. The key is used by the kmac_core also after the kmac_app finished
-        // sending the message. So we must check the key until we receive the digest because we
-        // don't know here when the hashing engine starts the processing.
-        keymgr_key_used = app_cfg.session_cfg.mode == AppKMAC;
-        key_len_o       = SideloadedKey;
-        for (int i = 0; i < Share; i++) begin
-          key_data_o[i] = keymgr_key[i];
-        end
-        // Key is valid if the current HW app interface does *keyed* MAC and the key provided by
-        // KeyMgr is valid.
-        key_valid_o = keymgr_key_used && keymgr_key_i.valid;
+  if (EnFullKmac) begin : gen_keymgr_side_load
+    always_comb begin
+      keymgr_key_used = 1'b0;
+      key_len_o = reg_key_len_i;
+      for (int i = 0; i < Share; i++) begin
+        key_data_o[i] = reg_key_data_i[i];
       end
+      // The key is considered invalid in all cases that are not listed below (which includes
+      // idle and error states).
+      key_valid_o = 1'b0;
 
-      StSw: begin
-        if (keymgr_key_en_i) begin
-          // Key from KeyMgr is actually used if *keyed* MAC is enabled.
-          keymgr_key_used = kmac_en_q;
+      unique case (st)
+        StAppMsg, StAppOutLen, StAppProcess, StAppWait: begin
+          // The key from KeyMgr is used if the current HW app interface does *keyed* MAC. This
+          // module does not know the precise timing related to when the kmac_core module uses the
+          // key during processing. To be on the safe side, we check that the key remains valid
+          // directly after latching the configuration and throughout the entire processing until
+          // the digest is received. The key is used by the kmac_core also after kmac_app finished
+          // sending the message. So we must check the key until we receive the digest because we
+          // don't know here when the hashing engine starts the processing.
+          keymgr_key_used = app_cfg.session_cfg.mode == AppKMAC;
           key_len_o       = SideloadedKey;
           for (int i = 0; i < Share; i++) begin
             key_data_o[i] = keymgr_key[i];
           end
+          // Key is valid if the current HW app interface does *keyed* MAC and the key provided by
+          // KeyMgr is valid.
+          key_valid_o = keymgr_key_used && keymgr_key_i.valid;
         end
-        // Key is valid if SW does *keyed* MAC and ...
-        if (kmac_en_q) begin
-          if (!keymgr_key_en_i) begin
-            // ... it uses the key from kmac's CSR, or ...
-            key_valid_o = 1'b1;
-          end else begin
-            // ... it uses the key provided by KeyMgr and that one is valid.
-            key_valid_o = keymgr_key_i.valid;
+
+        StSw: begin
+          if (keymgr_key_en_i) begin
+            // Key from KeyMgr is actually used if *keyed* MAC is enabled.
+            keymgr_key_used = kmac_en_q;
+            key_len_o       = SideloadedKey;
+            for (int i = 0; i < Share; i++) begin
+              key_data_o[i] = keymgr_key[i];
+            end
+          end
+          // Key is valid if SW does *keyed* MAC and ...
+          if (kmac_en_q) begin
+            if (!keymgr_key_en_i) begin
+              // ... it uses the key from kmac's CSR, or ...
+              key_valid_o = 1'b1;
+            end else begin
+              // ... it uses the key provided by KeyMgr and that one is valid.
+              key_valid_o = keymgr_key_i.valid;
+            end
           end
         end
-      end
 
-      default: ;
-    endcase
+        default: ;
+      endcase
+    end
+  end else begin : gen_no_keymgr_side_load
+    // If KMAC is disabled, the key is not needed.
+    assign keymgr_key_used = 1'b0;
+    assign key_len_o       = reg_key_len_i;
+    always_comb begin
+      for (int i = 0; i < Share; i++) begin
+        key_data_o[i] = reg_key_data_i[i];
+      end
+    end
+    assign key_valid_o = 1'b0;
+
+    logic unused_keymgr_key;
+    if (EnMasking) begin : gen_unused_keymgr_key_masked
+      assign unused_keymgr_key = ^{keymgr_key_i.key[0], keymgr_key_i.key[1],
+                                   keymgr_key_i.valid, keymgr_key_en_i,
+                                   keymgr_key[0], keymgr_key[1]};
+    end else begin : gen_unused_keymgr_key_unmasked
+      assign unused_keymgr_key = ^{keymgr_key_i.key[0], keymgr_key_i.key[1],
+                                   keymgr_key_i.valid, keymgr_key_en_i,
+                                   keymgr_key[0]};
+    end
   end
 
   // Prefix Demux
@@ -1397,5 +1469,17 @@ module kmac_app
   // different.
   `COVER(AppIntfUseDifferentSizeKey_C,
     (st == StAppCfg && kmac_en_q) |-> reg_key_len_i != SideloadedKey)
+
+  // Assertions for the case where EnFullKmac is 0.
+  `ASSERT(StrippedKmacAppCfgModeAllowed_A, EnFullKmac == 0 &&
+      st inside {StAppMsg, StAppOutLen, StAppProcess, StAppWait, StAppPushDigest} |->
+      app_cfg.session_cfg.mode inside {AppSHA3, AppShake, AppCShake})
+
+  // With the KMAC functionality stripped, no app interface may be configured for a keyed MAC.
+  if (EnFullKmac == 0) begin : gen_stripped_app_cfg_assert
+    for (genvar i = 0; i < NumAppIntf; i++) begin : gen_app_cfg_mode
+      `ASSERT_INIT(StrippedKmacAppCfgNotKmac_A, AppCfg[i].session_cfg.mode != AppKMAC)
+    end
+  end
 
 endmodule

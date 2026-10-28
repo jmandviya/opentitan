@@ -7,6 +7,7 @@
 load("@bazel_skylib//lib:sets.bzl", "sets")
 load(
     "@lowrisc_opentitan//rules:rv.bzl",
+    _CHERIOT_PLATFORM = "CHERIOT_PLATFORM",
     _OPENTITAN_CPU = "OPENTITAN_CPU",
     _OPENTITAN_PLATFORM = "OPENTITAN_PLATFORM",
     _opentitan_transition = "opentitan_transition",
@@ -79,6 +80,7 @@ CLEAR_KEY_SET = {"//signing:none_key": "none_key"}
 # Re-exports of names from transition.bzl
 OPENTITAN_CPU = _OPENTITAN_CPU
 OPENTITAN_PLATFORM = _OPENTITAN_PLATFORM
+CHERIOT_PLATFORM = _CHERIOT_PLATFORM
 opentitan_transition = _opentitan_transition
 
 opentitan_binary_blob = _opentitan_binary_blob
@@ -316,6 +318,7 @@ def opentitan_test(
         includes = [],
         linkopts = [],
         linker_script = None,
+        platform = None,
         ecdsa_key = None,
         rsa_key = None,
         spx_key = None,
@@ -344,6 +347,7 @@ def opentitan_test(
       local_defines: Compiler defines for this test.
       includes: Additional compiler include dirs for this test.
       linker_script: Linker script for this test.
+      platform: Platform to build the binary for (defaults to RV32).
       ecdsa_key: ECDSA key to sign the binary for this test.
       rsa_key: RSA key to sign the binary for this test.
       spx_key: SPX key to sign the binary for this test.
@@ -510,6 +514,7 @@ def opentitan_test(
             local_defines = local_defines,
             includes = includes,
             linker_script = linker_script,
+            platform = platform,
             linkopts = linkopts,
             naming_convention = "{name}",
             ecdsa_key = ecdsa_key,

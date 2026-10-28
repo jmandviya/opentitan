@@ -24,6 +24,10 @@ KEYMGR_DPE_ASSERT(kScKeymgrDPEStateDisabled,
                   KEYMGR_DPE_WORKING_STATE_STATE_VALUE_DISABLED);
 KEYMGR_DPE_ASSERT(kScKeymgrDPEStateInvalid,
                   KEYMGR_DPE_WORKING_STATE_STATE_VALUE_INVALID);
+KEYMGR_DPE_ASSERT(KEYMGR_DPE_METADATA_LOW_MULTIREG_COUNT,
+                  KEYMGR_DPE_PARAM_NUM_MAX_HW_SLOT);
+KEYMGR_DPE_ASSERT(KEYMGR_DPE_METADATA_HIGH_MULTIREG_COUNT,
+                  KEYMGR_DPE_PARAM_NUM_MAX_HW_SLOT);
 
 /**
  * Internal keymgr dpe operation definition
@@ -327,6 +331,8 @@ void sc_keymgr_dpe_policy_set(sc_keymgr_dpe_policies_t policy) {
                              policy.expo);
   reg = bitfield_bit32_write(reg, KEYMGR_DPE_SLOT_POLICY_RETAIN_PARENT_BIT,
                              policy.parent);
+  reg = bitfield_bit32_write(reg, KEYMGR_DPE_SLOT_POLICY_ALLOW_KEYGEN_BIT,
+                             policy.keygen);
   sec_mmio_write32(sc_keymgr_dpe_base() + KEYMGR_DPE_SLOT_POLICY_REG_OFFSET,
                    reg);
   // TODO(#30665): sec_mmio_writes currently does not work > The reason is if
@@ -450,9 +456,9 @@ rom_error_t sc_keymgr_dpe_advance_dpe_context(
  * Write into the lock register for the UDS.
  */
 void sc_keymgr_dpe_lock_uds(void) {
-  // Issue the start command.
-  abs_mmio_write32(sc_keymgr_dpe_base() + KEYMGR_DPE_LOAD_KEY_LOCK_REG_OFFSET,
-                   1 << KEYMGR_DPE_LOAD_KEY_LOCK_LOCK_BIT);
+  abs_mmio_write32(
+      sc_keymgr_dpe_base() + KEYMGR_DPE_LOAD_ROOT_KEY_LOCK_REG_OFFSET,
+      1 << KEYMGR_DPE_LOAD_ROOT_KEY_LOCK_LOCK_BIT);
 }
 
 /**
@@ -605,12 +611,82 @@ rom_error_t sc_keymgr_dpe_erase_slot(uint32_t sel_dst_slot) {
 }
 
 /**
+ * Reads back the metadata of a keymgr_dpe HW slot.
+ */
+rom_error_t sc_keymgr_dpe_get_metadata(uint32_t slot,
+                                       sc_keymgr_dpe_metadata_t *metadata) {
+  if (launder32(slot) >= KEYMGR_DPE_PARAM_NUM_MAX_HW_SLOT) {
+    return kErrorKeymgrInternal;
+  }
+  HARDENED_CHECK_LT(slot, KEYMGR_DPE_PARAM_NUM_MAX_HW_SLOT);
+
+  metadata->max_key_version = abs_mmio_read32(
+      sc_keymgr_dpe_base() + KEYMGR_DPE_METADATA_LOW_0_REG_OFFSET +
+      slot * sizeof(uint32_t));
+
+  uint32_t reg_high = abs_mmio_read32(sc_keymgr_dpe_base() +
+                                      KEYMGR_DPE_METADATA_HIGH_0_REG_OFFSET +
+                                      slot * sizeof(uint32_t));
+  metadata->valid =
+      bitfield_bit32_read(reg_high, KEYMGR_DPE_METADATA_HIGH_0_VALID_0_BIT)
+          ? kHardenedBoolTrue
+          : kHardenedBoolFalse;
+  metadata->boot_stage = (sc_keymgr_dpe_boot_stage_t)bitfield_field32_read(
+      reg_high, KEYMGR_DPE_METADATA_HIGH_0_BOOT_STAGE_0_FIELD);
+
+  metadata->slot_policy.child = bitfield_bit32_read(
+      reg_high, KEYMGR_DPE_METADATA_HIGH_0_ALLOW_CHILD_POLICY_0_BIT);
+  metadata->slot_policy.expo = bitfield_bit32_read(
+      reg_high, KEYMGR_DPE_METADATA_HIGH_0_EXPORTABLE_POLICY_0_BIT);
+  metadata->slot_policy.parent = bitfield_bit32_read(
+      reg_high, KEYMGR_DPE_METADATA_HIGH_0_RETAIN_PARENT_POLICY_0_BIT);
+  metadata->slot_policy.keygen = bitfield_bit32_read(
+      reg_high, KEYMGR_DPE_METADATA_HIGH_0_ALLOW_KEYGEN_POLICY_0_BIT);
+
+  return kErrorOk;
+}
+
+/**
+ * Checks that a keymgr_dpe HW slot holds a valid DPE context with the expected
+ * maximum key version, boot stage and slot policy.
+ */
+rom_error_t sc_keymgr_dpe_check_metadata(
+    uint32_t slot, uint32_t expected_max_key_version,
+    sc_keymgr_dpe_boot_stage_t expected_boot_stage,
+    const sc_keymgr_dpe_policies_t *expected_policy) {
+  sc_keymgr_dpe_metadata_t metadata;
+  HARDENED_RETURN_IF_ERROR(sc_keymgr_dpe_get_metadata(slot, &metadata));
+  if (launder32(metadata.valid) == kHardenedBoolTrue &&
+      launder32(metadata.max_key_version) == expected_max_key_version &&
+      launder32(metadata.boot_stage) == expected_boot_stage &&
+      launder32(metadata.slot_policy.child) == expected_policy->child &&
+      launder32(metadata.slot_policy.expo) == expected_policy->expo &&
+      launder32(metadata.slot_policy.parent) == expected_policy->parent &&
+      launder32(metadata.slot_policy.keygen) == expected_policy->keygen) {
+    HARDENED_CHECK_EQ(metadata.valid, kHardenedBoolTrue);
+    HARDENED_CHECK_EQ(metadata.max_key_version, expected_max_key_version);
+    HARDENED_CHECK_EQ(metadata.boot_stage, expected_boot_stage);
+    HARDENED_CHECK_EQ(metadata.slot_policy.child, expected_policy->child);
+    HARDENED_CHECK_EQ(metadata.slot_policy.expo, expected_policy->expo);
+    HARDENED_CHECK_EQ(metadata.slot_policy.parent, expected_policy->parent);
+    HARDENED_CHECK_EQ(metadata.slot_policy.keygen, expected_policy->keygen);
+    return kErrorOk;
+  }
+  return kErrorKeymgrInternal;
+}
+
+/**
  * Advances the keymgr dpe into the disable state. All keys store in the
  * sideloaded interface are continuously scrambled.
  */
 rom_error_t sc_keymgr_dpe_disable(void) {
   // Check if we are in the available state (Stalls until all ops are done)
   HARDENED_RETURN_IF_ERROR(expected_state_check(kScKeymgrDPEStateAvailable));
+
+  // According to the documentation for the SIDELOAD_CLEAR register, an invalid
+  // destination will enable continuous clearing of all destinations.
+  abs_mmio_write32(sc_keymgr_dpe_base() + KEYMGR_DPE_SIDELOAD_CLEAR_REG_OFFSET,
+                   UINT32_MAX);
 
   // Set the control register entries
   sc_keymgr_dpe_control_reg_set(
@@ -621,12 +697,7 @@ rom_error_t sc_keymgr_dpe_disable(void) {
   // Start the advance operation
   sc_keymgr_dpe_start_operation();
   // Wait until keymgr_dpe is finished and verify if state if disabled
-  HARDENED_RETURN_IF_ERROR(expected_state_check(kScKeymgrDPEStateDisabled));
-  // According to the documentation for the SIDELOAD_CLEAR register, an invalid
-  // destination will enable continuous clearing of all destinations.
-  abs_mmio_write32(sc_keymgr_dpe_base() + KEYMGR_DPE_SIDELOAD_CLEAR_REG_OFFSET,
-                   UINT32_MAX);
-  return kErrorOk;
+  return expected_state_check(kScKeymgrDPEStateDisabled);
 }
 
 /**

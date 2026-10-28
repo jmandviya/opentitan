@@ -212,6 +212,8 @@ module flash_ctrl_core_reg_top (
   logic alert_test_fatal_err_wd;
   logic alert_test_fatal_prim_flash_alert_wd;
   logic alert_test_recov_prim_flash_alert_wd;
+  logic alert_test_regwen_qs;
+  logic alert_test_regwen_wd;
   logic dis_we;
   logic [3:0] dis_qs;
   logic [3:0] dis_wd;
@@ -1028,6 +1030,7 @@ module flash_ctrl_core_reg_top (
   ) u_intr_state_prog_empty (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -1055,6 +1058,7 @@ module flash_ctrl_core_reg_top (
   ) u_intr_state_prog_lvl (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -1082,6 +1086,7 @@ module flash_ctrl_core_reg_top (
   ) u_intr_state_rd_full (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -1109,6 +1114,7 @@ module flash_ctrl_core_reg_top (
   ) u_intr_state_rd_lvl (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -1136,6 +1142,7 @@ module flash_ctrl_core_reg_top (
   ) u_intr_state_op_done (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_state_we),
@@ -1163,6 +1170,7 @@ module flash_ctrl_core_reg_top (
   ) u_intr_state_corr_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_state_we),
@@ -1192,6 +1200,7 @@ module flash_ctrl_core_reg_top (
   ) u_intr_enable_prog_empty (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_enable_we),
@@ -1219,6 +1228,7 @@ module flash_ctrl_core_reg_top (
   ) u_intr_enable_prog_lvl (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_enable_we),
@@ -1246,6 +1256,7 @@ module flash_ctrl_core_reg_top (
   ) u_intr_enable_rd_full (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_enable_we),
@@ -1273,6 +1284,7 @@ module flash_ctrl_core_reg_top (
   ) u_intr_enable_rd_lvl (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_enable_we),
@@ -1300,6 +1312,7 @@ module flash_ctrl_core_reg_top (
   ) u_intr_enable_op_done (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_enable_we),
@@ -1327,6 +1340,7 @@ module flash_ctrl_core_reg_top (
   ) u_intr_enable_corr_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (intr_enable_we),
@@ -1449,14 +1463,17 @@ module flash_ctrl_core_reg_top (
 
   // R[alert_test]: V(True)
   logic alert_test_qe;
-  logic [4:0] alert_test_flds_we;
+  logic [5:0] alert_test_flds_we;
   assign alert_test_qe = &alert_test_flds_we;
+  // Create REGWEN-gated WE signal
+  logic alert_test_gated_we;
+  assign alert_test_gated_we = alert_test_we && alert_test_regwen_qs;
   //   F[recov_err]: 0:0
   prim_subreg_ext #(
     .DW    (1)
   ) u_alert_test_recov_err (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_recov_err_wd),
     .d      ('0),
     .qre    (),
@@ -1472,7 +1489,7 @@ module flash_ctrl_core_reg_top (
     .DW    (1)
   ) u_alert_test_fatal_std_err (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_fatal_std_err_wd),
     .d      ('0),
     .qre    (),
@@ -1488,7 +1505,7 @@ module flash_ctrl_core_reg_top (
     .DW    (1)
   ) u_alert_test_fatal_err (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_fatal_err_wd),
     .d      ('0),
     .qre    (),
@@ -1504,7 +1521,7 @@ module flash_ctrl_core_reg_top (
     .DW    (1)
   ) u_alert_test_fatal_prim_flash_alert (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_fatal_prim_flash_alert_wd),
     .d      ('0),
     .qre    (),
@@ -1520,7 +1537,7 @@ module flash_ctrl_core_reg_top (
     .DW    (1)
   ) u_alert_test_recov_prim_flash_alert (
     .re     (1'b0),
-    .we     (alert_test_we),
+    .we     (alert_test_gated_we),
     .wd     (alert_test_recov_prim_flash_alert_wd),
     .d      ('0),
     .qre    (),
@@ -1530,6 +1547,34 @@ module flash_ctrl_core_reg_top (
     .qs     ()
   );
   assign reg2hw.alert_test.recov_prim_flash_alert.qe = alert_test_qe;
+
+  //   F[regwen]: 31:31
+  prim_subreg #(
+    .DW      (1),
+    .SwAccess(prim_subreg_pkg::SwAccessW0C),
+    .RESVAL  (1'h1),
+    .Mubi    (1'b0)
+  ) u_alert_test_regwen (
+    .clk_i   (clk_i),
+    .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
+
+    // from register interface
+    .we     (alert_test_we),
+    .wd     (alert_test_regwen_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0),
+
+    // to internal hardware
+    .qe     (alert_test_flds_we[5]),
+    .q      (),
+    .ds     (),
+
+    // to register interface (read)
+    .qs     (alert_test_regwen_qs)
+  );
 
 
   // R[dis]: V(False)
@@ -1541,6 +1586,7 @@ module flash_ctrl_core_reg_top (
   ) u_dis (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (dis_we),
@@ -1569,6 +1615,7 @@ module flash_ctrl_core_reg_top (
   ) u_exec (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (exec_we),
@@ -1597,6 +1644,7 @@ module flash_ctrl_core_reg_top (
   ) u_init (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (init_we),
@@ -1645,6 +1693,7 @@ module flash_ctrl_core_reg_top (
   ) u_control_start (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (control_gated_we),
@@ -1672,6 +1721,7 @@ module flash_ctrl_core_reg_top (
   ) u_control_op (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (control_gated_we),
@@ -1699,6 +1749,7 @@ module flash_ctrl_core_reg_top (
   ) u_control_prog_sel (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (control_gated_we),
@@ -1726,6 +1777,7 @@ module flash_ctrl_core_reg_top (
   ) u_control_erase_sel (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (control_gated_we),
@@ -1753,6 +1805,7 @@ module flash_ctrl_core_reg_top (
   ) u_control_partition_sel (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (control_gated_we),
@@ -1780,6 +1833,7 @@ module flash_ctrl_core_reg_top (
   ) u_control_info_sel (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (control_gated_we),
@@ -1807,6 +1861,7 @@ module flash_ctrl_core_reg_top (
   ) u_control_num (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (control_gated_we),
@@ -1838,6 +1893,7 @@ module flash_ctrl_core_reg_top (
   ) u_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (addr_gated_we),
@@ -1870,6 +1926,7 @@ module flash_ctrl_core_reg_top (
   ) u_prog_type_en_normal (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (prog_type_en_gated_we),
@@ -1897,6 +1954,7 @@ module flash_ctrl_core_reg_top (
   ) u_prog_type_en_repair (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (prog_type_en_gated_we),
@@ -1925,6 +1983,7 @@ module flash_ctrl_core_reg_top (
   ) u_erase_suspend (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (erase_suspend_we),
@@ -1954,6 +2013,7 @@ module flash_ctrl_core_reg_top (
   ) u_region_cfg_regwen_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (region_cfg_regwen_0_we),
@@ -1983,6 +2043,7 @@ module flash_ctrl_core_reg_top (
   ) u_region_cfg_regwen_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (region_cfg_regwen_1_we),
@@ -2012,6 +2073,7 @@ module flash_ctrl_core_reg_top (
   ) u_region_cfg_regwen_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (region_cfg_regwen_2_we),
@@ -2041,6 +2103,7 @@ module flash_ctrl_core_reg_top (
   ) u_region_cfg_regwen_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (region_cfg_regwen_3_we),
@@ -2070,6 +2133,7 @@ module flash_ctrl_core_reg_top (
   ) u_region_cfg_regwen_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (region_cfg_regwen_4_we),
@@ -2099,6 +2163,7 @@ module flash_ctrl_core_reg_top (
   ) u_region_cfg_regwen_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (region_cfg_regwen_5_we),
@@ -2128,6 +2193,7 @@ module flash_ctrl_core_reg_top (
   ) u_region_cfg_regwen_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (region_cfg_regwen_6_we),
@@ -2157,6 +2223,7 @@ module flash_ctrl_core_reg_top (
   ) u_region_cfg_regwen_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (region_cfg_regwen_7_we),
@@ -2190,6 +2257,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_0_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_0_gated_we),
@@ -2217,6 +2285,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_0_rd_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_0_gated_we),
@@ -2244,6 +2313,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_0_prog_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_0_gated_we),
@@ -2271,6 +2341,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_0_erase_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_0_gated_we),
@@ -2298,6 +2369,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_0_scramble_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_0_gated_we),
@@ -2325,6 +2397,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_0_ecc_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_0_gated_we),
@@ -2352,6 +2425,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_0_he_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_0_gated_we),
@@ -2385,6 +2459,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_1_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_1_gated_we),
@@ -2412,6 +2487,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_1_rd_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_1_gated_we),
@@ -2439,6 +2515,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_1_prog_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_1_gated_we),
@@ -2466,6 +2543,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_1_erase_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_1_gated_we),
@@ -2493,6 +2571,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_1_scramble_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_1_gated_we),
@@ -2520,6 +2599,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_1_ecc_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_1_gated_we),
@@ -2547,6 +2627,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_1_he_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_1_gated_we),
@@ -2580,6 +2661,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_2_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_2_gated_we),
@@ -2607,6 +2689,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_2_rd_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_2_gated_we),
@@ -2634,6 +2717,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_2_prog_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_2_gated_we),
@@ -2661,6 +2745,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_2_erase_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_2_gated_we),
@@ -2688,6 +2773,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_2_scramble_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_2_gated_we),
@@ -2715,6 +2801,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_2_ecc_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_2_gated_we),
@@ -2742,6 +2829,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_2_he_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_2_gated_we),
@@ -2775,6 +2863,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_3_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_3_gated_we),
@@ -2802,6 +2891,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_3_rd_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_3_gated_we),
@@ -2829,6 +2919,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_3_prog_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_3_gated_we),
@@ -2856,6 +2947,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_3_erase_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_3_gated_we),
@@ -2883,6 +2975,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_3_scramble_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_3_gated_we),
@@ -2910,6 +3003,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_3_ecc_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_3_gated_we),
@@ -2937,6 +3031,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_3_he_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_3_gated_we),
@@ -2970,6 +3065,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_4_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_4_gated_we),
@@ -2997,6 +3093,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_4_rd_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_4_gated_we),
@@ -3024,6 +3121,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_4_prog_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_4_gated_we),
@@ -3051,6 +3149,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_4_erase_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_4_gated_we),
@@ -3078,6 +3177,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_4_scramble_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_4_gated_we),
@@ -3105,6 +3205,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_4_ecc_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_4_gated_we),
@@ -3132,6 +3233,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_4_he_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_4_gated_we),
@@ -3165,6 +3267,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_5_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_5_gated_we),
@@ -3192,6 +3295,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_5_rd_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_5_gated_we),
@@ -3219,6 +3323,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_5_prog_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_5_gated_we),
@@ -3246,6 +3351,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_5_erase_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_5_gated_we),
@@ -3273,6 +3379,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_5_scramble_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_5_gated_we),
@@ -3300,6 +3407,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_5_ecc_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_5_gated_we),
@@ -3327,6 +3435,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_5_he_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_5_gated_we),
@@ -3360,6 +3469,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_6_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_6_gated_we),
@@ -3387,6 +3497,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_6_rd_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_6_gated_we),
@@ -3414,6 +3525,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_6_prog_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_6_gated_we),
@@ -3441,6 +3553,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_6_erase_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_6_gated_we),
@@ -3468,6 +3581,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_6_scramble_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_6_gated_we),
@@ -3495,6 +3609,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_6_ecc_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_6_gated_we),
@@ -3522,6 +3637,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_6_he_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_6_gated_we),
@@ -3555,6 +3671,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_7_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_7_gated_we),
@@ -3582,6 +3699,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_7_rd_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_7_gated_we),
@@ -3609,6 +3727,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_7_prog_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_7_gated_we),
@@ -3636,6 +3755,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_7_erase_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_7_gated_we),
@@ -3663,6 +3783,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_7_scramble_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_7_gated_we),
@@ -3690,6 +3811,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_7_ecc_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_7_gated_we),
@@ -3717,6 +3839,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_cfg_7_he_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_cfg_7_gated_we),
@@ -3750,6 +3873,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_0_base_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_0_gated_we),
@@ -3777,6 +3901,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_0_size_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_0_gated_we),
@@ -3810,6 +3935,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_1_base_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_1_gated_we),
@@ -3837,6 +3963,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_1_size_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_1_gated_we),
@@ -3870,6 +3997,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_2_base_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_2_gated_we),
@@ -3897,6 +4025,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_2_size_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_2_gated_we),
@@ -3930,6 +4059,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_3_base_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_3_gated_we),
@@ -3957,6 +4087,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_3_size_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_3_gated_we),
@@ -3990,6 +4121,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_4_base_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_4_gated_we),
@@ -4017,6 +4149,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_4_size_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_4_gated_we),
@@ -4050,6 +4183,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_5_base_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_5_gated_we),
@@ -4077,6 +4211,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_5_size_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_5_gated_we),
@@ -4110,6 +4245,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_6_base_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_6_gated_we),
@@ -4137,6 +4273,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_6_size_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_6_gated_we),
@@ -4170,6 +4307,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_7_base_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_7_gated_we),
@@ -4197,6 +4335,7 @@ module flash_ctrl_core_reg_top (
   ) u_mp_region_7_size_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (mp_region_7_gated_we),
@@ -4226,6 +4365,7 @@ module flash_ctrl_core_reg_top (
   ) u_default_region_rd_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (default_region_we),
@@ -4253,6 +4393,7 @@ module flash_ctrl_core_reg_top (
   ) u_default_region_prog_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (default_region_we),
@@ -4280,6 +4421,7 @@ module flash_ctrl_core_reg_top (
   ) u_default_region_erase_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (default_region_we),
@@ -4307,6 +4449,7 @@ module flash_ctrl_core_reg_top (
   ) u_default_region_scramble_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (default_region_we),
@@ -4334,6 +4477,7 @@ module flash_ctrl_core_reg_top (
   ) u_default_region_ecc_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (default_region_we),
@@ -4361,6 +4505,7 @@ module flash_ctrl_core_reg_top (
   ) u_default_region_he_en (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (default_region_we),
@@ -4390,6 +4535,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_regwen_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_regwen_0_we),
@@ -4419,6 +4565,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_regwen_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_regwen_1_we),
@@ -4448,6 +4595,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_regwen_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_regwen_2_we),
@@ -4477,6 +4625,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_regwen_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_regwen_3_we),
@@ -4506,6 +4655,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_regwen_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_regwen_4_we),
@@ -4535,6 +4685,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_regwen_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_regwen_5_we),
@@ -4564,6 +4715,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_regwen_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_regwen_6_we),
@@ -4593,6 +4745,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_regwen_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_regwen_7_we),
@@ -4622,6 +4775,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_regwen_8 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_regwen_8_we),
@@ -4651,6 +4805,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_regwen_9 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_regwen_9_we),
@@ -4684,6 +4839,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_0_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_0_gated_we),
@@ -4711,6 +4867,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_0_rd_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_0_gated_we),
@@ -4738,6 +4895,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_0_prog_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_0_gated_we),
@@ -4765,6 +4923,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_0_erase_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_0_gated_we),
@@ -4792,6 +4951,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_0_scramble_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_0_gated_we),
@@ -4819,6 +4979,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_0_ecc_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_0_gated_we),
@@ -4846,6 +5007,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_0_he_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_0_gated_we),
@@ -4879,6 +5041,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_1_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_1_gated_we),
@@ -4906,6 +5069,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_1_rd_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_1_gated_we),
@@ -4933,6 +5097,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_1_prog_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_1_gated_we),
@@ -4960,6 +5125,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_1_erase_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_1_gated_we),
@@ -4987,6 +5153,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_1_scramble_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_1_gated_we),
@@ -5014,6 +5181,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_1_ecc_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_1_gated_we),
@@ -5041,6 +5209,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_1_he_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_1_gated_we),
@@ -5074,6 +5243,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_2_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_2_gated_we),
@@ -5101,6 +5271,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_2_rd_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_2_gated_we),
@@ -5128,6 +5299,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_2_prog_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_2_gated_we),
@@ -5155,6 +5327,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_2_erase_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_2_gated_we),
@@ -5182,6 +5355,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_2_scramble_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_2_gated_we),
@@ -5209,6 +5383,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_2_ecc_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_2_gated_we),
@@ -5236,6 +5411,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_2_he_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_2_gated_we),
@@ -5269,6 +5445,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_3_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_3_gated_we),
@@ -5296,6 +5473,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_3_rd_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_3_gated_we),
@@ -5323,6 +5501,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_3_prog_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_3_gated_we),
@@ -5350,6 +5529,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_3_erase_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_3_gated_we),
@@ -5377,6 +5557,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_3_scramble_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_3_gated_we),
@@ -5404,6 +5585,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_3_ecc_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_3_gated_we),
@@ -5431,6 +5613,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_3_he_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_3_gated_we),
@@ -5464,6 +5647,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_4_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_4_gated_we),
@@ -5491,6 +5675,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_4_rd_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_4_gated_we),
@@ -5518,6 +5703,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_4_prog_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_4_gated_we),
@@ -5545,6 +5731,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_4_erase_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_4_gated_we),
@@ -5572,6 +5759,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_4_scramble_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_4_gated_we),
@@ -5599,6 +5787,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_4_ecc_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_4_gated_we),
@@ -5626,6 +5815,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_4_he_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_4_gated_we),
@@ -5659,6 +5849,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_5_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_5_gated_we),
@@ -5686,6 +5877,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_5_rd_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_5_gated_we),
@@ -5713,6 +5905,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_5_prog_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_5_gated_we),
@@ -5740,6 +5933,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_5_erase_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_5_gated_we),
@@ -5767,6 +5961,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_5_scramble_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_5_gated_we),
@@ -5794,6 +5989,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_5_ecc_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_5_gated_we),
@@ -5821,6 +6017,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_5_he_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_5_gated_we),
@@ -5854,6 +6051,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_6_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_6_gated_we),
@@ -5881,6 +6079,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_6_rd_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_6_gated_we),
@@ -5908,6 +6107,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_6_prog_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_6_gated_we),
@@ -5935,6 +6135,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_6_erase_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_6_gated_we),
@@ -5962,6 +6163,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_6_scramble_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_6_gated_we),
@@ -5989,6 +6191,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_6_ecc_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_6_gated_we),
@@ -6016,6 +6219,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_6_he_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_6_gated_we),
@@ -6049,6 +6253,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_7_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_7_gated_we),
@@ -6076,6 +6281,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_7_rd_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_7_gated_we),
@@ -6103,6 +6309,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_7_prog_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_7_gated_we),
@@ -6130,6 +6337,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_7_erase_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_7_gated_we),
@@ -6157,6 +6365,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_7_scramble_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_7_gated_we),
@@ -6184,6 +6393,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_7_ecc_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_7_gated_we),
@@ -6211,6 +6421,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_7_he_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_7_gated_we),
@@ -6244,6 +6455,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_8_en_8 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_8_gated_we),
@@ -6271,6 +6483,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_8_rd_en_8 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_8_gated_we),
@@ -6298,6 +6511,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_8_prog_en_8 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_8_gated_we),
@@ -6325,6 +6539,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_8_erase_en_8 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_8_gated_we),
@@ -6352,6 +6567,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_8_scramble_en_8 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_8_gated_we),
@@ -6379,6 +6595,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_8_ecc_en_8 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_8_gated_we),
@@ -6406,6 +6623,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_8_he_en_8 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_8_gated_we),
@@ -6439,6 +6657,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_9_en_9 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_9_gated_we),
@@ -6466,6 +6685,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_9_rd_en_9 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_9_gated_we),
@@ -6493,6 +6713,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_9_prog_en_9 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_9_gated_we),
@@ -6520,6 +6741,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_9_erase_en_9 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_9_gated_we),
@@ -6547,6 +6769,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_9_scramble_en_9 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_9_gated_we),
@@ -6574,6 +6797,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_9_ecc_en_9 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_9_gated_we),
@@ -6601,6 +6825,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info0_page_cfg_9_he_en_9 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info0_page_cfg_9_gated_we),
@@ -6630,6 +6855,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info1_regwen (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info1_regwen_we),
@@ -6663,6 +6889,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info1_page_cfg_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info1_page_cfg_gated_we),
@@ -6690,6 +6917,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info1_page_cfg_rd_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info1_page_cfg_gated_we),
@@ -6717,6 +6945,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info1_page_cfg_prog_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info1_page_cfg_gated_we),
@@ -6744,6 +6973,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info1_page_cfg_erase_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info1_page_cfg_gated_we),
@@ -6771,6 +7001,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info1_page_cfg_scramble_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info1_page_cfg_gated_we),
@@ -6798,6 +7029,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info1_page_cfg_ecc_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info1_page_cfg_gated_we),
@@ -6825,6 +7057,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info1_page_cfg_he_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info1_page_cfg_gated_we),
@@ -6854,6 +7087,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info2_regwen_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info2_regwen_0_we),
@@ -6883,6 +7117,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info2_regwen_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info2_regwen_1_we),
@@ -6916,6 +7151,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info2_page_cfg_0_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info2_page_cfg_0_gated_we),
@@ -6943,6 +7179,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info2_page_cfg_0_rd_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info2_page_cfg_0_gated_we),
@@ -6970,6 +7207,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info2_page_cfg_0_prog_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info2_page_cfg_0_gated_we),
@@ -6997,6 +7235,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info2_page_cfg_0_erase_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info2_page_cfg_0_gated_we),
@@ -7024,6 +7263,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info2_page_cfg_0_scramble_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info2_page_cfg_0_gated_we),
@@ -7051,6 +7291,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info2_page_cfg_0_ecc_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info2_page_cfg_0_gated_we),
@@ -7078,6 +7319,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info2_page_cfg_0_he_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info2_page_cfg_0_gated_we),
@@ -7111,6 +7353,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info2_page_cfg_1_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info2_page_cfg_1_gated_we),
@@ -7138,6 +7381,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info2_page_cfg_1_rd_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info2_page_cfg_1_gated_we),
@@ -7165,6 +7409,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info2_page_cfg_1_prog_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info2_page_cfg_1_gated_we),
@@ -7192,6 +7437,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info2_page_cfg_1_erase_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info2_page_cfg_1_gated_we),
@@ -7219,6 +7465,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info2_page_cfg_1_scramble_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info2_page_cfg_1_gated_we),
@@ -7246,6 +7493,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info2_page_cfg_1_ecc_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info2_page_cfg_1_gated_we),
@@ -7273,6 +7521,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank0_info2_page_cfg_1_he_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank0_info2_page_cfg_1_gated_we),
@@ -7302,6 +7551,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_regwen_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_regwen_0_we),
@@ -7331,6 +7581,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_regwen_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_regwen_1_we),
@@ -7360,6 +7611,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_regwen_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_regwen_2_we),
@@ -7389,6 +7641,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_regwen_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_regwen_3_we),
@@ -7418,6 +7671,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_regwen_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_regwen_4_we),
@@ -7447,6 +7701,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_regwen_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_regwen_5_we),
@@ -7476,6 +7731,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_regwen_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_regwen_6_we),
@@ -7505,6 +7761,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_regwen_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_regwen_7_we),
@@ -7534,6 +7791,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_regwen_8 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_regwen_8_we),
@@ -7563,6 +7821,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_regwen_9 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_regwen_9_we),
@@ -7596,6 +7855,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_0_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_0_gated_we),
@@ -7623,6 +7883,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_0_rd_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_0_gated_we),
@@ -7650,6 +7911,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_0_prog_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_0_gated_we),
@@ -7677,6 +7939,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_0_erase_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_0_gated_we),
@@ -7704,6 +7967,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_0_scramble_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_0_gated_we),
@@ -7731,6 +7995,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_0_ecc_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_0_gated_we),
@@ -7758,6 +8023,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_0_he_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_0_gated_we),
@@ -7791,6 +8057,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_1_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_1_gated_we),
@@ -7818,6 +8085,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_1_rd_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_1_gated_we),
@@ -7845,6 +8113,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_1_prog_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_1_gated_we),
@@ -7872,6 +8141,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_1_erase_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_1_gated_we),
@@ -7899,6 +8169,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_1_scramble_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_1_gated_we),
@@ -7926,6 +8197,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_1_ecc_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_1_gated_we),
@@ -7953,6 +8225,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_1_he_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_1_gated_we),
@@ -7986,6 +8259,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_2_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_2_gated_we),
@@ -8013,6 +8287,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_2_rd_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_2_gated_we),
@@ -8040,6 +8315,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_2_prog_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_2_gated_we),
@@ -8067,6 +8343,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_2_erase_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_2_gated_we),
@@ -8094,6 +8371,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_2_scramble_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_2_gated_we),
@@ -8121,6 +8399,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_2_ecc_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_2_gated_we),
@@ -8148,6 +8427,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_2_he_en_2 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_2_gated_we),
@@ -8181,6 +8461,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_3_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_3_gated_we),
@@ -8208,6 +8489,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_3_rd_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_3_gated_we),
@@ -8235,6 +8517,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_3_prog_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_3_gated_we),
@@ -8262,6 +8545,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_3_erase_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_3_gated_we),
@@ -8289,6 +8573,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_3_scramble_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_3_gated_we),
@@ -8316,6 +8601,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_3_ecc_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_3_gated_we),
@@ -8343,6 +8629,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_3_he_en_3 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_3_gated_we),
@@ -8376,6 +8663,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_4_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_4_gated_we),
@@ -8403,6 +8691,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_4_rd_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_4_gated_we),
@@ -8430,6 +8719,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_4_prog_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_4_gated_we),
@@ -8457,6 +8747,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_4_erase_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_4_gated_we),
@@ -8484,6 +8775,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_4_scramble_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_4_gated_we),
@@ -8511,6 +8803,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_4_ecc_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_4_gated_we),
@@ -8538,6 +8831,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_4_he_en_4 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_4_gated_we),
@@ -8571,6 +8865,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_5_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_5_gated_we),
@@ -8598,6 +8893,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_5_rd_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_5_gated_we),
@@ -8625,6 +8921,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_5_prog_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_5_gated_we),
@@ -8652,6 +8949,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_5_erase_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_5_gated_we),
@@ -8679,6 +8977,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_5_scramble_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_5_gated_we),
@@ -8706,6 +9005,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_5_ecc_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_5_gated_we),
@@ -8733,6 +9033,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_5_he_en_5 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_5_gated_we),
@@ -8766,6 +9067,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_6_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_6_gated_we),
@@ -8793,6 +9095,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_6_rd_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_6_gated_we),
@@ -8820,6 +9123,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_6_prog_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_6_gated_we),
@@ -8847,6 +9151,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_6_erase_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_6_gated_we),
@@ -8874,6 +9179,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_6_scramble_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_6_gated_we),
@@ -8901,6 +9207,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_6_ecc_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_6_gated_we),
@@ -8928,6 +9235,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_6_he_en_6 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_6_gated_we),
@@ -8961,6 +9269,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_7_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_7_gated_we),
@@ -8988,6 +9297,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_7_rd_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_7_gated_we),
@@ -9015,6 +9325,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_7_prog_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_7_gated_we),
@@ -9042,6 +9353,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_7_erase_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_7_gated_we),
@@ -9069,6 +9381,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_7_scramble_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_7_gated_we),
@@ -9096,6 +9409,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_7_ecc_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_7_gated_we),
@@ -9123,6 +9437,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_7_he_en_7 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_7_gated_we),
@@ -9156,6 +9471,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_8_en_8 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_8_gated_we),
@@ -9183,6 +9499,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_8_rd_en_8 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_8_gated_we),
@@ -9210,6 +9527,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_8_prog_en_8 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_8_gated_we),
@@ -9237,6 +9555,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_8_erase_en_8 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_8_gated_we),
@@ -9264,6 +9583,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_8_scramble_en_8 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_8_gated_we),
@@ -9291,6 +9611,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_8_ecc_en_8 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_8_gated_we),
@@ -9318,6 +9639,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_8_he_en_8 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_8_gated_we),
@@ -9351,6 +9673,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_9_en_9 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_9_gated_we),
@@ -9378,6 +9701,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_9_rd_en_9 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_9_gated_we),
@@ -9405,6 +9729,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_9_prog_en_9 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_9_gated_we),
@@ -9432,6 +9757,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_9_erase_en_9 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_9_gated_we),
@@ -9459,6 +9785,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_9_scramble_en_9 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_9_gated_we),
@@ -9486,6 +9813,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_9_ecc_en_9 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_9_gated_we),
@@ -9513,6 +9841,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info0_page_cfg_9_he_en_9 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info0_page_cfg_9_gated_we),
@@ -9542,6 +9871,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info1_regwen (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info1_regwen_we),
@@ -9575,6 +9905,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info1_page_cfg_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info1_page_cfg_gated_we),
@@ -9602,6 +9933,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info1_page_cfg_rd_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info1_page_cfg_gated_we),
@@ -9629,6 +9961,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info1_page_cfg_prog_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info1_page_cfg_gated_we),
@@ -9656,6 +9989,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info1_page_cfg_erase_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info1_page_cfg_gated_we),
@@ -9683,6 +10017,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info1_page_cfg_scramble_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info1_page_cfg_gated_we),
@@ -9710,6 +10045,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info1_page_cfg_ecc_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info1_page_cfg_gated_we),
@@ -9737,6 +10073,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info1_page_cfg_he_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info1_page_cfg_gated_we),
@@ -9766,6 +10103,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info2_regwen_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info2_regwen_0_we),
@@ -9795,6 +10133,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info2_regwen_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info2_regwen_1_we),
@@ -9828,6 +10167,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info2_page_cfg_0_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info2_page_cfg_0_gated_we),
@@ -9855,6 +10195,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info2_page_cfg_0_rd_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info2_page_cfg_0_gated_we),
@@ -9882,6 +10223,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info2_page_cfg_0_prog_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info2_page_cfg_0_gated_we),
@@ -9909,6 +10251,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info2_page_cfg_0_erase_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info2_page_cfg_0_gated_we),
@@ -9936,6 +10279,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info2_page_cfg_0_scramble_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info2_page_cfg_0_gated_we),
@@ -9963,6 +10307,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info2_page_cfg_0_ecc_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info2_page_cfg_0_gated_we),
@@ -9990,6 +10335,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info2_page_cfg_0_he_en_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info2_page_cfg_0_gated_we),
@@ -10023,6 +10369,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info2_page_cfg_1_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info2_page_cfg_1_gated_we),
@@ -10050,6 +10397,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info2_page_cfg_1_rd_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info2_page_cfg_1_gated_we),
@@ -10077,6 +10425,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info2_page_cfg_1_prog_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info2_page_cfg_1_gated_we),
@@ -10104,6 +10453,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info2_page_cfg_1_erase_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info2_page_cfg_1_gated_we),
@@ -10131,6 +10481,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info2_page_cfg_1_scramble_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info2_page_cfg_1_gated_we),
@@ -10158,6 +10509,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info2_page_cfg_1_ecc_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info2_page_cfg_1_gated_we),
@@ -10185,6 +10537,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank1_info2_page_cfg_1_he_en_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank1_info2_page_cfg_1_gated_we),
@@ -10214,6 +10567,7 @@ module flash_ctrl_core_reg_top (
   ) u_hw_info_cfg_override_scramble_dis (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (hw_info_cfg_override_we),
@@ -10241,6 +10595,7 @@ module flash_ctrl_core_reg_top (
   ) u_hw_info_cfg_override_ecc_dis (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (hw_info_cfg_override_we),
@@ -10269,6 +10624,7 @@ module flash_ctrl_core_reg_top (
   ) u_bank_cfg_regwen (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (bank_cfg_regwen_we),
@@ -10376,6 +10732,7 @@ module flash_ctrl_core_reg_top (
   ) u_op_status_done (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (op_status_we),
@@ -10403,6 +10760,7 @@ module flash_ctrl_core_reg_top (
   ) u_op_status_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (op_status_we),
@@ -10432,6 +10790,7 @@ module flash_ctrl_core_reg_top (
   ) u_status_rd_full (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -10459,6 +10818,7 @@ module flash_ctrl_core_reg_top (
   ) u_status_rd_empty (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -10486,6 +10846,7 @@ module flash_ctrl_core_reg_top (
   ) u_status_prog_full (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -10513,6 +10874,7 @@ module flash_ctrl_core_reg_top (
   ) u_status_prog_empty (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -10540,6 +10902,7 @@ module flash_ctrl_core_reg_top (
   ) u_status_init_wip (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -10567,6 +10930,7 @@ module flash_ctrl_core_reg_top (
   ) u_status_initialized (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -10612,6 +10976,7 @@ module flash_ctrl_core_reg_top (
   ) u_err_code_op_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (err_code_we),
@@ -10639,6 +11004,7 @@ module flash_ctrl_core_reg_top (
   ) u_err_code_mp_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (err_code_we),
@@ -10666,6 +11032,7 @@ module flash_ctrl_core_reg_top (
   ) u_err_code_rd_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (err_code_we),
@@ -10693,6 +11060,7 @@ module flash_ctrl_core_reg_top (
   ) u_err_code_prog_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (err_code_we),
@@ -10720,6 +11088,7 @@ module flash_ctrl_core_reg_top (
   ) u_err_code_prog_win_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (err_code_we),
@@ -10747,6 +11116,7 @@ module flash_ctrl_core_reg_top (
   ) u_err_code_prog_type_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (err_code_we),
@@ -10774,6 +11144,7 @@ module flash_ctrl_core_reg_top (
   ) u_err_code_update_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (err_code_we),
@@ -10801,6 +11172,7 @@ module flash_ctrl_core_reg_top (
   ) u_err_code_macro_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (err_code_we),
@@ -10830,6 +11202,7 @@ module flash_ctrl_core_reg_top (
   ) u_std_fault_status_reg_intg_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -10857,6 +11230,7 @@ module flash_ctrl_core_reg_top (
   ) u_std_fault_status_prog_intg_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -10884,6 +11258,7 @@ module flash_ctrl_core_reg_top (
   ) u_std_fault_status_lcmgr_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -10911,6 +11286,7 @@ module flash_ctrl_core_reg_top (
   ) u_std_fault_status_lcmgr_intg_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -10938,6 +11314,7 @@ module flash_ctrl_core_reg_top (
   ) u_std_fault_status_arb_fsm_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -10965,6 +11342,7 @@ module flash_ctrl_core_reg_top (
   ) u_std_fault_status_storage_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -10992,6 +11370,7 @@ module flash_ctrl_core_reg_top (
   ) u_std_fault_status_phy_fsm_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11019,6 +11398,7 @@ module flash_ctrl_core_reg_top (
   ) u_std_fault_status_ctrl_cnt_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11046,6 +11426,7 @@ module flash_ctrl_core_reg_top (
   ) u_std_fault_status_fifo_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11075,6 +11456,7 @@ module flash_ctrl_core_reg_top (
   ) u_fault_status_op_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11102,6 +11484,7 @@ module flash_ctrl_core_reg_top (
   ) u_fault_status_mp_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11129,6 +11512,7 @@ module flash_ctrl_core_reg_top (
   ) u_fault_status_rd_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11156,6 +11540,7 @@ module flash_ctrl_core_reg_top (
   ) u_fault_status_prog_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11183,6 +11568,7 @@ module flash_ctrl_core_reg_top (
   ) u_fault_status_prog_win_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11210,6 +11596,7 @@ module flash_ctrl_core_reg_top (
   ) u_fault_status_prog_type_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11237,6 +11624,7 @@ module flash_ctrl_core_reg_top (
   ) u_fault_status_seed_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11264,6 +11652,7 @@ module flash_ctrl_core_reg_top (
   ) u_fault_status_phy_relbl_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (fault_status_we),
@@ -11291,6 +11680,7 @@ module flash_ctrl_core_reg_top (
   ) u_fault_status_phy_storage_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (fault_status_we),
@@ -11318,6 +11708,7 @@ module flash_ctrl_core_reg_top (
   ) u_fault_status_spurious_ack (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11345,6 +11736,7 @@ module flash_ctrl_core_reg_top (
   ) u_fault_status_arb_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11372,6 +11764,7 @@ module flash_ctrl_core_reg_top (
   ) u_fault_status_host_gnt_err (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11400,6 +11793,7 @@ module flash_ctrl_core_reg_top (
   ) u_err_addr (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11430,6 +11824,7 @@ module flash_ctrl_core_reg_top (
   ) u_ecc_single_err_cnt_ecc_single_err_cnt_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ecc_single_err_cnt_we),
@@ -11457,6 +11852,7 @@ module flash_ctrl_core_reg_top (
   ) u_ecc_single_err_cnt_ecc_single_err_cnt_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (ecc_single_err_cnt_we),
@@ -11486,6 +11882,7 @@ module flash_ctrl_core_reg_top (
   ) u_ecc_single_err_addr_0 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11515,6 +11912,7 @@ module flash_ctrl_core_reg_top (
   ) u_ecc_single_err_addr_1 (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11544,6 +11942,7 @@ module flash_ctrl_core_reg_top (
   ) u_phy_alert_cfg_alert_ack (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (phy_alert_cfg_we),
@@ -11571,6 +11970,7 @@ module flash_ctrl_core_reg_top (
   ) u_phy_alert_cfg_alert_trig (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (phy_alert_cfg_we),
@@ -11600,6 +12000,7 @@ module flash_ctrl_core_reg_top (
   ) u_phy_status_init_wip (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11627,6 +12028,7 @@ module flash_ctrl_core_reg_top (
   ) u_phy_status_prog_normal_avail (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11654,6 +12056,7 @@ module flash_ctrl_core_reg_top (
   ) u_phy_status_prog_repair_avail (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (1'b0),
@@ -11682,6 +12085,7 @@ module flash_ctrl_core_reg_top (
   ) u_scratch (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (scratch_we),
@@ -11711,6 +12115,7 @@ module flash_ctrl_core_reg_top (
   ) u_fifo_lvl_prog (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (fifo_lvl_we),
@@ -11738,6 +12143,7 @@ module flash_ctrl_core_reg_top (
   ) u_fifo_lvl_rd (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (fifo_lvl_we),
@@ -11766,6 +12172,7 @@ module flash_ctrl_core_reg_top (
   ) u_fifo_rst (
     .clk_i   (clk_i),
     .rst_ni  (rst_ni),
+    .reinit_i(1'b0),
 
     // from register interface
     .we     (fifo_rst_we),
@@ -12088,6 +12495,8 @@ module flash_ctrl_core_reg_top (
   assign alert_test_fatal_prim_flash_alert_wd = reg_wdata[3];
 
   assign alert_test_recov_prim_flash_alert_wd = reg_wdata[4];
+
+  assign alert_test_regwen_wd = reg_wdata[31];
   assign dis_we = addr_hit[4] & reg_we & !reg_error;
 
   assign dis_wd = reg_wdata[3:0];
@@ -13003,6 +13412,7 @@ module flash_ctrl_core_reg_top (
         reg_rdata_next[2] = '0;
         reg_rdata_next[3] = '0;
         reg_rdata_next[4] = '0;
+        reg_rdata_next[31] = alert_test_regwen_qs;
       end
 
       addr_hit[4]: begin

@@ -435,6 +435,7 @@
           domain: Main
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_peri
@@ -514,7 +515,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: gpio
@@ -543,6 +543,7 @@
         num_inp_period_counters: 8
       }
       attr: ipgen
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_peri
@@ -652,7 +653,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: spi_device
@@ -675,6 +675,7 @@
       {
         SramType: spi_device_pkg::SramType1r1w
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_peri
@@ -809,7 +810,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: i2c0
@@ -827,6 +827,7 @@
           domain: Main
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_peri
@@ -935,7 +936,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: rv_timer
@@ -953,6 +953,7 @@
           domain: Main
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_timers
@@ -1011,7 +1012,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: otp_ctrl
@@ -1044,6 +1044,7 @@
         }
       }
       attr: ipgen
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_secure
@@ -1346,7 +1347,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: otp_macro
@@ -1379,6 +1379,7 @@
         VendorTestOffset: otp_ctrl_reg_pkg::VendorTestOffset
         VendorTestSize: otp_ctrl_reg_pkg::VendorTestSize
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_secure
@@ -1629,7 +1630,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: lc_ctrl
@@ -1675,6 +1675,7 @@
         EscNumSeverities: AlertHandlerEscNumSeverities
         EscPingCountWidth: AlertHandlerEscPingCountWidth
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_secure
@@ -2313,7 +2314,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: alert_handler
@@ -2344,6 +2344,7 @@
         EscPingCountWidth: "16"
       }
       attr: ipgen
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_secure
@@ -2457,7 +2458,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: spi_host0
@@ -2475,6 +2475,7 @@
           domain: Main
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_peri
@@ -2578,7 +2579,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: pwrmgr
@@ -4217,6 +4217,15 @@
           expose: "true"
           name_top: SramCtrlRetEccCorrection
         }
+        {
+          name: SecZeroInit
+          desc: Initialize the memory with zeros instead of pseudo-random data.
+          type: bit
+          default: "0"
+          local: "false"
+          expose: "true"
+          name_top: SecSramCtrlRetZeroInit
+        }
       ]
       inter_signal_list:
       [
@@ -4411,6 +4420,7 @@
         UseDmiInterface: "1"
       }
       generate_dif: false
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -4811,7 +4821,6 @@
           index: -1
         }
       ]
-      domain: Main
     }
     {
       name: rv_plic
@@ -4835,6 +4844,7 @@
       [
         rv_core_ibex
       ]
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_secure
@@ -4904,7 +4914,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: aes
@@ -4934,6 +4943,7 @@
         SecMasking: "1"
         SecSBoxImpl: aes_pkg::SBoxImplDom
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_aes
@@ -5088,7 +5098,7 @@
         {
           name: keymgr_key
           struct: hw_key_req
-          package: keymgr_pkg
+          package: keymgr_dpe_pkg
           type: uni
           act: rcv
           width: 1
@@ -5121,7 +5131,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: hmac
@@ -5139,6 +5148,7 @@
           domain: Main
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_hmac
@@ -5165,8 +5175,8 @@
         }
         {
           name: keymgr_key
-          struct: hw_key_req
-          package: keymgr_pkg
+          struct: wide_hw_key_req
+          package: keymgr_dpe_pkg
           type: uni
           act: rcv
           width: 1
@@ -5199,7 +5209,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: kmac
@@ -5235,6 +5244,7 @@
           domain: Main
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_kmac
@@ -5251,6 +5261,19 @@
           local: "false"
           expose: "true"
           name_top: KmacEnMasking
+        }
+        {
+          name: EnFullKmac
+          desc:
+            '''
+            Disable(0) or enable(1) the full KMAC functionality.
+            If disabled, the module is stripped down to only support SHA3, SHAKE and cSHAKE.
+            '''
+          type: bit
+          default: "1"
+          local: "false"
+          expose: "true"
+          name_top: KmacEnFullKmac
         }
         {
           name: SwKeyMasked
@@ -5331,7 +5354,7 @@
         {
           name: keymgr_key
           struct: hw_key_req
-          package: keymgr_pkg
+          package: keymgr_dpe_pkg
           type: uni
           act: rcv
           width: 1
@@ -5443,7 +5466,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: otbn
@@ -5485,6 +5507,7 @@
           domain: Main
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_otbn
@@ -5696,8 +5719,8 @@
         }
         {
           name: keymgr_key
-          struct: otbn_key_req
-          package: keymgr_pkg
+          struct: wide_hw_key_req
+          package: keymgr_dpe_pkg
           type: uni
           act: rcv
           width: 1
@@ -5740,7 +5763,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: keymgr_dpe
@@ -5770,6 +5792,7 @@
         NumBootStages: "2"
         NumRomDigestInputs: "2"
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_secure
@@ -5833,7 +5856,7 @@
         {
           name: aes_key
           struct: hw_key_req
-          package: keymgr_pkg
+          package: keymgr_dpe_pkg
           type: uni
           act: req
           width: 1
@@ -5847,7 +5870,7 @@
         {
           name: kmac_key
           struct: hw_key_req
-          package: keymgr_pkg
+          package: keymgr_dpe_pkg
           type: uni
           act: req
           width: 1
@@ -5860,8 +5883,8 @@
         }
         {
           name: hmac_key
-          struct: hw_key_req
-          package: keymgr_pkg
+          struct: wide_hw_key_req
+          package: keymgr_dpe_pkg
           type: uni
           act: req
           width: 1
@@ -5874,8 +5897,8 @@
         }
         {
           name: otbn_key
-          struct: otbn_key_req
-          package: keymgr_pkg
+          struct: wide_hw_key_req
+          package: keymgr_dpe_pkg
           type: uni
           act: req
           width: 1
@@ -5910,6 +5933,17 @@
           default: ""
           domain: Main
           top_signame: otp_ctrl_keymgr_creator_root_key
+          index: -1
+        }
+        {
+          name: secondary_root_key
+          struct: keymgr_dpe_creator_root_key
+          package: keymgr_dpe_pkg
+          type: uni
+          act: rcv
+          width: 1
+          default: keymgr_dpe_pkg::KEYMGR_DPE_SECONDARY_ROOT_KEY_DEFAULT
+          inst_name: keymgr_dpe
           index: -1
         }
         {
@@ -6036,7 +6070,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: csrng
@@ -6054,6 +6087,7 @@
           domain: Main
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_secure
@@ -6103,18 +6137,6 @@
           index: -1
         }
         {
-          name: otp_en_csrng_sw_app_read
-          struct: mubi8
-          package: prim_mubi_pkg
-          type: uni
-          act: rcv
-          width: 1
-          default: prim_mubi_pkg::MuBi8True
-          inst_name: csrng
-          top_signame: csrng_otp_en_csrng_sw_app_read
-          index: -1
-        }
-        {
           name: lc_hw_debug_en
           struct: lc_tx
           package: lc_ctrl_pkg
@@ -6150,7 +6172,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: entropy_src
@@ -6175,6 +6196,7 @@
         HealthTestWindowWidth: "20"
         DistrFifoDepth: "11"
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_secure
@@ -6431,28 +6453,6 @@
           index: -1
         }
         {
-          name: otp_en_entropy_src_fw_read
-          struct: mubi8
-          package: prim_mubi_pkg
-          type: uni
-          act: rcv
-          width: 1
-          default: prim_mubi_pkg::MuBi8True
-          inst_name: entropy_src
-          index: -1
-        }
-        {
-          name: otp_en_entropy_src_fw_over
-          struct: mubi8
-          package: prim_mubi_pkg
-          type: uni
-          act: rcv
-          width: 1
-          default: prim_mubi_pkg::MuBi8True
-          inst_name: entropy_src
-          index: -1
-        }
-        {
           name: rng_fips
           struct: logic
           type: uni
@@ -6489,7 +6489,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: edn0
@@ -6511,6 +6510,7 @@
       {
         NumEndPoints: "8"
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_secure
@@ -6592,7 +6592,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: edn1
@@ -6614,6 +6613,7 @@
       {
         NumEndPoints: "1"
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_secure
@@ -6695,7 +6695,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: sram_ctrl_main
@@ -6747,6 +6746,7 @@
           size: 0x10000
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -6828,6 +6828,15 @@
           local: "false"
           expose: "true"
           name_top: SramCtrlMainEccCorrection
+        }
+        {
+          name: SecZeroInit
+          desc: Initialize the memory with zeros instead of pseudo-random data.
+          type: bit
+          default: "0"
+          local: "false"
+          expose: "true"
+          name_top: SecSramCtrlMainZeroInit
         }
       ]
       inter_signal_list:
@@ -6974,7 +6983,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: sram_ctrl_mbox
@@ -7026,6 +7034,7 @@
           size: 0x1000
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -7107,6 +7116,15 @@
           local: "false"
           expose: "true"
           name_top: SramCtrlMboxEccCorrection
+        }
+        {
+          name: SecZeroInit
+          desc: Initialize the memory with zeros instead of pseudo-random data.
+          type: bit
+          default: "0"
+          local: "false"
+          expose: "true"
+          name_top: SecSramCtrlMboxZeroInit
         }
       ]
       inter_signal_list:
@@ -7250,7 +7268,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: rom_ctrl0
@@ -7296,6 +7313,7 @@
         SecDisableScrambling: 1'b0
         FlopToKmac: 1'b1
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -7435,7 +7453,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: rom_ctrl1
@@ -7481,6 +7498,7 @@
         SecDisableScrambling: 1'b0
         FlopToKmac: 1'b1
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -7620,7 +7638,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: dma
@@ -7638,6 +7655,7 @@
           domain: Main
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -7819,7 +7837,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: mbx0
@@ -7868,6 +7885,7 @@
           range_mapping: []
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -8008,7 +8026,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: mbx1
@@ -8057,6 +8074,7 @@
           range_mapping: []
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -8197,7 +8215,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: mbx2
@@ -8246,6 +8263,7 @@
           range_mapping: []
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -8386,7 +8404,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: mbx3
@@ -8435,6 +8452,7 @@
           range_mapping: []
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -8575,7 +8593,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: mbx4
@@ -8624,6 +8641,7 @@
           range_mapping: []
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -8764,7 +8782,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: mbx5
@@ -8813,6 +8830,7 @@
           range_mapping: []
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -8953,7 +8971,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: mbx6
@@ -9002,6 +9019,7 @@
           range_mapping: []
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -9142,7 +9160,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: mbx_jtag
@@ -9191,6 +9208,7 @@
           range_mapping: []
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -9331,7 +9349,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: mbx_pcie0
@@ -9380,6 +9397,7 @@
           range_mapping: []
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -9520,7 +9538,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: mbx_pcie1
@@ -9569,6 +9586,7 @@
           range_mapping: []
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -9709,7 +9727,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: soc_dbg_ctrl
@@ -9738,6 +9755,7 @@
           soc_dbg: 0x2300
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_io_secure
@@ -9935,7 +9953,6 @@
         }
       ]
       generate_dif: true
-      domain: Main
     }
     {
       name: racl_ctrl
@@ -9955,6 +9972,7 @@
         }
       }
       attr: ipgen
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -10082,7 +10100,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
     {
       name: ac_range_check
@@ -10106,6 +10123,7 @@
         num_ranges: 32
       }
       attr: ipgen
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_secure
@@ -10443,7 +10461,6 @@
           range_mapping: []
         }
       }
-      domain: Main
     }
     {
       name: rv_core_ibex
@@ -10466,7 +10483,7 @@
         PMPRstMsecCfg: ibex_pmp_reset_pkg::PmpMseccfgRst
         RV32E: "0"
         RV32M: ibex_pkg::RV32MSingleCycle
-        RV32B: ibex_pkg::RV32BOTEarlGrey
+        RV32B: ibex_pkg::RV32BFull
         RV32ZC: ibex_pkg::RV32ZcaZcbZcmp
         RegFile: ibex_pkg::RegFileFF
         BranchTargetALU: "1"
@@ -10526,6 +10543,7 @@
           domain: Main
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_i: clkmgr_clocks_i.clk_main_infra
@@ -10650,7 +10668,7 @@
           name: RV32B
           desc: RV32B
           type: ibex_pkg::rv32b_e
-          default: ibex_pkg::RV32BOTEarlGrey
+          default: ibex_pkg::RV32BFull
           local: "false"
           expose: "true"
           name_top: RvCoreIbexRV32B
@@ -11117,20 +11135,6 @@
           index: 3
         }
         {
-          name: fpga_info
-          struct: logic
-          type: uni
-          act: rcv
-          width: 32
-          inst_name: rv_core_ibex
-          default: ""
-          package: ""
-          external: true
-          conn_type: false
-          index: -1
-          top_signame: fpga_info
-        }
-        {
           name: corei_tl_h
           struct: tl
           package: tlul_pkg
@@ -11179,7 +11183,6 @@
         }
       }
       generate_dif: true
-      domain: Main
     }
   ]
   port:
@@ -11942,7 +11945,6 @@
       rv_core_ibex.hart_id
       rv_core_ibex.boot_addr
       otp_ctrl.otp_broadcast
-      csrng.otp_en_csrng_sw_app_read
       soc_dbg_ctrl.soc_dbg_state
       lc_ctrl.otp_device_id
       lc_ctrl.otp_manuf_state
@@ -12030,7 +12032,6 @@
       rstmgr.por_n: por_n
       rstmgr.resets: ""
       rstmgr.rst_en: ""
-      rv_core_ibex.fpga_info: fpga_info
       soc_proxy.misc_tl_h2d: ctn_misc_tl_h2d
       soc_proxy.misc_tl_d2h: ctn_misc_tl_d2h
       soc_proxy.soc_wkup_async: soc_wkup_async
@@ -12073,12 +12074,12 @@
           domain: Main
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_main_i: clkmgr_clocks_i.clk_main_infra
         clk_fixed_i: clkmgr_clocks_i.clk_io_infra
       }
-      domain: Main
       connections:
       {
         rv_core_ibex.corei:
@@ -12669,7 +12670,7 @@
               {
                 hart: 0x21140000
               }
-              size_byte: 0x100
+              size_byte: 0x200
             }
           ]
           xbar: false
@@ -13851,11 +13852,11 @@
           domain: Main
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_peri_i: clkmgr_clocks_i.clk_io_infra
       }
-      domain: Main
       connections:
       {
         main:
@@ -14595,11 +14596,11 @@
           domain: Main
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_mbx_i: clkmgr_clocks_i.clk_main_infra
       }
-      domain: Main
       connections:
       {
         mbx:
@@ -15064,12 +15065,12 @@
           domain: Main
         }
       }
+      domain: Main
       clock_connections:
       {
         clk_dbg_i: clkmgr_clocks_i.clk_main_infra
         clk_peri_i: clkmgr_clocks_i.clk_io_infra
       }
-      domain: Main
       connections:
       {
         dbg:
@@ -17773,10 +17774,6 @@
       {
         port_overrides:
         {
-          rv_core_ibex.fpga_info:
-          {
-            unused: true
-          }
           rv_dm.next_dm_addr:
           {
             unused: true
@@ -18056,10 +18053,6 @@
       {
         port_overrides:
         {
-          rv_core_ibex.fpga_info:
-          {
-            unused: true
-          }
           rv_dm.next_dm_addr:
           {
             unused: true
@@ -25446,7 +25439,7 @@
       {
         name: keymgr_key
         struct: hw_key_req
-        package: keymgr_pkg
+        package: keymgr_dpe_pkg
         type: uni
         act: rcv
         width: 1
@@ -25487,8 +25480,8 @@
       }
       {
         name: keymgr_key
-        struct: hw_key_req
-        package: keymgr_pkg
+        struct: wide_hw_key_req
+        package: keymgr_dpe_pkg
         type: uni
         act: rcv
         width: 1
@@ -25515,7 +25508,7 @@
       {
         name: keymgr_key
         struct: hw_key_req
-        package: keymgr_pkg
+        package: keymgr_dpe_pkg
         type: uni
         act: rcv
         width: 1
@@ -25742,8 +25735,8 @@
       }
       {
         name: keymgr_key
-        struct: otbn_key_req
-        package: keymgr_pkg
+        struct: wide_hw_key_req
+        package: keymgr_dpe_pkg
         type: uni
         act: rcv
         width: 1
@@ -25793,7 +25786,7 @@
       {
         name: aes_key
         struct: hw_key_req
-        package: keymgr_pkg
+        package: keymgr_dpe_pkg
         type: uni
         act: req
         width: 1
@@ -25807,7 +25800,7 @@
       {
         name: kmac_key
         struct: hw_key_req
-        package: keymgr_pkg
+        package: keymgr_dpe_pkg
         type: uni
         act: req
         width: 1
@@ -25820,8 +25813,8 @@
       }
       {
         name: hmac_key
-        struct: hw_key_req
-        package: keymgr_pkg
+        struct: wide_hw_key_req
+        package: keymgr_dpe_pkg
         type: uni
         act: req
         width: 1
@@ -25834,8 +25827,8 @@
       }
       {
         name: otbn_key
-        struct: otbn_key_req
-        package: keymgr_pkg
+        struct: wide_hw_key_req
+        package: keymgr_dpe_pkg
         type: uni
         act: req
         width: 1
@@ -25870,6 +25863,17 @@
         default: ""
         domain: Main
         top_signame: otp_ctrl_keymgr_creator_root_key
+        index: -1
+      }
+      {
+        name: secondary_root_key
+        struct: keymgr_dpe_creator_root_key
+        package: keymgr_dpe_pkg
+        type: uni
+        act: rcv
+        width: 1
+        default: keymgr_dpe_pkg::KEYMGR_DPE_SECONDARY_ROOT_KEY_DEFAULT
+        inst_name: keymgr_dpe
         index: -1
       }
       {
@@ -26013,18 +26017,6 @@
         end_idx: -1
         top_type: one-to-one
         top_signame: csrng_entropy_src_hw_if
-        index: -1
-      }
-      {
-        name: otp_en_csrng_sw_app_read
-        struct: mubi8
-        package: prim_mubi_pkg
-        type: uni
-        act: rcv
-        width: 1
-        default: prim_mubi_pkg::MuBi8True
-        inst_name: csrng
-        top_signame: csrng_otp_en_csrng_sw_app_read
         index: -1
       }
       {
@@ -26237,28 +26229,6 @@
         type: req_rsp
         act: req
         width: 1
-        inst_name: entropy_src
-        index: -1
-      }
-      {
-        name: otp_en_entropy_src_fw_read
-        struct: mubi8
-        package: prim_mubi_pkg
-        type: uni
-        act: rcv
-        width: 1
-        default: prim_mubi_pkg::MuBi8True
-        inst_name: entropy_src
-        index: -1
-      }
-      {
-        name: otp_en_entropy_src_fw_over
-        struct: mubi8
-        package: prim_mubi_pkg
-        type: uni
-        act: rcv
-        width: 1
-        default: prim_mubi_pkg::MuBi8True
         inst_name: entropy_src
         index: -1
       }
@@ -28901,20 +28871,6 @@
         domain: Main
         top_signame: otp_ctrl_sram_otp_key
         index: 3
-      }
-      {
-        name: fpga_info
-        struct: logic
-        type: uni
-        act: rcv
-        width: 32
-        inst_name: rv_core_ibex
-        default: ""
-        package: ""
-        external: true
-        conn_type: false
-        index: -1
-        top_signame: fpga_info
       }
       {
         name: corei_tl_h
@@ -33864,25 +33820,6 @@
         netname: rstmgr_rst_en
       }
       {
-        package: ""
-        struct: logic
-        domain: Main
-        inter_pd: false
-        signame: fpga_info_i
-        signame_chip:
-        {
-          asic: "'0"
-          verilator: "'0"
-        }
-        width: 32
-        type: uni
-        default: ""
-        direction: in
-        conn_type: false
-        index: -1
-        netname: fpga_info
-      }
-      {
         package: tlul_pkg
         struct: tl_h2d
         domain: Aon
@@ -34688,7 +34625,7 @@
         default: "'0"
       }
       {
-        package: keymgr_pkg
+        package: keymgr_dpe_pkg
         struct: hw_key_req
         domain: Main
         signame: keymgr_dpe_aes_key
@@ -34697,10 +34634,10 @@
         end_idx: -1
         act: req
         suffix: ""
-        default: keymgr_pkg::HW_KEY_REQ_DEFAULT
+        default: keymgr_dpe_pkg::HW_KEY_REQ_DEFAULT
       }
       {
-        package: keymgr_pkg
+        package: keymgr_dpe_pkg
         struct: hw_key_req
         domain: Main
         signame: keymgr_dpe_kmac_key
@@ -34709,11 +34646,11 @@
         end_idx: -1
         act: req
         suffix: ""
-        default: keymgr_pkg::HW_KEY_REQ_DEFAULT
+        default: keymgr_dpe_pkg::HW_KEY_REQ_DEFAULT
       }
       {
-        package: keymgr_pkg
-        struct: hw_key_req
+        package: keymgr_dpe_pkg
+        struct: wide_hw_key_req
         domain: Main
         signame: keymgr_dpe_hmac_key
         width: 1
@@ -34721,11 +34658,11 @@
         end_idx: -1
         act: req
         suffix: ""
-        default: keymgr_pkg::HW_KEY_REQ_DEFAULT
+        default: keymgr_dpe_pkg::WIDE_HW_KEY_REQ_DEFAULT
       }
       {
-        package: keymgr_pkg
-        struct: otbn_key_req
+        package: keymgr_dpe_pkg
+        struct: wide_hw_key_req
         domain: Main
         signame: keymgr_dpe_otbn_key
         width: 1
@@ -34733,7 +34670,7 @@
         end_idx: -1
         act: req
         suffix: ""
-        default: keymgr_pkg::OTBN_KEY_REQ_DEFAULT
+        default: keymgr_dpe_pkg::WIDE_HW_KEY_REQ_DEFAULT
       }
       {
         package: kmac_pkg
@@ -37052,16 +36989,6 @@
         type: uni
         end_idx: -1
         default: "'0"
-      }
-      {
-        package: prim_mubi_pkg
-        struct: mubi8
-        signame: csrng_otp_en_csrng_sw_app_read
-        domain: Main
-        width: 1
-        type: uni
-        end_idx: -1
-        default: prim_mubi_pkg::MuBi8True
       }
       {
         package: lc_ctrl_state_pkg

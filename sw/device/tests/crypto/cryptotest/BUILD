@@ -350,6 +350,23 @@ cryptotest(
     test_vectors = ED25519_TESTVECTOR_TARGETS,
 )
 
+ED25519_RANDOM_TESTVECTOR_TARGETS = [
+    "//sw/host/cryptotest/testvectors/data:random_ed25519_json",
+]
+
+ED25519_RANDOM_TESTVECTOR_ARGS = " ".join([
+    "--ed25519-json=\"$(rootpath {})\"".format(target)
+    for target in ED25519_RANDOM_TESTVECTOR_TARGETS
+])
+
+cryptotest(
+    name = "ed25519_random_kat",
+    slow_test = True,
+    test_args = ED25519_RANDOM_TESTVECTOR_ARGS,
+    test_harness = "//sw/host/tests/crypto/ed25519_kat:harness",
+    test_vectors = ED25519_RANDOM_TESTVECTOR_TARGETS,
+)
+
 X25519_TESTVECTOR_TARGETS = [
     "//sw/host/cryptotest/testvectors/data:wycheproof_x25519_json",
 ]
@@ -526,6 +543,45 @@ cryptotest(
     test_vectors = RSA_TESTVECTOR_TARGETS,
 )
 
+RSA_RANDOM_TESTVECTOR_TARGETS = [
+    "//sw/host/cryptotest/testvectors/data:random_rsa_{}_{}_{}.json".format(
+        padding_mode,
+        security_level,
+        hash_suffix,
+    )
+    for security_level in [
+        2048,
+        3072,
+        4096,
+    ]
+    for padding_mode in [
+        "pkcs1_1.5",
+        "pss",
+        "oaep",
+    ]
+    for hash_suffix in [
+        "sha256",
+        "sha384",
+        "sha512",
+        "sha3_256",
+        "sha3_384",
+        "sha3_512",
+    ]
+]
+
+RSA_RANDOM_TESTVECTOR_ARGS = " ".join([
+    "--rsa-json=\"$(rootpath {})\"".format(target)
+    for target in RSA_RANDOM_TESTVECTOR_TARGETS
+])
+
+cryptotest(
+    name = "rsa_random_kat",
+    slow_test = True,
+    test_args = RSA_RANDOM_TESTVECTOR_ARGS,
+    test_harness = "//sw/host/tests/crypto/rsa_kat:harness",
+    test_vectors = RSA_RANDOM_TESTVECTOR_TARGETS,
+)
+
 cryptotest(
     name = "rsa_keygen_kat",
     slow_test = True,
@@ -557,6 +613,15 @@ cryptotest(
     test_vectors = SHA256_TESTVECTOR_TARGETS,
 )
 
+cryptotest(
+    name = "sha256_otbn_kat",
+    slow_test = True,
+    test_args = SHA256_TESTVECTOR_ARGS,
+    test_harness = "//sw/host/tests/crypto/hash_kat:harness",
+    test_vectors = SHA256_TESTVECTOR_TARGETS,
+    use_otbn_hash = True,
+)
+
 SHA384_TESTVECTOR_TARGETS = [
     "//sw/host/cryptotest/testvectors/data:nist_cavp_sha2_fips_180_4_sha384_{}_json".format(
         msg_type.lower(),
@@ -580,6 +645,15 @@ cryptotest(
     test_vectors = SHA384_TESTVECTOR_TARGETS,
 )
 
+cryptotest(
+    name = "sha384_otbn_kat",
+    slow_test = True,
+    test_args = SHA384_TESTVECTOR_ARGS,
+    test_harness = "//sw/host/tests/crypto/hash_kat:harness",
+    test_vectors = SHA384_TESTVECTOR_TARGETS,
+    use_otbn_hash = True,
+)
+
 SHA512_TESTVECTOR_TARGETS = [
     "//sw/host/cryptotest/testvectors/data:nist_cavp_sha2_fips_180_4_sha512_{}_json".format(
         msg_type.lower(),
@@ -601,6 +675,15 @@ cryptotest(
     test_args = SHA512_TESTVECTOR_ARGS,
     test_harness = "//sw/host/tests/crypto/hash_kat:harness",
     test_vectors = SHA512_TESTVECTOR_TARGETS,
+)
+
+cryptotest(
+    name = "sha512_otbn_kat",
+    slow_test = True,
+    test_args = SHA512_TESTVECTOR_ARGS,
+    test_harness = "//sw/host/tests/crypto/hash_kat:harness",
+    test_vectors = SHA512_TESTVECTOR_TARGETS,
+    use_otbn_hash = True,
 )
 
 SHA3_224_TESTVECTOR_TARGETS = [
@@ -844,6 +927,108 @@ cryptotest(
     test_vectors = HMAC_SHA512_TESTVECTOR_TARGETS,
 )
 
+HKDF_SHA256_TESTVECTOR_TARGETS = [
+    "//sw/host/cryptotest/testvectors/data:wycheproof_hkdf_sha256.json",
+]
+
+HKDF_SHA256_TESTVECTOR_ARGS = " ".join([
+    "--hkdf-json=\"$(rootpath {})\"".format(target)
+    for target in HKDF_SHA256_TESTVECTOR_TARGETS
+])
+
+cryptotest(
+    name = "hkdf_sha256_kat",
+    slow_test = True,
+    test_args = HKDF_SHA256_TESTVECTOR_ARGS,
+    test_harness = "//sw/host/tests/crypto/hkdf_kat:harness",
+    test_vectors = HKDF_SHA256_TESTVECTOR_TARGETS,
+)
+
+cryptotest(
+    name = "hkdf_sha256_otbn_kat",
+    slow_test = True,
+    test_args = HKDF_SHA256_TESTVECTOR_ARGS,
+    test_harness = "//sw/host/tests/crypto/hkdf_kat:harness",
+    test_vectors = HKDF_SHA256_TESTVECTOR_TARGETS,
+    use_otbn_hash = True,
+)
+
+HKDF_SHA384_TESTVECTOR_TARGETS = [
+    "//sw/host/cryptotest/testvectors/data:wycheproof_hkdf_sha384.json",
+]
+
+HKDF_SHA384_TESTVECTOR_ARGS = " ".join([
+    "--hkdf-json=\"$(rootpath {})\"".format(target)
+    for target in HKDF_SHA384_TESTVECTOR_TARGETS
+])
+
+cryptotest(
+    name = "hkdf_sha384_kat",
+    slow_test = True,
+    test_args = HKDF_SHA384_TESTVECTOR_ARGS,
+    test_harness = "//sw/host/tests/crypto/hkdf_kat:harness",
+    test_vectors = HKDF_SHA384_TESTVECTOR_TARGETS,
+)
+
+cryptotest(
+    name = "hkdf_sha384_otbn_kat",
+    slow_test = True,
+    test_args = HKDF_SHA384_TESTVECTOR_ARGS,
+    test_harness = "//sw/host/tests/crypto/hkdf_kat:harness",
+    test_vectors = HKDF_SHA384_TESTVECTOR_TARGETS,
+    use_otbn_hash = True,
+)
+
+HKDF_SHA512_TESTVECTOR_TARGETS = [
+    "//sw/host/cryptotest/testvectors/data:wycheproof_hkdf_sha512.json",
+]
+
+HKDF_SHA512_TESTVECTOR_ARGS = " ".join([
+    "--hkdf-json=\"$(rootpath {})\"".format(target)
+    for target in HKDF_SHA512_TESTVECTOR_TARGETS
+])
+
+cryptotest(
+    name = "hkdf_sha512_kat",
+    slow_test = True,
+    test_args = HKDF_SHA512_TESTVECTOR_ARGS,
+    test_harness = "//sw/host/tests/crypto/hkdf_kat:harness",
+    test_vectors = HKDF_SHA512_TESTVECTOR_TARGETS,
+)
+
+cryptotest(
+    name = "hkdf_sha512_otbn_kat",
+    slow_test = True,
+    test_args = HKDF_SHA512_TESTVECTOR_ARGS,
+    test_harness = "//sw/host/tests/crypto/hkdf_kat:harness",
+    test_vectors = HKDF_SHA512_TESTVECTOR_TARGETS,
+    use_otbn_hash = True,
+)
+
+KDF_RANDOM_TESTVECTOR_TARGETS = [
+    "//sw/host/cryptotest/testvectors/data:random_kdf_{}.json".format(config)
+    for config in [
+        "hkdf_sha256",
+        "hkdf_sha384",
+        "hkdf_sha512",
+        "kmac128",
+        "kmac256",
+    ]
+]
+
+KDF_RANDOM_TESTVECTOR_ARGS = " ".join([
+    "--kdf-json=\"$(rootpath {})\"".format(target)
+    for target in KDF_RANDOM_TESTVECTOR_TARGETS
+])
+
+cryptotest(
+    name = "kdf_random_kat",
+    slow_test = True,
+    test_args = KDF_RANDOM_TESTVECTOR_ARGS,
+    test_harness = "//sw/host/tests/crypto/kdf_kat:harness",
+    test_vectors = KDF_RANDOM_TESTVECTOR_TARGETS,
+)
+
 KMAC_TESTVECTOR_TARGETS = [
     "//sw/host/cryptotest/testvectors/data:wycheproof_kmac_{}.json".format(config)
     for config in [
@@ -921,13 +1106,16 @@ test_suite(
         ":ecdh_kat",
         ":ecdsa_kat",
         ":ed25519_kat",
+        ":ed25519_random_kat",
         ":hmac_sha256_kat",
         ":hmac_sha384_kat",
         ":hmac_sha512_kat",
+        ":kdf_random_kat",
         ":kmac_kat",
         ":mldsa_kat",
         ":mlkem_kat",
         ":rsa_kat",
+        ":rsa_random_kat",
         ":sha256_kat",
         ":sha384_kat",
         ":sha3_224_kat",

@@ -61,7 +61,7 @@ class cip_base_env_cfg #(type RAL_T = dv_base_reg_block) extends dv_base_env_cfg
   uvm_reg_data_t      shadow_update_err_status_fields[dv_base_reg_field];
   uvm_reg_data_t      shadow_storage_err_status_fields[dv_base_reg_field];
 
-  alert_esc_agent_cfg m_alert_agent_cfgs[string];
+  alert_agent_cfg     m_alert_agent_cfgs[string];
   push_pull_agent_cfg#(.DeviceDataWidth(EDN_DATA_WIDTH)) m_edn_pull_agent_cfgs[];
 
   // EDN clk freq setting, if EDN is present.
@@ -170,7 +170,7 @@ class cip_base_env_cfg #(type RAL_T = dv_base_reg_block) extends dv_base_env_cfg
       check_alert_configs();
       foreach(list_of_alerts[i]) begin
         string alert_name = list_of_alerts[i];
-        m_alert_agent_cfgs[alert_name] = alert_esc_agent_cfg::type_id::create(
+        m_alert_agent_cfgs[alert_name] = alert_agent_cfg::type_id::create(
             $sformatf("m_alert_agent_cfgs[%s]", alert_name));
         m_alert_agent_cfgs[alert_name].is_active = is_active;
         m_alert_agent_cfgs[alert_name].if_mode = (is_active ?
@@ -200,7 +200,11 @@ class cip_base_env_cfg #(type RAL_T = dv_base_reg_block) extends dv_base_env_cfg
     // initialization.
     bit create_jtag_riscv_map;
     void'($value$plusargs("create_jtag_riscv_map=%0b", create_jtag_riscv_map));
-    if (create_jtag_riscv_map) begin
+
+    // The +create_jtag_riscv_map flag tells the environment to take a clone of the uvm_reg_map for
+    // its default register model (which is visible as cfg.ral) and store it in the jtag_riscv_map
+    // class variable.
+    if (create_jtag_riscv_map && ral.get_name() == ral_type_name) begin
       jtag_riscv_map = clone_reg_map("jtag_riscv_map", ral.default_map);
       `uvm_info(`gfn, "Cloned default_map to jtag_riscv_map.", UVM_HIGH)
     end
@@ -242,8 +246,17 @@ class cip_base_env_cfg #(type RAL_T = dv_base_reg_block) extends dv_base_env_cfg
     `DV_CHECK_NE_FATAL(alert_test_csr, null,
                        $sformatf("cannot find alert_test csr in %0s", blk.get_name()))
 
-    `DV_CHECK_EQ(alert_test_csr.get_n_used_bits(), alert_names.size(),
-                 "alert_test field number and list_of_alerts size mismatch")
+    // Ignore the `regwen` field in the alert_test register
+    begin
+      uvm_reg_field alert_test_fields[$];
+      int num_alert_test_fields;
+      alert_test_csr.get_fields(alert_test_fields);
+      foreach (alert_test_fields[i]) begin
+        if (alert_test_fields[i].get_name() != "regwen") num_alert_test_fields++;
+      end
+      `DV_CHECK_EQ(num_alert_test_fields, alert_names.size(),
+                   "alert_test field number and list_of_alerts size mismatch")
+    end
 
     foreach(alert_names[i]) begin
       uvm_reg_field alert_test_field = blk.get_field_by_name(alert_names[i]);

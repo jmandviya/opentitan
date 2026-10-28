@@ -271,13 +271,13 @@ class kmac_scoreboard extends cip_base_scoreboard #(.CFG_T(kmac_env_cfg),
 
             // Once valid sideload keys have been seen, update scoreboard state.
             //
-            // Note: max size of sideloaded key is keymgr_pkg::KeyWidth
+            // Note: max size of sideloaded key is keymgr_dpe_pkg::KeyWidth
 
             sideload_key = cfg.keymgr_sideload_agent_cfg.vif.sideload_key;
 
             `uvm_info(`gfn, $sformatf("detected valid sideload_key: %0p", sideload_key), UVM_HIGH)
 
-            for (int i = 0; i < keymgr_pkg::KeyWidth / 32; i++) begin
+            for (int i = 0; i < keymgr_dpe_pkg::KeyWidth / 32; i++) begin
               keymgr_keys[0][i] = sideload_key.key[0][i*32 +: 32];
               keymgr_keys[1][i] = sideload_key.key[1][i*32 +: 32];
             end
@@ -295,12 +295,12 @@ class kmac_scoreboard extends cip_base_scoreboard #(.CFG_T(kmac_env_cfg),
   // Get sideload keys, pack and return the keys.
   virtual function bit [KMAC_NUM_SHARES-1:0][KMAC_NUM_KEYS_PER_SHARE-1:0][31:0] get_keymgr_keys();
     bit [KMAC_NUM_SHARES-1:0][KMAC_NUM_KEYS_PER_SHARE-1:0][31:0] keymgr_keys;
-    keymgr_pkg::hw_key_req_t sideload_key;
+    keymgr_dpe_pkg::hw_key_req_t sideload_key;
 
     if (cfg.keymgr_sideload_agent_cfg.vif.sideload_key.valid) begin
       sideload_key = cfg.keymgr_sideload_agent_cfg.vif.sideload_key;
       `uvm_info(`gfn, $sformatf("get valid sideload_key: %0p", sideload_key), UVM_HIGH)
-      for (int i = 0; i < keymgr_pkg::KeyWidth / 32; i++) begin
+      for (int i = 0; i < keymgr_dpe_pkg::KeyWidth / 32; i++) begin
         keymgr_keys[0][i] = sideload_key.key[0][i*32 +: 32];
         keymgr_keys[1][i] = sideload_key.key[1][i*32 +: 32];
       end
@@ -415,7 +415,10 @@ class kmac_scoreboard extends cip_base_scoreboard #(.CFG_T(kmac_env_cfg),
                 end
               end
               StAppCfg: begin
-                if (app_mode == AppKeymgr &&
+                // Without the keyed MAC the keymgr interface uses AppCfgKeyMgrStripped, a plain
+                // cSHAKE operation that never consumes the sideload key, so an invalid key does
+                // not raise an error here.
+                if (app_mode == AppKeymgr && cfg.enable_full_kmac &&
                     !cfg.keymgr_sideload_agent_cfg.vif.sideload_key.valid) begin
                   app_st = StErrorKeyNotValid;
                 end else begin
@@ -562,10 +565,10 @@ class kmac_scoreboard extends cip_base_scoreboard #(.CFG_T(kmac_env_cfg),
 
             kmac_app_fifo[app_mode].get(item);
 
-            cg_wrapper = cov.app_cg_wrappers[app_mode];
+            if (cfg.en_cov) cg_wrapper = cov.app_cg_wrappers[app_mode];
 
             foreach (item.m_req.m_reqs[i]) begin
-              bit [keymgr_pkg::KmacDataIfWidth/8-1:0] strb;
+              bit [keymgr_dpe_pkg::KmacDataIfWidth/8-1:0] strb;
               strb = (1 << item.m_req.m_reqs[i].m_num_bytes) - 1;
 
               if (cfg.en_cov) begin
@@ -800,11 +803,14 @@ class kmac_scoreboard extends cip_base_scoreboard #(.CFG_T(kmac_env_cfg),
         if (addr_phase_write) begin
           kmac_cmd = item.a_data[KmacCmdIdx:0];
 
-          // Handle hash_cnt clear conditions
-          if (item.a_data[KmacHashCntClrIdx]) `DV_CHECK(ral.entropy_refresh_hash_cnt.predict(0));
-          if (item.a_data[KmacEntropyReqIdx]) begin
-            `DV_CHECK(ral.entropy_refresh_hash_cnt.predict(0));
-            set_entropy_fetch(1);
+          // Handle hash_cnt clear conditions. The entropy hash counter only exists with the full
+          // KMAC. Otherwise the design ties these CMD fields off, so there is nothing to predict.
+          if (cfg.enable_full_kmac) begin
+            if (item.a_data[KmacHashCntClrIdx]) `DV_CHECK(ral.entropy_refresh_hash_cnt.predict(0));
+            if (item.a_data[KmacEntropyReqIdx]) begin
+              `DV_CHECK(ral.entropy_refresh_hash_cnt.predict(0));
+              set_entropy_fetch(1);
+            end
           end
 
           if (app_fsm_active) begin
@@ -1043,7 +1049,7 @@ class kmac_scoreboard extends cip_base_scoreboard #(.CFG_T(kmac_env_cfg),
         end
       end
       "entropy_refresh_threshold_shadowed": begin
-        if (addr_phase_write &&
+        if (addr_phase_write && cfg.enable_full_kmac &&
             (dv_base_csr.is_staged() || dv_base_csr.get_shadow_update_err())) begin
           bit [HASH_CNT_WIDTH-1:0] threshold = item.a_data;
           if (threshold > 0 && threshold <= `gmv(ral.entropy_refresh_hash_cnt)) begin
@@ -1478,7 +1484,7 @@ class kmac_scoreboard extends cip_base_scoreboard #(.CFG_T(kmac_env_cfg),
     // - the expected output length in bytes
     // - if we are using the xof version of kmac
     if (in_kmac_app) begin
-      // Static app interfaces always return 384 bits (48 bytes).
+      // Static app interfaces always return 512 bits (64 bytes).
       output_len_bytes = AppDigestW / 8;
       // xof_en is 1 when the padded output length is 0,
       // but this will never happen in KMAC_APP
@@ -1708,23 +1714,27 @@ class kmac_scoreboard extends cip_base_scoreboard #(.CFG_T(kmac_env_cfg),
       // We need to essentially decode the encoded output length that is
       // written to the msgfifo as a post-fix to the actual message.
       sha3_pkg::CShake: begin
-        bit [MAX_ENCODE_WIDTH-1:0] full_len = '0;
-        // the very last byte written to msgfifo is the number of bytes that
-        // when put together represent the encoded output length.
-        bit [7:0] num_encoded_byte = msg.pop_back();
+        if (cfg.enable_full_kmac) begin
+          bit [MAX_ENCODE_WIDTH-1:0] full_len = '0;
+          // the very last byte written to msgfifo is the number of bytes that
+          // when put together represent the encoded output length.
+          bit [7:0] num_encoded_byte = msg.pop_back();
 
-        for (int i = 0; i < num_encoded_byte; i++) begin
-          full_len[i*8 +: 8] = msg.pop_back();
-        end
+          for (int i = 0; i < num_encoded_byte; i++) begin
+            full_len[i*8 +: 8] = msg.pop_back();
+          end
 
-        // We should set xof_en if `right_encode(0)` was written to the msgfifo after the message.
-        // right_encode(0) = '{'h0, 'h1}
-        if (num_encoded_byte == 1 && full_len == 0) begin
-          xof_en = 1;
-          // can't set  the output length to 0, so we fall back to the Shake behavior here
-          output_len = digest_share0.size();
+          // We should set xof_en if `right_encode(0)` was written to the msgfifo after the message.
+          // right_encode(0) = '{'h0, 'h1}
+          if (num_encoded_byte == 1 && full_len == 0) begin
+            xof_en = 1;
+            // can't set  the output length to 0, so we fall back to the Shake behavior here
+            output_len = digest_share0.size();
+          end else begin
+            output_len = full_len / 8;
+          end
         end else begin
-          output_len = full_len / 8;
+          output_len = digest_share0.size();
         end
       end
     endcase
@@ -1814,12 +1824,12 @@ class kmac_scoreboard extends cip_base_scoreboard #(.CFG_T(kmac_env_cfg),
   endfunction
 
   // Increment the hash_cnt under the following conditions:
-  // 1). Masking mode is On
+  // 1). Masking mode is On and the full KMAC is enabled
   // 2). Hash_cnt is less than the threshold (except threshold == 0)
   // 3). Hash_cnt is not overflowed
   function void incr_and_predict_hash_cnt();
     bit [HASH_CNT_WIDTH-1:0] curr_hash_cnt_val = `gmv(ral.entropy_refresh_hash_cnt);
-    if (cfg.enable_masking == 0) return;
+    if (cfg.enable_masking == 0 || cfg.enable_full_kmac == 0) return;
 
     // Check overflow
     if (curr_hash_cnt_val != '1) begin

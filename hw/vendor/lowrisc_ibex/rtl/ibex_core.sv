@@ -682,6 +682,7 @@ module ibex_core import ibex_pkg::*; import ibex_cheriot_pkg::*; #(
 
     // from/to IF-ID pipeline register
     .instr_valid_i        (instr_valid_id),
+    .dummy_instr_id_i     (dummy_instr_id),
     .instr_rdata_i        (instr_rdata_id),
     .instr_rdata_alu_i    (instr_rdata_alu_id),
     .instr_rdata_c_i      (instr_rdata_c_id),
@@ -869,10 +870,9 @@ module ibex_core import ibex_pkg::*; import ibex_cheriot_pkg::*; #(
     .rst_ni(rst_ni),
 
     // ALU signal from ID stage
-    .alu_operator_i         (alu_operator_ex),
-    .alu_operand_a_i        (alu_operand_a_ex),
-    .alu_operand_b_i        (alu_operand_b_ex),
-    .alu_instr_first_cycle_i(instr_first_cycle_id),
+    .alu_operator_i (alu_operator_ex),
+    .alu_operand_a_i(alu_operand_a_ex),
+    .alu_operand_b_i(alu_operand_b_ex),
 
     // Branch target ALU signal from ID stage
     .bt_a_operand_i(bt_a_operand),
@@ -992,8 +992,6 @@ module ibex_core import ibex_pkg::*; import ibex_cheriot_pkg::*; #(
       .csr_mshwmb_i            (csr_mshwmb),
       .csr_mshwm_set_o         (csr_mshwm_set),
       .csr_mshwm_new_o         (csr_mshwm_new),
-      .ztop_rdata_i            (32'h0),
-      .ztop_rcap_i             (NULL_CAP),
       .csr_dbg_tclr_fault_i    (csr_dbg_tclr_fault)
     );
 
@@ -1338,9 +1336,13 @@ module ibex_core import ibex_pkg::*; import ibex_cheriot_pkg::*; #(
 
   // Detect invalid MuBi encoding on cheriot_enable_i (neither On nor Off).
   // Gated by instr_exec to not trigger alerts before all signals are initialized.
+  // SEC_CM: CHERIOT_ENABLE.CTRL.MUBI
   if (BaseIsa == BaseIsaRV32IorCHERIoT) begin : gen_cheriot_enable_check
     assign cheriot_enable_mubi_err = instr_exec & !((cheriot_enable_i == IbexMuBiOn) ||
                                                     (cheriot_enable_i == IbexMuBiOff));
+    // Once CHERIoT mode is enabled it must stay enabled until reset.
+    `ASSERT(CheriotEnableOneWaySwitch,
+            (cheriot_enable_i == IbexMuBiOn) |=> (cheriot_enable_i == IbexMuBiOn), clk_i, !rst_ni)
   end else begin : gen_no_cheriot_enable_check
     assign cheriot_enable_mubi_err = 1'b0;
   end
@@ -1360,20 +1362,27 @@ module ibex_core import ibex_pkg::*; import ibex_cheriot_pkg::*; #(
   logic outstanding_load_id;
   logic outstanding_store_id;
 
-  assign outstanding_load_id  = id_stage_i.instr_executing & id_stage_i.lsu_req_dec &
+  assign outstanding_load_id  = id_stage_i.instr_executing &
+                                (id_stage_i.lsu_req_dec | id_stage_i.cheriot_lsu_req_dec) &
                                 ~id_stage_i.lsu_we;
-  assign outstanding_store_id = id_stage_i.instr_executing & id_stage_i.lsu_req_dec &
+  assign outstanding_store_id = id_stage_i.instr_executing &
+                                (id_stage_i.lsu_req_dec | id_stage_i.cheriot_lsu_req_dec) &
                                 id_stage_i.lsu_we;
 
   if (WritebackStage) begin : gen_wb_stage
-    // When the writeback stage is present a load/store could be in ID or WB. A Load/store in ID can
-    // see a response before it moves to WB when it is unaligned otherwise we should only see
-    // a response when load/store is in WB.
-    assign outstanding_load_resp  = outstanding_load_wb |
-      (outstanding_load_id  & load_store_unit_i.split_misaligned_access);
+    // lsu_busy indicates that the LSU's state machine is in a non-idle state and therefore that
+    // we are still waiting for a response to come back. The only exception is the WAIT_GNT state,
+    // in which the access is still waiting for its grant, so no response can be outstanding.
+    logic lsu_expecting_resp;
+    assign lsu_expecting_resp = lsu_busy & (load_store_unit_i.ls_fsm_cs != WAIT_GNT);
 
+    // When the writeback stage is present a load/store could be in ID or WB. A Load/store in ID can
+    // see a response before it moves to WB when it is unaligned or a CHERIoT capability access.
+    // Otherwise we should only see a response when load/store is in WB.
+    assign outstanding_load_resp  = outstanding_load_wb  |
+                                    (outstanding_load_id & lsu_expecting_resp);
     assign outstanding_store_resp = outstanding_store_wb |
-      (outstanding_store_id & load_store_unit_i.split_misaligned_access);
+                                    (outstanding_store_id & lsu_expecting_resp);
 
     // When writing back the result of a load, the load must have made it to writeback
     `ASSERT(NoMemRFWriteWithoutPendingLoad, rf_we_lsu |-> outstanding_load_wb, clk_i, !rst_ni)
@@ -2423,6 +2432,36 @@ module ibex_core import ibex_pkg::*; import ibex_cheriot_pkg::*; #(
     end
   end
 
+  // A step debug entry must follow exactly one instruction that completed or trapped, as seen
+  // on RVFI (which has no dummies). A Zcmp sequence counts once, at its last uop or a trap. DRET is
+  // left out by using the debug mode recorded with its RVFI item. The count saturates, so no wrap.
+  logic [1:0] step_rvfi_cnt_q;
+  logic       step_arch_retire;
+
+  assign step_arch_retire = rvfi_valid && !rvfi_ext_debug_mode &&
+                            (rvfi_trap || !rvfi_ext_expanded_insn_valid ||
+                             rvfi_ext_expanded_insn_last);
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      step_rvfi_cnt_q <= '0;
+    end else if (debug_mode) begin
+      step_rvfi_cnt_q <= '0;
+    end else if (step_arch_retire && !(&step_rvfi_cnt_q)) begin
+      step_rvfi_cnt_q <= step_rvfi_cnt_q + 2'd1;
+    end
+  end
+
+  `COVER(StepCountedTrappedNonFinalUop,
+         rvfi_valid && rvfi_trap && rvfi_ext_expanded_insn_valid &&
+         !rvfi_ext_expanded_insn_last && debug_single_step)
+
+  // Checked when dcsr.cause is saved: the debug entry request comes before the stepped
+  // instruction's RVFI item.
+  `ASSERT(StepDebugEntryHasArchitecturalProgress,
+          debug_mode_entering && debug_csr_save && (debug_cause == DBG_CAUSE_STEP)
+          |=> (step_rvfi_cnt_q == 2'd1))
+
 `else
   logic unused_instr_new_id, unused_instr_id_done, unused_instr_done_wb,
         unused_instr_expanded_id, unused_instr_gets_expanded_id;
@@ -2435,9 +2474,19 @@ module ibex_core import ibex_pkg::*; import ibex_cheriot_pkg::*; #(
 
   // Certain parameter combinations are not supported
   `ASSERT_INIT(IllegalParamSecure, !(SecureIbex && (RV32M == RV32MNone)))
+  `ASSERT_INIT(IllegalParamCHERIoTNoWriteback,
+               !((BaseIsa == BaseIsaRV32IorCHERIoT) && !WritebackStage))
 
   // If the ID stage signals its ready the mult/div FSMs must be idle in the following cycle
   // `ASSERT(MultDivFSMIdleOnIdReady, id_in_ready |=> ex_block_i.sva_multdiv_fsm_idle)
+
+  // A dummy instruction must neither arm nor complete a single step.
+  `ASSERT(SingleStepStableAcrossDummy,
+          instr_valid_id & dummy_instr_id |=> $stable(id_stage_i.controller_i.do_single_step_q))
+  `COVER(SingleStepDummyWhileDisarmed,
+         instr_valid_id & dummy_instr_id & ~id_stage_i.controller_i.do_single_step_q)
+  `COVER(SingleStepDummyWhileArmed,
+         instr_valid_id & dummy_instr_id & id_stage_i.controller_i.do_single_step_q)
 
   //////////
   // FCOV //

@@ -141,9 +141,6 @@ inside a secure environment.
 Setting                | Value
 :----------------------| :----
 EN_SRAM_IFETCH         | True
-EN_CSRNG_SW_APP_READ   | True
-EN_ENTROPY_SRC_FW_READ | True
-EN_ENTROPY_SRC_FW_OVER | True
 
 Notes:
 

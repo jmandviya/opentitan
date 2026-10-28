@@ -8,11 +8,11 @@
   one_paragraph_desc: '''
                       RRAM Controller interfaces the integrated, non-volatile RRAM memory with software and other hardware components in the system, such as Life Cycle Controller, Key Manager, and OTP Controller.
                       It consists of the open-source RRAM controller that interfaces with a third party RRAM macro.
-                      The protocol controller handles direct memory mapped read requests, software controlled read and write requests, as well as life cycle RMA entry.
+                      The RRAM controller handles direct memory mapped read requests, software controlled read and write requests, as well as life cycle RMA entry.
                       The controller supports a differentiation between info and data partitions, RRAM memory protection at page boundaries, and the handling of key manager secrets inaccessible to software.
                       The data partition of the RRAM is further divided into a data region and an OTP region.
                       The controller handles OTP read and write requests that are emulated with a read-set-write algorithm on the OTP region.
-                      The actual physical controller is highly parameterized (number of pages, number of words and word size for each page, and number of read buffers) and supports XEX scrambling configurable by software, as well as ECC support configurable on a page boundary.
+                      The RRAM phy is highly parameterized (number of pages, number of words and word size for each page, and number of read buffers) and supports XEX scrambling configurable by software, as well as ECC support configurable on a page boundary.
                       '''
   // Unique comportable IP identifier defined under KNOWN_CIP_IDS in the regtool.
   cip_id:             "45",
@@ -22,9 +22,9 @@
   sw_checklist:       "/sw/device/lib/dif/dif_rram_ctrl",
   revisions: [
       {
-          version:            "0.1.0",
+          version:            "1.0.0",
           life_stage:         "L1",
-          design_stage:       "D0",
+          design_stage:       "D1",
           verification_stage: "V0",
       },
   ]
@@ -44,19 +44,27 @@
     { name: "rd_full",    type: "status", desc: "Read FIFO full",                            },
     { name: "rd_lvl",     type: "status", desc: "Read FIFO filled to level",                 },
     { name: "op_done",    type: "event",  desc: "Operation complete",                        },
-    { name: "corr_err",   type: "event",  desc: "Correctable error encountered",             },
+    { name: "corr1_err",  type: "event",  desc: "Correctable single-bit error encountered",  },
+    { name: "corr2_err",  type: "event",  desc: "Correctable double-bit error encountered",  },
   ],
 
   alert_list: [
     { name: "recov_err",
-      desc: "RRAM recoverable errors",
+      desc: '''
+            RRAM recoverable errors.
+            Fired whenever a software initiated controller operation completes with any bit set in !!ERR_CODE.
+            ''',
     },
     { name: "fatal_std_err",
-      desc: "RRAM standard fatal errors"
+      desc: '''
+            RRAM standard fatal errors.
+            Fired whenever any bit in !!STD_FAULT_STATUS is set.
+            '''
     },
     { name: "fatal_err",
       desc: '''
-            RRAM fatal errors including uncorrectable ECC errors.
+            RRAM fatal errors.
+            Fired whenever any bit in !!FAULT_STATUS is set, including uncorrectable ECC errors.
 
             Note that this alert is not always fatal.
             The underlying error bits in the !!FAULT_STATUS register remain set until reset, meaning the alert keeps firing.
@@ -154,11 +162,21 @@
       act:     "req",
       package: "pwrmgr_pkg"
     },
-    { struct:  "keymgr_rram",
+    { struct:  "keymgr_dpe_creator_seed",
       type:    "uni",
-      name:    "keymgr",
+      name:    "keymgr_creator_seed",
       act:     "req",
-      package: "rram_ctrl_pkg"
+      default: "'0",
+      package: "keymgr_dpe_pkg",
+      desc:    "Creator seed output to the key manager"
+    },
+    { struct:  "keymgr_dpe_owner_seed",
+      type:    "uni",
+      name:    "keymgr_owner_seed",
+      act:     "req",
+      default: "'0",
+      package: "keymgr_dpe_pkg",
+      desc:    "Owner seed output to the key manager"
     }
   ],
 
@@ -180,8 +198,8 @@
     { name: "MEM.BUS.INTEGRITY",
       desc: '''
             End-to-end bus integrity scheme.
-            Integrity is added in rram_phy_rd  and stored alongside the data in the read-buffer.
-            Integrity is checked in rram_phy_wr.
+            Integrity is added in rram_phy_rd and stored alongside the data in the read-buffer; for reads, the TL-UL requester is expected to check this integrity.
+            For writes, integrity is checked in rram_phy_wr; software should perform a readback to fully verify a write completed correctly.
             '''
     }
     { name: "MEM.ADDR_INFECTION",
@@ -197,19 +215,19 @@
     }
     { name: "LC_CTRL.INTERSIG.MUBI",
       desc: '''
-            Life cycle control signals are used control information partition access
-            and RRAM debug access. See secret information partition, isolated information partitions
-            and jtag connection in documentation for more details.
+            Life cycle control signals are used to control information partition access
+            and RRAM debug access. See the documentation on the secret information partition,
+            isolated information partitions, and JTAG connection for more details.
             '''
     }
     { name: "CTRL.CONFIG.REGWEN",
       desc: "Configurations cannot be changed when an operation is ongoing."
     }
     { name: "DATA_REGIONS.CONFIG.REGWEN",
-      desc: "Each data region has a configurable regwen."
+      desc: "Each data region has a configurable REGWEN."
     }
     { name: "INFO_PAGE.CONFIG.REGWEN",
-      desc: "Each info page has a configurable regwen."
+      desc: "Each info page has a configurable REGWEN."
     }
     { name: "MEM.CTRL.GLOBAL_ESC",
       desc: "Global escalation causes memory to no longer be accessible."
@@ -217,7 +235,8 @@
     { name: "MEM.CTRL.LOCAL_ESC",
       desc: '''
             A subset of fatal errors cause memory to no longer be accessible.
-            This subset is defined in !!STD_FAULT_STATUS.
+            All errors in !!STD_FAULT_STATUS and !!FAULT_STATUS are part of this subset.
+            !!FAULT_STATUS.PHY_RELBL_ERR is only part of it once enabled via !!DIS.LOCAL_ESC_RELBL_ERR.
             '''
     }
     { name: "MEM_DISABLE.CONFIG.MUBI",
@@ -240,11 +259,11 @@
             '''
     }
     { name: "RMA_ENTRY.MEM.SEC_WIPE",
-      desc: "RMA entry entry wipes RRAM memory and overwrites it with random data."
+      desc: "RMA entry wipes RRAM memory and overwrites it with random data."
     }
     { name: "CTRL.FSM.SPARSE",
       desc: '''
-             The following controller FSMs are sparesly encoded:
+            The following controller FSMs are sparesly encoded:
             - rram_ctrl_lcmgr (RMA + seed FSM)
             - rram_ctrl_otp
             - rram_ctrl_arb
@@ -302,6 +321,23 @@
     { name: "WR_TL_LC_GATE.FSM.SPARSE",
       desc: "The control FSM inside the TL-UL gating primitive is sparsely encoded."
     }
+    { name: "MEM.READBACK",
+      desc: '''
+            Every RRAM read is issued twice (a shadow read).
+            If the two results differ, it indicates the data was manipulated during the read process (e.g. by a fault injection attack), and a fatal alert is raised.
+            '''
+    }
+    { name: "MEM.INTEGRITY",
+      desc: '''
+            The RRAM macro computes ECC for every stored word.
+            rram_ctrl controls whether ECC is enabled per region or info page (ecc_en), and captures the location and count of correctable errors in [`CORR1_ERR_LOC`](registers.md#corr1_err_loc)/[`CORR1_ERR_CNT`](registers.md#corr1_err_cnt) (single-bit) and [`CORR2_ERR_LOC`](registers.md#corr2_err_loc)/[`CORR2_ERR_CNT`](registers.md#corr2_err_cnt) (double-bit).
+            '''
+    }
+    { name: "OTP.MEM.INTEGRITY",
+      desc: '''
+            Each OTP word is protected with an additional 8-bit Hamming(72,64) integrity syndrome, stored separately in the OTP integrity page, on top of the RRAM macro's own ECC.
+            '''
+    }
   ]
 
   param_list: [
@@ -356,7 +392,7 @@
     { name:      "WrFifoDepth",
       desc:      "Depth of write fifo",
       type:      "int"
-      default:   "4",
+      default:   "16",
       local:     "false",
       expose:    "true"
     },
@@ -380,6 +416,18 @@
       default:   "8",
       local:     "true"
     },
+    { name:      "NumEmulInfoRegions",
+      desc:      "Number of emulated info page regions (windows) on the data partition",
+      type:      "int",
+      default:   "2",
+      local:     "true"
+    },
+    { name:      "NumEmulInfoSubregions",
+      desc:      "Total number of emulated info subregions across all emulated info regions",
+      type:      "int",
+      default:   "24",
+      local:     "true"
+    },
     { name:      "NumDataPages",
       desc:      "Number of data pages",
       type:      "int",
@@ -389,7 +437,7 @@
     { name:      "NumOtpPages",
       desc:      "Number of data pages reserved for OTP",
       type:      "int",
-      default:   "5",
+      default:   "6",
       local:     "true"
     },
     { name:      "WordsPerPage",
@@ -415,16 +463,16 @@
   features: [
     {
      name: "RRAM_CTRL.ESCALATION"
-     desc: '''rram controller has two sources of escalation.
-           1. Global escalation : This is initiated by the Lifecycle Controller through lc_escalate_en.
-           2. Local escalation : This is activated in response to standard faults detected within the RRAM.
+     desc: '''The RRAM controller has two sources of escalation.
+           1. Global escalation: This is initiated by the life cycle controller through lc_escalate_en.
+           2. Local escalation: This is activated in response to standard faults detected within the RRAM.
                                  These faults are monitored through RRAM_CTRL.STD_FAULT_STATUS.
            '''
     }
     {
       name: "RRAM_CTRL.FETCH_CODE"
       desc: '''If SW programs RRAM_CTRL.EXEC to 0xA26A38F7, code fetch from RRAM device is allowed.
-            All top-level tests that make use of the tests uses this features. No dedicated test is required.
+            All top-level tests make use of this feature. No dedicated test is required.
             '''
     }
     {
@@ -468,14 +516,24 @@
             '''
     }
     {
+      name: "RRAM_CTRL.MEM_PROTECTION.EMULATED_INFO_PAGES"
+      desc: '''RRAM has only 8 physical info pages, fewer than firmware needs.
+            SW can define up to two windows on the data partition through RRAM_CTRL.EMUL_INFO_REGION, each enabled by its own mubi EN field and locked by its own RRAM_CTRL.EMUL_INFO_REGWEN.
+            Each window can be split into up to 12 subregions using TOR-style (relative-offset) addressing, configured through RRAM_CTRL.EMUL_INFO_SUBREGION and locked individually by RRAM_CTRL.EMUL_INFO_SUBREGION_REGWEN.
+            Each subregion has its own read, write, scramble, and ECC permissions, configured through RRAM_CTRL.EMUL_INFO_SUBREGION_CFG and locked separately by RRAM_CTRL.EMUL_INFO_SUBREGION_CFG_REGWEN.
+            Host reads always deny the whole window, regardless of subregion configuration.
+            Emulated info subregions take priority over the generic memory-protection regions, but never over the fixed OTP exclusion region.
+            '''
+    }
+    {
       name: "RRAM_CTRL.OP.HOST_READ"
       desc: "Host can read any data partition by providing a valid physical address."
     }
     {
       name: "RRAM_CTRL.OP.PROTOCOL_CTRL"
-      desc: '''As opposed to the host, the protocol controller can read, write both data and info partitions.
+      desc: '''As opposed to the host, the RRAM controller can read and write both data and info partitions.
             It has lower priority than host requests.
-            While an operation is in progress, other hw initiated request i.e. RMA, will be held until the operation is finished.
+            While an operation is in progress, other HW-initiated requests, i.e. RMA, are held until the operation is finished.
             '''
     }
     {
@@ -487,6 +545,7 @@
               - Isolated partition
               - Data partition
             This procedure is implemented to guarantee that any sensitive information previously stored in these partitions remains unrecoverable.
+            From the start of the RMA request until the next reset, new software initiated controller operations are rejected with an error and host reads are answered with an error.
             '''
     }
   ],
@@ -511,13 +570,14 @@
             resval: false,
           },
           { bits: "7:4",
-            name: "RELBL_ERR_FATAL",
+            name: "LOCAL_ESC_RELBL_ERR",
             mubi: true,
             desc: '''
-                  Configuration bit for reliablity error.
-                  Once this config bit is set to MuBi4True, every fault in !!FAULT_STATUS will disable the RRAM immediately.
-                  Otherwise !!FAULT_STATUS.PHY_RELBL_ERR is excluded for the local escalation to deal with firmware selection during the boot process.
-                  Since this register is rw1s instead of rw this configuration cannot be reverted.
+                  Enables local escalation for reliability errors.
+                  Once this config bit is set to any value other than MuBi4False, !!FAULT_STATUS.PHY_RELBL_ERR will disable the RRAM until the next reset.
+                  Otherwise !!FAULT_STATUS.PHY_RELBL_ERR is excluded from the local escalation, to deal with firmware selection during the boot process.
+                  The fatal_err alert is raised regardless of this setting.
+                  Since this register is rw1s instead of rw, this configuration cannot be reverted.
                   '''
             resval: false,
           },
@@ -626,7 +686,7 @@
               { value: "2",
                 name: "Rewrite",
                 desc: '''
-                      This operation reads a specific location and writes it back to the RRAM with the intention to fix errors that occured in the RRAM over time.
+                      This operation reads a specific location and writes it back to the RRAM with the intention to fix errors that occurred in the RRAM over time.
                       '''
               },
             ]
@@ -691,7 +751,7 @@
               { bits: "0",
                 name: "REGION",
                 resval: "1"
-                desc: "Region register write enable.  Once set to 0, it can longer be configured to 1",
+                desc: "Region register write enable. Once set to 0, it can no longer be configured to 1.",
                 enum: [
                   { value: "0",
                     name: "Region locked",
@@ -786,9 +846,9 @@
             { bits: "23:12",
               name: "SIZE",
               desc: '''
-                    Region size in number of pages.
-                    For example, if base is 0 and size is 1, then the region is defined by page 0.
-                    If base is 0 and size is 2, then the region is defined by pages 0 and 1.
+                    Region size, encoded as (number of pages - 1).
+                    For example, if base is 0 and size is 0, then the region is defined by page 0.
+                    If base is 0 and size is 1, then the region is defined by pages 0 and 1.
                     ''',
               resval: "0"
             },
@@ -852,7 +912,7 @@
                 resval: "1"
                 desc: '''
                       Info page write enable.
-                      Once set to 0, it can longer be configured to 1.
+                      Once set to 0, it can no longer be configured to 1.
                       '''
                 enum: [
                   { value: "0",
@@ -930,6 +990,243 @@
         },
       },
 
+      { multireg: {
+          cname: "RRAM_CTRL",
+          name: "EMUL_INFO_REGWEN"
+          desc: '''
+                Emulated info region registers configuration enable.
+                Subregions within a window are only considered once this is locked, see !!EMUL_INFO_SUBREGION.
+                '''
+          count: "NumEmulInfoRegions",
+          swaccess: "rw0c",
+          hwaccess: "hro",
+          compact: false,
+          fields: [
+              { bits: "0",
+                name: "REGION",
+                resval: "1"
+                desc: "Region register write enable. Once set to 0, it can no longer be configured to 1.",
+                enum: [
+                  { value: "0",
+                    name: "Region locked",
+                    desc: '''
+                          Region can no longer be configured until next reset.
+                          '''
+                  },
+                  { value: "1",
+                    name: "Region enabled",
+                    desc: '''
+                          Region can be configured.
+                          '''
+                  },
+                ]
+              },
+          ],
+        },
+      },
+
+      { multireg: {
+          cname: "RRAM_CTRL",
+          name: "EMUL_INFO_REGION",
+          desc: '''
+                Base and size configuration for an emulated info page region (window).
+                Unlike !!MP_REGION, this register carries no access permissions of its own.
+                See !!EMUL_INFO_SUBREGION_CFG for per-subregion permissions.
+                Host access to this window is always blocked in hardware.
+                Once EN is set, any access to the window that is not covered by an enabled subregion is denied.
+                Enabling this and locking it via !!EMUL_INFO_REGWEN is a precondition for using any subregions configured through !!EMUL_INFO_SUBREGION and !!EMUL_INFO_SUBREGION_CFG within this window.
+                '''
+          count: "NumEmulInfoRegions",
+          swaccess: "rw",
+          hwaccess: "hro",
+          regwen: "EMUL_INFO_REGWEN",
+          regwen_multi: true,
+          fields: [
+            { bits: "11:0",
+              name: "BASE",
+              desc: '''
+                    Region base page. Note the granularity is page, not byte or word.
+                    ''',
+              resval: "0"
+            },
+            { bits: "23:12",
+              name: "SIZE",
+              desc: '''
+                    Region size, encoded as (number of pages - 1).
+                    ''',
+              resval: "0"
+            },
+            { bits: "27:24",
+              name: "EN",
+              mubi: true,
+              desc: '''
+                    Window enabled.
+                    If enabled, accesses to the window that are not covered by an enabled subregion are denied.
+                    If two enabled windows overlap, the subregions of both windows are disabled and both windows are denied entirely.
+                    If disabled, neither the window nor any of its subregions is matched against any incoming transaction.
+                    ''',
+              resval: false
+            },
+          ],
+        },
+      },
+
+      { multireg: {
+          cname: "RRAM_CTRL",
+          name: "EMUL_INFO_SUBREGION_REGWEN"
+          desc: '''
+                Emulated info subregion size registers configuration enable.
+                Independent from !!EMUL_INFO_SUBREGION_CFG_REGWEN.
+                A subregion's placement and its permissions can be locked separately.
+                A subregion is only considered once its placement is locked.
+                '''
+          count: "NumEmulInfoSubregions",
+          swaccess: "rw0c",
+          hwaccess: "hro",
+          compact: false,
+          fields: [
+              { bits: "0",
+                name: "REGION",
+                resval: "1"
+                desc: "Subregion write enable. Once set to 0, it can no longer be configured to 1.",
+                enum: [
+                  { value: "0",
+                    name: "Subregion locked",
+                    desc: '''
+                          Subregion size can no longer be configured until next reset.
+                          Locking this is one of the conditions for the subregion to become active.
+                          See !!EMUL_INFO_SUBREGION for the full conditions.
+                          '''
+                  },
+                  { value: "1",
+                    name: "Subregion enabled",
+                    desc: '''
+                          Subregion size can be configured.
+                          '''
+                  },
+                ]
+              },
+          ],
+        },
+      },
+
+      { multireg: {
+          cname: "RRAM_CTRL",
+          name: "EMUL_INFO_SUBREGION",
+          desc: '''
+                Subregions are configured with TOR (top of range) addressing, but relative to the window's base.
+                A subregion's range runs from the prior subregion's TOP plus one up to its own TOP.
+                Configure subregions in increasing TOP order, locking each starting from the first subregion of its window.
+                A subregion is enabled once all of the following hold.
+                Its window is enabled via !!EMUL_INFO_REGION.EN and locked via !!EMUL_INFO_REGWEN.
+                Its own placement and that of every lower-indexed subregion of its window are locked via !!EMUL_INFO_SUBREGION_REGWEN, i.e., the whole lock chain back to the first subregion of its window.
+                Its TOP does not exceed its window's SIZE.
+                Its window does not overlap any other enabled window.
+                '''
+          count: "NumEmulInfoSubregions",
+          swaccess: "rw",
+          hwaccess: "hro",
+          regwen: "EMUL_INFO_SUBREGION_REGWEN",
+          regwen_multi: true,
+          fields: [
+            { bits: "7:0",
+              name: "TOP",
+              desc: '''
+                    Subregion's last page, as an offset in pages from its window's base page.
+                    ''',
+              resval: "0"
+            },
+          ],
+        },
+      },
+
+      { multireg: {
+          cname: "RRAM_CTRL",
+          name: "EMUL_INFO_SUBREGION_CFG_REGWEN"
+          desc: '''
+                Emulated info subregion permission registers configuration enable.
+                Independent from !!EMUL_INFO_SUBREGION_REGWEN.
+                A subregion's permissions and its placement can be locked separately.
+                '''
+          count: "NumEmulInfoSubregions",
+          swaccess: "rw0c",
+          hwaccess: "none",
+          compact: false,
+          fields: [
+              { bits: "0",
+                name: "REGION",
+                resval: "1"
+                desc: "Subregion write enable. Once set to 0, it can no longer be configured to 1.",
+                enum: [
+                  { value: "0",
+                    name: "Subregion locked",
+                    desc: '''
+                          Subregion permissions can no longer be configured until next reset.
+                          '''
+                  },
+                  { value: "1",
+                    name: "Subregion enabled",
+                    desc: '''
+                          Subregion permissions can be configured.
+                          '''
+                  },
+                ]
+              },
+          ],
+        },
+      },
+
+      { multireg: {
+          cname: "RRAM_CTRL",
+          name: "EMUL_INFO_SUBREGION_CFG",
+          desc: '''
+                Memory property configuration for an emulated info subregion.
+                There is no separate EN field.
+                Bits 3:0 are reserved, so RD_EN, WR_EN, SCRAMBLE_EN, and ECC_EN sit at the same bit positions as in !!MP_REGION_CFG and !!INFO_PAGE_CFG.
+                See !!EMUL_INFO_SUBREGION for the full conditions under which a subregion is enabled.
+                '''
+          count: "NumEmulInfoSubregions",
+          swaccess: "rw",
+          hwaccess: "hro",
+          regwen: "EMUL_INFO_SUBREGION_CFG_REGWEN",
+          regwen_multi: true,
+          fields: [
+            { bits: "7:4",
+              name: "RD_EN",
+              mubi: true,
+              desc: '''
+                    Subregion can be read.
+                    ''',
+              resval: false
+            },
+            { bits: "11:8",
+              name: "WR_EN",
+              mubi: true,
+              desc: '''
+                    Subregion can be written.
+                    ''',
+              resval: false
+            }
+            { bits: "15:12",
+              name: "SCRAMBLE_EN",
+              mubi: true,
+              desc: '''
+                    Subregion is scramble enabled.
+                    ''',
+              resval: false
+            }
+            { bits: "19:16",
+              name: "ECC_EN",
+              mubi: true,
+              desc: '''
+                    Subregion is ECC enabled (both integrity and reliability ECC).
+                    ''',
+              resval: false
+            }
+          ],
+        },
+      },
+
       { name: "HW_INFO_CFG_OVERRIDE",
         desc: "HW interface info configuration rule overrides",
         swaccess: "rw",
@@ -939,10 +1236,13 @@
             name: "SCRAMBLE_DIS",
             mubi: true,
             desc: '''
-                  The hardwired hardware info configuration rules for scramble enable are logically AND'd with this field.
-                  If the hardware rules hardwires scramble to enable, we can disable via software if needed.
+                  If this field is MuBi4True, scrambling is disabled for the lcmgr info page.
+                  If this field is MuBi4False, scrambling is controlled by the hardwired hardware info configuration rules.
+                  This allows software to disable scrambling if needed.
 
-                  By default this field is false.
+                  The behaviour is not specified when this field is not a valid MuBi4 value.
+
+                  By default this field is MuBi4False.
                   ''',
             resval: false
           }
@@ -950,10 +1250,13 @@
             name: "ECC_DIS",
             mubi: true,
             desc: '''
-                  The hardwired hardware info configuration rules for ECC enable are logically AND'd with this field.
-                  If the hardware rules hardwires ECC to enable, we can disable via software if needed.
+                  If this field is MuBi4True, ECC calculation and checks are disabled for the lcmgr info page.
+                  If this field is MuBi4False, the use of ECC is controlled by the hardwired hardware info configuration rules.
+                  This allows software to disable ECC checks if needed.
 
-                  By default this field is false.
+                  The behaviour is not specified when this field is not a valid MuBi4 value.
+
+                  By default this field is MuBi4False.
                   ''',
             resval: false
           }
@@ -1008,6 +1311,7 @@
             desc: '''
                   Software has supplied an undefined operation.
                   See !!CONTROL.OP for list of valid operations.
+                  This error is also set if a software operation is started before the initialization has completed, see !!STATUS.INIT_DONE and !!STATUS.KEYS_VALID, or while software access is disabled from the start of the RMA entry process.
                   '''
           },
           { bits: "1",
@@ -1085,7 +1389,7 @@
           { bits: "5",
             name: "phy_wr_intg_err",
             desc: '''
-                  The RRAM phy controller encountered a write data transmission integrity error.
+                  The RRAM phy encountered a write data transmission integrity error.
                   '''
           },
           { bits: "6",
@@ -1221,20 +1525,21 @@
 
                   Note that this error bit can be cleared to allow firmware dealing with multi-bit ECC errors during firmware selection and verification.
                   After passing this stage, it is recommended that firmware classifies the corresponding alert as fatal on the receiver end, i.e, inside the alert handler.
+                  Clearing this bit does not revoke a local escalation it has already caused while !!DIS.LOCAL_ESC_RELBL_ERR was set.
                   '''
           },
           { bits: "10",
             name: "phy_rd_intg_err",
             swaccess: "ro",
             desc: '''
-                  The RRAM phy controller encountered an integrity error. The shadow response was not identical to the original response.
+                  The RRAM phy encountered an integrity error. The shadow response was not identical to the original response.
                   '''
           },
           { bits: "11",
             name: "phy_rd_ctrl_err",
             swaccess: "ro",
             desc: '''
-                  The RRAM phy controller detected one of the following errors:
+                  The RRAM phy detected one of the following errors:
                   - a mismatch of command request integrity and command response integrity.
                   - a spurious valid.
                   - a spurious rram read request.
@@ -1268,8 +1573,8 @@
         ]
       },
 
-      { name: "CORR_ERR_CNT",
-        desc: "Count of correctable ECC errors",
+      { name: "CORR1_ERR_CNT",
+        desc: "Count of correctable single-bit ECC errors",
         swaccess: "rw",
         hwaccess: "hrw",
         fields: [
@@ -1281,19 +1586,50 @@
         ]
       },
 
-      { name: "CORR_ERR_LOC",
-        desc: "Last address that was successfully corrected",
+      { name: "CORR2_ERR_CNT",
+        desc: "Count of correctable double-bit ECC errors",
+        swaccess: "rw",
+        hwaccess: "hrw",
+        fields: [
+          { bits: "7:0",
+            name: "val",
+            desc: "This count will not wrap when saturated",
+            resval: 0,
+          },
+        ]
+      },
+
+      { name: "CORR1_ERR_LOC",
+        desc: "Last address that was corrected by the ECC decoder with a single-bit error",
         swaccess: "ro",
         hwaccess: "hwo",
         fields: [
           { bits: "20:0",
             name: "addr",
-            desc: "Last successfully corrected address",
+            desc: "Last corrected address",
             resval: 0,
           },
           { bits: "24",
             name: "part"
-            desc: "Last successfully corrected partition",
+            desc: "Last corrected partition",
+            resval: 0,
+          },
+        ]
+      }
+
+      { name: "CORR2_ERR_LOC",
+        desc: "Last address that was corrected by the ECC decoder with a double-bit error",
+        swaccess: "ro",
+        hwaccess: "hwo",
+        fields: [
+          { bits: "20:0",
+            name: "addr",
+            desc: "Last corrected address",
+            resval: 0,
+          },
+          { bits: "24",
+            name: "part"
+            desc: "Last corrected partition",
             resval: 0,
           },
         ]
@@ -1310,7 +1646,7 @@
           },
           { bits: "1",
             name: "init_done",
-            desc: "RRAM phy controller is initialized (including RRAM)"
+            desc: "RRAM phy is initialized (including RRAM)"
             tags: [ // Bit changes after start from reset value to 1b1 due to initialization
             "excl:CsrAllTests:CsrExclAll"]
           },
@@ -1408,6 +1744,7 @@
                 RRAM write FIFO.
 
                 The FIFO is 4 entries of 4B words. This FIFO can only be programmed by software after a write operation has been initiated via the !!CONTROL register.
+                Writes while no software operation is in progress complete without an error response and the data is discarded.
                 This ensures accidental programming of the write FIFO cannot lock up the system.
                 '''
         },

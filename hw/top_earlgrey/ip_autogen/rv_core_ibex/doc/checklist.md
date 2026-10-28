@@ -1,10 +1,7 @@
 # Ibex Processor Core Checklist
 
-This checklist is for [Hardware Stage][] transitions for the [Ibex Processor Core.](../README.md)
+This checklist is for [Hardware Stage](../../../../../doc/project_governance/development_stages.md) transitions for the [Ibex Processor Core.](../README.md)
 All checklist items refer to the content in the [Checklist.](../../../../../doc/project_governance/checklist/README.md)
-
-[Hardware Stage]: ../../../../../doc/project_governance/development_stages.md
-
 
 ## Design Checklist
 
@@ -12,16 +9,16 @@ All checklist items refer to the content in the [Checklist.](../../../../../doc/
 
 Type          | Item                           | Resolution  | Note/Collaterals
 --------------|--------------------------------|-------------|------------------
-Documentation | [SPEC_COMPLETE][]              | Done        |
-Documentation | [CSR_DEFINED][]                | Done        | lowRISC/ibex#307
+Documentation | [SPEC_COMPLETE][]              | Done        | [RV_CORE_IBEX Design Spec](../README.md)
+Documentation | [CSR_DEFINED][]                | Done        | [Registers](registers.md)
 RTL           | [CLKRST_CONNECTED][]           | Done        |
-RTL           | [IP_TOP][]                     | Done        |
-RTL           | [IP_INSTANTIABLE][]            | Done        |
-RTL           | [PHYSICAL_MACROS_DEFINED_80][] | N/A         |
+RTL           | [IP_TOP][]                     | Done        | rv_core_ibex.sv
+RTL           | [IP_INSTANTIABLE][]            | Done        | Elaborates cleanly in EarlGrey
+RTL           | [PHYSICAL_MACROS_DEFINED_80][] | Done        | ICache SRAMs via prim_ram_1p
 RTL           | [FUNC_IMPLEMENTED][]           | Done        |
 RTL           | [ASSERT_KNOWN_ADDED][]         | Done        |
 Code Quality  | [LINT_SETUP][]                 | Done        |
-
+Security      | [SEC_CM_SCOPED][]              | Done        | [Security countermeasures](interfaces.md#security-countermeasures)
 
 [SPEC_COMPLETE]:              ../../../../../doc/project_governance/checklist/README.md#spec_complete
 [CSR_DEFINED]:                ../../../../../doc/project_governance/checklist/README.md#csr_defined
@@ -32,38 +29,35 @@ Code Quality  | [LINT_SETUP][]                 | Done        |
 [FUNC_IMPLEMENTED]:           ../../../../../doc/project_governance/checklist/README.md#func_implemented
 [ASSERT_KNOWN_ADDED]:         ../../../../../doc/project_governance/checklist/README.md#assert_known_added
 [LINT_SETUP]:                 ../../../../../doc/project_governance/checklist/README.md#lint_setup
-
-### D1 Exceptions
-
-[PHYSICAL_MACROS_DEFINED_80][] is waived as Ibex doesn't have memories inside.
+[SEC_CM_SCOPED]:              ../../../../../doc/project_governance/checklist/README.md#sec_cm_scoped
 
 ### D2
 
 Type          | Item                      | Resolution  | Note/Collaterals
 --------------|---------------------------|-------------|------------------
-Documentation | [NEW_FEATURES][]          | N/A         |
-Documentation | [BLOCK_DIAGRAM][]         | Done        |
-Documentation | [DOC_INTERFACE][]         | Done        |
-Documentation | [DOC_INTEGRATION_GUIDE][] | Waived      | This checklist item has been added retrospectively.
-Documentation | [MISSING_FUNC][]          | N/A         |
-Documentation | [FEATURE_FROZEN][]        | Done        |
-RTL           | [FEATURE_COMPLETE][]      | Done        |
-RTL           | [PORT_FROZEN][]           | Done        |
-RTL           | [ARCHITECTURE_FROZEN][]   | Done        |
-RTL           | [REVIEW_TODO][]           | Done        | Minor TODOs remain, waived
-RTL           | [STYLE_X][]               | Done        | will be reworked (#366)
-RTL           | [CDC_SYNCMACRO][]         | Done        |
-Code Quality  | [LINT_PASS][]             | Done        | Lint waivers created, not finalized
-Code Quality  | [CDC_SETUP][]             | Waived      | No block-level flow available - waived to top-level signoff.
-Code Quality  | [RDC_SETUP][]             | Waived      | No block-level flow available - waived to top-level signoff.
-Code Quality  | [AREA_CHECK][]            | Done        | Area smoke check done (on FPGA)
-Code Quality  | [TIMING_CHECK][]          | Done        | FPGA timing acceptable
-Security      | [SEC_CM_DOCUMENTED][]     | Done        |
+Documentation | [NEW_FEATURES][]          | Not Started |
+Documentation | [BLOCK_DIAGRAM][]         | Not Started |
+Documentation | [DOC_INTERFACE][]         | Not Started |
+Documentation | [DOC_INTEGRATION_D2][]    | Not Started |
+Documentation | [MISSING_FUNC][]          | Not Started |
+Documentation | [FEATURE_FROZEN][]        | Not Started |
+RTL           | [FEATURE_COMPLETE][]      | Not Started |
+RTL           | [PORT_FROZEN][]           | Not Started |
+RTL           | [ARCHITECTURE_FROZEN][]   | Not Started |
+RTL           | [REVIEW_TODO][]           | Not Started |
+RTL           | [STYLE_X][]               | Not Started |
+RTL           | [CDC_SYNCMACRO][]         | Not Started |
+Code Quality  | [LINT_PASS][]             | Not Started |
+Code Quality  | [CDC_SETUP][]             | Not Started |
+Code Quality  | [RDC_SETUP][]             | Not Started |
+Code Quality  | [AREA_CHECK][]            | Not Started |
+Code Quality  | [TIMING_CHECK][]          | Not Started |
+Security      | [SEC_CM_DOCUMENTED][]     | Not Started |
 
 [NEW_FEATURES]:          ../../../../../doc/project_governance/checklist/README.md#new_features
 [BLOCK_DIAGRAM]:         ../../../../../doc/project_governance/checklist/README.md#block_diagram
 [DOC_INTERFACE]:         ../../../../../doc/project_governance/checklist/README.md#doc_interface
-[DOC_INTEGRATION_GUIDE]: ../../../../../doc/project_governance/checklist/README.md#doc_integration_guide
+[DOC_INTEGRATION_D2]:    ../../../../../doc/project_governance/checklist/README.md#doc_integration_d2
 [MISSING_FUNC]:          ../../../../../doc/project_governance/checklist/README.md#missing_func
 [FEATURE_FROZEN]:        ../../../../../doc/project_governance/checklist/README.md#feature_frozen
 [FEATURE_COMPLETE]:      ../../../../../doc/project_governance/checklist/README.md#feature_complete
@@ -83,13 +77,13 @@ Security      | [SEC_CM_DOCUMENTED][]     | Done        |
 
  Type         | Item                         | Resolution  | Note/Collaterals
 --------------|------------------------------|-------------|------------------
-Security      | [SEC_CM_ASSETS_LISTED][]     | Done        |
-Security      | [SEC_CM_IMPLEMENTED][]       | Done        |
-Security      | [SEC_CM_RND_CNST][]          | Done        |
-Security      | [SEC_CM_NON_RESET_FLOPS][]   | Done        |
-Security      | [SEC_CM_SHADOW_REGS][]       | Done        |
-Security      | [SEC_CM_RTL_REVIEWED][]      | Done        |
-Security      | [SEC_CM_COUNCIL_REVIEWED][]  | Done        |
+Security      | [SEC_CM_ASSETS_LISTED][]     | Not Started |
+Security      | [SEC_CM_IMPLEMENTED][]       | Not Started |
+Security      | [SEC_CM_RND_CNST][]          | Not Started |
+Security      | [SEC_CM_NON_RESET_FLOPS][]   | Not Started |
+Security      | [SEC_CM_SHADOW_REGS][]       | Not Started |
+Security      | [SEC_CM_RTL_REVIEWED][]      | Not Started |
+Security      | [SEC_CM_COUNCIL_REVIEWED][]  | Not Started |
 
 [SEC_CM_ASSETS_LISTED]:    ../../../../../doc/project_governance/checklist/README.md#sec_cm_assets_listed
 [SEC_CM_IMPLEMENTED]:      ../../../../../doc/project_governance/checklist/README.md#sec_cm_implemented
@@ -104,6 +98,7 @@ Security      | [SEC_CM_COUNCIL_REVIEWED][]  | Done        |
  Type         | Item                    | Resolution  | Note/Collaterals
 --------------|-------------------------|-------------|------------------
 Documentation | [NEW_FEATURES_D3][]     | Not Started |
+Documentation | [DOC_INTEGRATION_D3][]  | Not Started |
 RTL           | [TODO_COMPLETE][]       | Not Started |
 Code Quality  | [LINT_COMPLETE][]       | Not Started |
 Code Quality  | [CDC_COMPLETE][]        | Not Started |
@@ -112,8 +107,11 @@ Review        | [REVIEW_RTL][]          | Not Started |
 Review        | [REVIEW_DELETED_FF][]   | Not Started |
 Review        | [REVIEW_SW_CHANGE][]    | Not Started |
 Review        | [REVIEW_SW_ERRATA][]    | Not Started |
+Review        | Reviewer(s)             | Not Started |
+Review        | Signoff date            | Not Started |
 
 [NEW_FEATURES_D3]:      ../../../../../doc/project_governance/checklist/README.md#new_features_d3
+[DOC_INTEGRATION_D3]:   ../../../../../doc/project_governance/checklist/README.md#doc_integration_d3
 [TODO_COMPLETE]:        ../../../../../doc/project_governance/checklist/README.md#todo_complete
 [LINT_COMPLETE]:        ../../../../../doc/project_governance/checklist/README.md#lint_complete
 [CDC_COMPLETE]:         ../../../../../doc/project_governance/checklist/README.md#cdc_complete
@@ -126,7 +124,9 @@ Review        | [REVIEW_SW_ERRATA][]    | Not Started |
 ## Verification Checklist
 
 Ibex verification is tracked in the [Ibex documentation](https://ibex-core.readthedocs.io/en/latest/03_reference/verification_stages.html).
-Ibex is at **V2S**.
+Ibex is at **V0**.
+
+The verification checklist for the previously taped-out Ibex version (verification stage V2S, v2.1.0) used in Earl Grey v1.0.0 can be found in the [Ibex documentation tagged earlgrey_1.0.0](https://ibex-core.readthedocs.io/en/earlgrey_1.0.0/03_reference/verification_stages.html).
 
 Features specific to rv_core_ibex do not have block-level verification.
 Top-level testing suffices for these, see the [rv_core_ibex DV document](../dv/README.md) for more details.

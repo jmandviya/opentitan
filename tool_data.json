@@ -30,6 +30,12 @@
         "comment": "RTL simulator."
     },
     {
+        "name": "Verdi",
+        "vendor": "Synopsys",
+        "version": "X-2025.06-SP2-1",
+        "comment": "Provides the FSDB dumper (novas) libraries VCS loads to dump waves in FSDB format."
+    },
+    {
         "name": "Vivado",
         "vendor": "Xilinx",
         "version": "2021.1",
@@ -40,5 +46,11 @@
         "vendor": "Cadence",
         "version": "24.03-s007",
         "comment": "Provides xrun for simulations and is used to run our full UVM verification environment."
+    },
+    {
+        "name": "vManager",
+        "vendor": "Cadence",
+        "version": "24.03-s002",
+        "comment": "Provides imc, which DVSim uses to merge and report Xcelium coverage."
     }
 ]

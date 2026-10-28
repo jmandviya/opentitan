@@ -9,7 +9,7 @@
 
 /**
  * Mode magic values generated with
- * $ ./util/design/sparse-fsm-encode.py -d 4 -m 14 -n 11 \
+ * $ ./util/design/sparse-fsm-encode.py -d 4 -m 20 -n 11 \
  *    -s 347912204 --avoid-zero
  *
  * Call the same utility with the same arguments and a higher -m to generate
@@ -29,6 +29,9 @@
 .equ MODE_RSA_2048_KEYGEN, 0x799
 .equ MODE_RSA_3072_KEYGEN, 0x4e0
 .equ MODE_RSA_4096_KEYGEN, 0x3ca
+.equ MODE_RSA_2048_KEYGEN_DET, 0x643
+.equ MODE_RSA_3072_KEYGEN_DET, 0x426
+.equ MODE_RSA_4096_KEYGEN_DET, 0x734
 
 # Encryption/Signature modes
 
@@ -40,10 +43,16 @@
 # Supported key lengths.
 .equ MODE_RSA_2048_MODEXP,    0x582
 .equ MODE_RSA_2048_MODEXP_F4, 0x095
+.equ MODE_RSA_2048_MODEXP_DE, 0x47b
+.equ MODE_RSA_2048_MODEXP_E,  0x0a3
 .equ MODE_RSA_3072_MODEXP,    0x20e
 .equ MODE_RSA_3072_MODEXP_F4, 0x1be
+.equ MODE_RSA_3072_MODEXP_DE, 0x159
+.equ MODE_RSA_3072_MODEXP_E,  0x684
 .equ MODE_RSA_4096_MODEXP,    0x361
 .equ MODE_RSA_4096_MODEXP_F4, 0x3d4
+.equ MODE_RSA_4096_MODEXP_DE, 0x4d6
+.equ MODE_RSA_4096_MODEXP_E,  0x7e7
 
 /**
  * Hardened boolean values.
@@ -60,16 +69,25 @@
 .globl MODE_RSA_2048_KEYGEN
 .globl MODE_RSA_3072_KEYGEN
 .globl MODE_RSA_4096_KEYGEN
+.globl MODE_RSA_2048_KEYGEN_DET
+.globl MODE_RSA_3072_KEYGEN_DET
+.globl MODE_RSA_4096_KEYGEN_DET
 .globl MODE_RSA_512_MODEXP
 .globl MODE_RSA_512_MODEXP_F4
 .globl MODE_RSA_1024_MODEXP
 .globl MODE_RSA_1024_MODEXP_F4
 .globl MODE_RSA_2048_MODEXP
 .globl MODE_RSA_2048_MODEXP_F4
+.globl MODE_RSA_2048_MODEXP_DE
+.globl MODE_RSA_2048_MODEXP_E
 .globl MODE_RSA_3072_MODEXP
 .globl MODE_RSA_3072_MODEXP_F4
+.globl MODE_RSA_3072_MODEXP_DE
+.globl MODE_RSA_3072_MODEXP_E
 .globl MODE_RSA_4096_MODEXP
 .globl MODE_RSA_4096_MODEXP_F4
+.globl MODE_RSA_4096_MODEXP_DE
+.globl MODE_RSA_4096_MODEXP_E
 
 .section .text.start
 start:
@@ -127,6 +145,33 @@ start:
   addi    x3, x0, MODE_RSA_4096_MODEXP_F4
   beq     x2, x3, rsa_4096_modexp_f4
 
+  addi    x3, x0, MODE_RSA_2048_MODEXP_DE
+  beq     x2, x3, rsa_2048_modexp_de
+
+  addi    x3, x0, MODE_RSA_2048_MODEXP_E
+  beq     x2, x3, rsa_2048_modexp_e
+
+  addi    x3, x0, MODE_RSA_3072_MODEXP_DE
+  beq     x2, x3, rsa_3072_modexp_de
+
+  addi    x3, x0, MODE_RSA_3072_MODEXP_E
+  beq     x2, x3, rsa_3072_modexp_e
+
+  addi    x3, x0, MODE_RSA_4096_MODEXP_DE
+  beq     x2, x3, rsa_4096_modexp_de
+
+  addi    x3, x0, MODE_RSA_4096_MODEXP_E
+  beq     x2, x3, rsa_4096_modexp_e
+
+  addi    x3, x0, MODE_RSA_2048_KEYGEN_DET
+  beq     x2, x3, rsa_2048_keygen_det
+
+  addi    x3, x0, MODE_RSA_3072_KEYGEN_DET
+  beq     x2, x3, rsa_3072_keygen_det
+
+  addi    x3, x0, MODE_RSA_4096_KEYGEN_DET
+  beq     x2, x3, rsa_4096_keygen_det
+
   /* Unsupported mode; fail. */
   unimp
   unimp
@@ -159,6 +204,19 @@ rsa_4096_keygen:
 
   /* Tail-call keygen. */
   jal     x0, do_keygen
+  unimp
+
+rsa_2048_keygen_det:
+  li      x30, 8
+  jal     x0, do_keygen_det
+
+rsa_3072_keygen_det:
+  li      x30, 12
+  jal     x0, do_keygen_det
+
+rsa_4096_keygen_det:
+  li      x30, 16
+  jal     x0, do_keygen_det
 
 rsa_512_modexp:
   /* Enable message blinding. */
@@ -211,6 +269,28 @@ rsa_2048_modexp_f4:
   /* Tail-call modexp_f4. */
   jal     x0, do_modexp_f4
 
+rsa_2048_modexp_de:
+  /* Enable message blinding with custom exponent e. */
+  la      x2, rsa_e
+  lw      x29, 0(x2)
+
+  /* Set the number of limbs for the modulus (2048 / 256 = 8). */
+  li      x30, 8
+
+  /* Tail-call modexp. */
+  jal     x0, do_modexp
+
+rsa_2048_modexp_e:
+  /* Load custom public exponent e. */
+  la      x2, rsa_e
+  lw      x15, 0(x2)
+
+  /* Set the number of limbs for the modulus (2048 / 256 = 8). */
+  li      x30, 8
+
+  /* Tail-call modexp_e. */
+  jal     x0, do_modexp_e
+
 rsa_3072_modexp:
   /* Enable message blinding. */
   li x29, 1
@@ -228,6 +308,28 @@ rsa_3072_modexp_f4:
   /* Tail-call modexp_f4. */
   jal     x0, do_modexp_f4
 
+rsa_3072_modexp_de:
+  /* Enable message blinding with custom exponent e. */
+  la      x2, rsa_e
+  lw      x29, 0(x2)
+
+  /* Set the number of limbs for the modulus (3072 / 256 = 12). */
+  li      x30, 12
+
+  /* Tail-call modexp. */
+  jal     x0, do_modexp
+
+rsa_3072_modexp_e:
+  /* Load custom public exponent e. */
+  la      x2, rsa_e
+  lw      x15, 0(x2)
+
+  /* Set the number of limbs for the modulus (3072 / 256 = 12). */
+  li      x30, 12
+
+  /* Tail-call modexp_e. */
+  jal     x0, do_modexp_e
+
 rsa_4096_modexp:
   /* Enable message blinding. */
   li x29, 1
@@ -244,6 +346,28 @@ rsa_4096_modexp_f4:
 
   /* Tail-call modexp_f4. */
   jal     x0, do_modexp_f4
+
+rsa_4096_modexp_de:
+  /* Enable message blinding with custom exponent e. */
+  la      x2, rsa_e
+  lw      x29, 0(x2)
+
+  /* Set the number of limbs for the modulus (4096 / 256 = 16). */
+  li      x30, 16
+
+  /* Tail-call modexp. */
+  jal     x0, do_modexp
+
+rsa_4096_modexp_e:
+  /* Load custom public exponent e. */
+  la      x2, rsa_e
+  lw      x15, 0(x2)
+
+  /* Set the number of limbs for the modulus (4096 / 256 = 16). */
+  li      x30, 16
+
+  /* Tail-call modexp_e. */
+  jal     x0, do_modexp_e
 
 /**
  * Invoke the RSA key generation algorithm.
@@ -266,9 +390,10 @@ do_keygen:
   jal x1, rsa_keygen
 
   # Restore mode indicator from the scratchpad.
-  la x16, mode
   la x17, mode_tmp
   lw x18, 0(x17)
+_do_keygen_set_mode:
+  la x16, mode
   sw x18, 0(x16)
 
   # Move the Miller-Rabin counter from the scratchpad.
@@ -291,6 +416,24 @@ do_keygen:
   sw       x3, 0(x2)
 
   ecall
+  unimp
+
+do_keygen_det:
+  la x16, mode
+  la x17, mode_tmp
+  lw x18, 0(x16)
+  sw x18, 0(x17)
+
+  jal x1, rsa_keygen_det
+
+  li x16, 8
+  addi x18, x0, MODE_RSA_2048_KEYGEN
+  beq x30, x16, _do_keygen_set_mode
+  li x16, 12
+  addi x18, x0, MODE_RSA_3072_KEYGEN
+  beq x30, x16, _do_keygen_set_mode
+  addi x18, x0, MODE_RSA_4096_KEYGEN
+  jal x0, _do_keygen_set_mode
 
 /**
  * Precompute constants and call modular exponentiation.
@@ -298,6 +441,7 @@ do_keygen:
  * Calls `ecall` when done; should be tail-called by mode-specific routines
  * after the number of limbs is set.
  *
+ * @param[in]          x29: 1 for default F4=65537 blinding, or custom odd e>=3
  * @param[in]          x30: number of limbs for modulus
  * @param[in]      dmem[n]: n, modulus
  * @param[in]      dmem[d]: d, exponent
@@ -316,7 +460,10 @@ do_modexp:
        dmem[inout] = dmem[inout]^dmem[d] mod dmem[n] */
   jal      x1, modexp
 
-  # Restore mode indicator based on limb count x30.
+  # Restore mode indicator based on limb count x30 and exponent x29.
+  li   x2, 1
+  bne  x29, x2, _restore_mode_de
+
   li   x16, 8
   addi x17, x0, MODE_RSA_2048_MODEXP
   beq  x30, x16, _restore_mode
@@ -326,6 +473,18 @@ do_modexp:
   beq  x30, x16, _restore_mode
 
   addi x17, x0, MODE_RSA_4096_MODEXP
+  jal  x0, _restore_mode
+
+_restore_mode_de:
+  li   x16, 8
+  addi x17, x0, MODE_RSA_2048_MODEXP_DE
+  beq  x30, x16, _restore_mode
+
+  li   x16, 12
+  addi x17, x0, MODE_RSA_3072_MODEXP_DE
+  beq  x30, x16, _restore_mode
+
+  addi x17, x0, MODE_RSA_4096_MODEXP_DE
 
 _restore_mode:
   la   x16, mode
@@ -344,12 +503,15 @@ _restore_mode:
  * Calls `ecall` when done; should be tail-called by mode-specific routines
  * after the number of limbs is set.
  *
+ * @param[in]          x15: custom public exponent e (at do_modexp_e; 0 for F4)
  * @param[in]          x30: number of limbs for modulus
  * @param[in]      dmem[n]: n, modulus
  * @param[in]  dmem[inout]: a, base for exponentiation
- * @param[out] dmem[inout]: result, a^65537 mod n
+ * @param[out] dmem[inout]: result, a^e mod n
  */
 do_modexp_f4:
+  li    x15, 0
+do_modexp_e:
   /* Load pointers to modulus and Montgomery constant buffers. */
   la    x16, rsa_n
   la    x17, RR
@@ -358,7 +520,7 @@ do_modexp_f4:
   jal      x1, modload
 
   /* Run exponentiation.
-       dmem[work_buf] = dmem[inout]^65537 mod dmem[n] */
+       dmem[work_buf] = dmem[inout]^e mod dmem[n] */
   la       x14, inout
   la       x2, work_buf
   jal      x1, modexp_65537

@@ -30,9 +30,8 @@
       desc: '''
             Verify the countermeasure(s) CONFIG.REGWEN.
             Verify that:
-            1) ME_REGWEN and SW_REGUPD cannot be set back to 1 after being set to 0 once.
-            2) If ME_REGWEN is not set, MODULE_ENABLE cannot be modified.
-            3) Only if MODULE_ENABLE is MuBi4False and SW_REGUPD is 1, a) REGWEN reads as 1 and b) associated control and threshold registers can be modified.
+            1) SW_REGUPD cannot be set back to 1 after being set to 0 once.
+            2) Only if MODULE_ENABLE is MuBi4False and SW_REGUPD is 1, a) REGWEN reads as 1 and b) associated control and threshold registers can be modified.
             '''
       stage: V2S
       tests: ["entropy_src_rng", "entropy_src_cfg_regwen"]
@@ -58,15 +57,6 @@
             '''
       stage: V2S
       tests: ["entropy_src_rng"]
-    }
-    {
-      name: sec_cm_intersig_mubi
-      desc: '''
-            Verify the countermeasure(s) INTERSIG.MUBI.
-            Verify that unless the otp_en_entropy_src_fw_read or otp_en_entropy_src_fw_over input signals are equal to MuBi8True the DUT doesn't allow reading entropy from the ENTROPY_DATA register or from the FW_OV_RD_DATA register, respectively.
-            '''
-      stage: V2S
-      tests: ["entropy_src_rng", "entropy_src_fw_ov"]
     }
     {
       name: sec_cm_main_sm_fsm_sparse

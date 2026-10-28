@@ -82,13 +82,28 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        top: [earlgrey, darjeeling, englishbreakfast]
+        top: [earlgrey, darjeeling]
     steps:
       - uses: actions/checkout@v6
       - name: Prepare Nix
         uses: ./.github/actions/prepare-nix
       - name: Run hardware lint
         run: nix run --quiet --no-warn-dirty .#lint -- hw ${{ matrix.top }}
+
+  # Per-top slang lint and elaboration.
+  lint_slang:
+    name: Lint slang (${{ matrix.top }})
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        top: [earlgrey, darjeeling]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Prepare Nix
+        uses: ./.github/actions/prepare-nix
+      - name: Run slang lint
+        run: nix run --quiet --no-warn-dirty .#lint -- slang ${{ matrix.top }}
 
   # Whole-tree Verible style check:
   #
@@ -155,7 +170,7 @@ jobs:
   quick_lint:
     name: Lint (quick)
     runs-on: ubuntu-latest
-    needs: [lint_hygiene, lint_gen, lint_hw, lint_bazel]
+    needs: [lint_hygiene, lint_gen, lint_hw, lint_slang, lint_bazel]
     if: ${{ !cancelled() }}
     steps:
       - name: Check lint results
@@ -261,11 +276,13 @@ jobs:
     needs: [quick_lint, gate]
     runs-on: ubuntu-22.04
     if: ${{ github.event_name != 'merge_group' && needs.gate.outputs.run_full == 'true' }}
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0 # Bitstream cache requires all commits.
+      - name: Prepare Nix
+        uses: ./.github/actions/prepare-nix
       - name: Prepare environment
         uses: ./.github/actions/prepare-env
         with:
@@ -281,12 +298,15 @@ jobs:
       - name: Display environment
         run: |
           python3 --version
-          fusesoc --version
-          verilator --version
+          nix run --quiet --no-warn-dirty .#eda -- fusesoc --version
+          nix run --quiet --no-warn-dirty .#eda -- verilator --version
       - name: OTBN ISS test
         run: make -C hw/ip/otbn/dv/otbnsim test
+      # The smoke test builds a Verilator model with FuseSoC, so it runs in the
+      # development shell.  The RISC-V toolchain installed above stays visible,
+      # as the shell bind-mounts the directories of the host.
       - name: OBTN smoke test
-        run: ./hw/ip/otbn/dv/smoke/run_smoke.sh
+        run: nix run --quiet --no-warn-dirty .#eda -- ./hw/ip/otbn/dv/smoke/run_smoke.sh
       - name: Assemble & link code snippets
         run: make -C hw/ip/otbn/util asm-check
 
@@ -314,14 +334,18 @@ jobs:
     if: ${{ github.event_name != 'merge_group' && needs.gate.outputs.run_full == 'true' }}
     steps:
       - uses: actions/checkout@v6
+      - name: Prepare Nix
+        uses: ./.github/actions/prepare-nix
       - name: Prepare environment
         uses: ./.github/actions/prepare-env
         with:
           service_account_json: '${{ secrets.BAZEL_CACHE_CREDS }}'
       - name: Build simulator with Verilator
         run: |
-          ./bazelisk.sh build --//hw/top=englishbreakfast //hw:verilator_real
-          sim_binary_path=$(./bazelisk.sh cquery --//hw/top=englishbreakfast --output=files //hw:verilator_real)
+          nix run --quiet --no-warn-dirty .#eda -- \
+            ./bazelisk.sh build --//hw/top=englishbreakfast //hw:verilator_real
+          sim_binary_path=$(nix run --quiet --no-warn-dirty .#eda -- \
+            ./bazelisk.sh cquery --//hw/top=englishbreakfast --output=files //hw:verilator_real)
           mkdir -p build-bin/hw/top_englishbreakfast
           cp ${sim_binary_path} build-bin/hw/top_englishbreakfast/
       - name: Upload binary
@@ -331,7 +355,7 @@ jobs:
           path: build-bin/hw/top_englishbreakfast/Vchip_englishbreakfast_verilator
           overwrite: true
       - name: Test
-        run: ./ci/scripts/run-english-breakfast-verilator-tests.sh
+        run: nix run --quiet --no-warn-dirty .#eda -- ./ci/scripts/run-english-breakfast-verilator-tests.sh
         # The patching mechanism for english breakfast is incompatible with multitop
         # so this job will fail. At the same time, multitop is not advanced enough
         # that we can compile those tests for EB yet. Ignore this job until we can
@@ -346,12 +370,14 @@ jobs:
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v6
+      - name: Prepare Nix
+        uses: ./.github/actions/prepare-nix
       - name: Prepare environment
         uses: ./.github/actions/prepare-env
         with:
           service_account_json: '${{ secrets.BAZEL_CACHE_CREDS }}'
       - name: Run fast Verilator tests
-        run: ./ci/scripts/run-verilator-tests.sh
+        run: nix run --quiet --no-warn-dirty .#eda -- ./ci/scripts/run-verilator-tests.sh
       - name: Publish Bazel test results
         uses: ./.github/actions/publish-bazel-test-results
         if: ${{ !cancelled() }}
@@ -363,15 +389,17 @@ jobs:
     runs-on: ubuntu-22.04
     needs: quick_lint
     if: ${{ github.event_name != 'merge_group' }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
+      - name: Prepare Nix
+        uses: ./.github/actions/prepare-nix
       - name: Prepare environment
         uses: ./.github/actions/prepare-env
         with:
           service_account_json: '${{ secrets.BAZEL_CACHE_CREDS }}'
       - name: Run Verilator test
-        run: ./ci/scripts/run-verilator-tests.sh --sanity
+        run: nix run --quiet --no-warn-dirty .#eda -- ./ci/scripts/run-verilator-tests.sh --sanity
       - name: Publish Bazel test results
         uses: ./.github/actions/publish-bazel-test-results
         if: ${{ !cancelled() }}
@@ -555,19 +583,19 @@ jobs:
       - name: Build software targets
         run: |
           # Build everything we selected, excluding some tags.
-          ./bazelisk.sh build                                     \
-            --remote_download_outputs=minimal                     \
-            --build_tests_only=false                              \
-            --define DISABLE_VERILATOR_BUILD=true                 \
-            --test_tag_filters=-broken,-fpga,-qemu,-verilator,-dv \
+          ./bazelisk.sh build                                                       \
+            --remote_download_outputs=minimal                                       \
+            --build_tests_only=false                                                \
+            --define DISABLE_VERILATOR_BUILD=true                                   \
+            --test_tag_filters=-broken,-skip_build_in_ci,-fpga,-qemu,-verilator,-dv \
             --target_pattern_file="$target_pattern_file"
       - name: Run software unit tests
         run: |
-          ./bazelisk.sh test                                               \
-            --build_tests_only=true                                        \
-            --test_output=errors                                           \
-            --define DISABLE_VERILATOR_BUILD=true                          \
-            --test_tag_filters=-broken,-fpga,-qemu,-verilator,-dv,-silicon \
+          ./bazelisk.sh test                                                                 \
+            --build_tests_only=true                                                          \
+            --test_output=errors                                                             \
+            --define DISABLE_VERILATOR_BUILD=true                                            \
+            --test_tag_filters=-broken,-skip_build_in_ci,-fpga,-qemu,-verilator,-dv,-silicon \
             --target_pattern_file="$target_pattern_file"
       - name: Publish Bazel test results
         uses: ./.github/actions/publish-bazel-test-results
@@ -602,6 +630,7 @@ jobs:
           # Compile some selected targets
           ./bazelisk.sh build                                \
             --remote_download_outputs=minimal                \
+            --define DISABLE_VERILATOR_BUILD=true            \
             --build_tests_only=false                         \
             --//hw/top=darjeeling                            \
             //sw/device/...

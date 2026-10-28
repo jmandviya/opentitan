@@ -8,6 +8,8 @@
 #include "sw/device/lib/base/math.h"
 #include "sw/device/lib/base/memory.h"
 #include "sw/device/lib/crypto/drivers/entropy.h"
+#include "sw/device/lib/crypto/impl/cmvp.h"
+#include "sw/device/lib/crypto/impl/state.h"
 #include "sw/device/lib/crypto/impl/status.h"
 #include "sw/device/lib/crypto/include/config.h"
 #include "sw/device/lib/crypto/include/datatypes.h"
@@ -31,6 +33,10 @@
 static status_t seed_material_construct(
     const otcrypto_const_byte_buf_t *value,
     entropy_seed_material_t *seed_material) {
+  if (value == NULL || value->len == 0) {
+    seed_material->len = 0;
+    return OTCRYPTO_OK;
+  }
   if (value->len > kEntropySeedBytes) {
     return OTCRYPTO_BAD_ARGS;
   }
@@ -108,9 +114,12 @@ static otcrypto_status_t seed_material_xor(
 
 otcrypto_status_t otcrypto_drbg_instantiate(
     const otcrypto_const_byte_buf_t *perso_string) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_DRBG_INSTANTIATE);
+  OTCRYPTO_LOCKED_STATE_CHECK();
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
   // Check for NULL pointers or bad length.
-  if (perso_string->len != 0 && perso_string->data == NULL) {
+  if (perso_string != NULL && perso_string->len != 0 &&
+      perso_string->data == NULL) {
     return OTCRYPTO_BAD_ARGS;
   }
 #endif
@@ -120,13 +129,14 @@ otcrypto_status_t otcrypto_drbg_instantiate(
       hardened_memshred(seed_material.data, ARRAYSIZE(seed_material.data)));
   HARDENED_TRY(seed_material_construct(perso_string, &seed_material));
 
-  HARDENED_TRY(entropy_csrng_uninstantiate());
   return otcrypto_eval_exit(entropy_csrng_instantiate(
       /*disable_trng_input=*/kHardenedBoolFalse, &seed_material));
 }
 
 otcrypto_status_t otcrypto_drbg_reseed(
     const otcrypto_const_byte_buf_t *additional_input) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_DRBG_RESEED);
+  OTCRYPTO_LOCKED_STATE_CHECK();
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
   // Check for NULL pointers or bad length.
   if (additional_input == NULL ||
@@ -147,6 +157,8 @@ otcrypto_status_t otcrypto_drbg_reseed(
 otcrypto_status_t otcrypto_drbg_manual_instantiate(
     const otcrypto_const_byte_buf_t *entropy,
     const otcrypto_const_byte_buf_t *perso_string) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_DRBG_MANUAL_INSTANTIATE);
+  OTCRYPTO_LOCKED_STATE_CHECK();
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
   // Check for NULL pointers or bad length.
   if (perso_string->len != 0 && perso_string->data == NULL) {
@@ -173,6 +185,8 @@ otcrypto_status_t otcrypto_drbg_manual_instantiate(
 otcrypto_status_t otcrypto_drbg_manual_reseed(
     const otcrypto_const_byte_buf_t *entropy,
     const otcrypto_const_byte_buf_t *additional_input) {
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_DRBG_MANUAL_RESEED);
+  OTCRYPTO_LOCKED_STATE_CHECK();
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
   // Check for NULL pointers or bad length.
   if (additional_input == NULL ||
@@ -224,17 +238,20 @@ static otcrypto_status_t generate(
 otcrypto_status_t otcrypto_drbg_generate(
     const otcrypto_const_byte_buf_t *additional_input,
     otcrypto_word32_buf_t *drbg_output) {
-  if (drbg_output->len == 0) {
-    // Nothing to do.
-    return OTCRYPTO_OK;
-  }
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_DRBG_GENERATE);
+  OTCRYPTO_LOCKED_STATE_CHECK();
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
-  if (additional_input == NULL ||
+  if (additional_input == NULL || drbg_output == NULL ||
       (additional_input->len != 0 && additional_input->data == NULL) ||
-      drbg_output == NULL || drbg_output->data == NULL) {
+      (drbg_output->len != 0 && drbg_output->data == NULL)) {
     return OTCRYPTO_BAD_ARGS;
   }
 #endif
+  if (launder32(drbg_output->len) == 0) {
+    HARDENED_CHECK_EQ(drbg_output->len, 0);
+    // Nothing to do.
+    return otcrypto_eval_exit(OTCRYPTO_OK);
+  }
 
   // Randomize destination buffer.
   HARDENED_TRY(hardened_memshred(drbg_output->data, drbg_output->len));
@@ -246,22 +263,26 @@ otcrypto_status_t otcrypto_drbg_generate(
 otcrypto_status_t otcrypto_drbg_manual_generate(
     const otcrypto_const_byte_buf_t *additional_input,
     otcrypto_word32_buf_t *drbg_output) {
-  if (drbg_output->len == 0) {
-    // Nothing to do.
-    return OTCRYPTO_OK;
-  }
+  OTCRYPTO_SET_CMVP_INDICATOR(OTCRYPTO_FUNCTION_DRBG_MANUAL_GENERATE);
+  OTCRYPTO_LOCKED_STATE_CHECK();
 #ifndef OTCRYPTO_DISABLE_NULL_CHECKS
-  if (additional_input == NULL ||
+  if (additional_input == NULL || drbg_output == NULL ||
       (additional_input->len != 0 && additional_input->data == NULL) ||
-      drbg_output == NULL || drbg_output->data == NULL) {
+      (drbg_output->len != 0 && drbg_output->data == NULL)) {
     return OTCRYPTO_BAD_ARGS;
   }
 #endif
+  if (launder32(drbg_output->len) == 0) {
+    HARDENED_CHECK_EQ(drbg_output->len, 0);
+    // Nothing to do.
+    return otcrypto_eval_exit(OTCRYPTO_OK);
+  }
 
   return otcrypto_eval_exit(generate(/*fips_check=*/kHardenedBoolFalse,
                                      additional_input, drbg_output));
 }
 
 otcrypto_status_t otcrypto_drbg_uninstantiate(void) {
+  OTCRYPTO_LOCKED_STATE_CHECK();
   return otcrypto_eval_exit(entropy_csrng_uninstantiate());
 }

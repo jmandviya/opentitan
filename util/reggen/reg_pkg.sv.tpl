@@ -45,12 +45,16 @@ ${hdr}
 %>\
 
   typedef struct packed {
-    % if r.is_homogeneous():
+    % if r.reinit is not None:
+    logic reinit;
+    % endif
+    % if r.is_homogeneous(inregwen=True):
       ## If we have a homogeneous register or multireg, there is just one field
       ## (possibly replicated many times). The typedef is for one copy of that
-      ## field.
+      ## field. An inregwen control field is internal, so it is excluded here.
 <%
-      field = r.get_field_list()[0]
+      field = [f for f in r.get_field_list()
+               if r0.inregwen is None or f.name != r0.inregwen][0]
       field_q_width = field.get_n_bits(r0.hwext, r0.hwre, ['q'])
       field_q_bits = lib.bitarray(field_q_width, 2)
 %>\
@@ -101,12 +105,13 @@ ${hdr}
 %>\
 
   typedef struct packed {
-    % if r.is_homogeneous():
+    % if r.is_homogeneous(inregwen=True):
       ## If we have a homogeneous register or multireg, there is just one field
       ## (possibly replicated many times). The typedef is for one copy of that
-      ## field.
+      ## field. An inregwen control field is internal, so it is excluded here.
 <%
-      field = r.get_field_list()[0]
+      field = [f for f in r.get_field_list()
+               if r0.inregwen is None or f.name != r0.inregwen][0]
       field_d_width = field.get_n_bits(r0.hwext, r0.hwre, ['d'])
       field_d_bits = lib.bitarray(field_d_width, 2)
 %>\
@@ -165,7 +170,7 @@ ${hdr}
 <%def name="reg2hw_for_iface(iface_name, iface_desc, for_iface, rb)">\
 <%
 lpfx = gen_rtl.get_type_name_pfx(block, iface_name)
-nbits = rb.get_n_bits(["q", "qe", "re"])
+nbits = rb.get_n_bits(["q", "qe", "re", "reinit"])
 packbit = 0
 
 addr_width = rb.get_addr_width()
@@ -185,7 +190,7 @@ reg_if_width = 2 + addr_width + data_width + data_byte_width
 <%
     r0 = gen_rtl.get_r0(r)
     struct_type = gen_rtl.get_reg_tx_type(block, r, False)
-    struct_width = r0.get_n_bits(['q', 'qe', 're'])
+    struct_width = r0.get_n_bits(['q', 'qe', 're', 'reinit'])
 
     if isinstance(r, MultiRegister):
       struct_type += " [{}:0]".format(len(r.pregs) - 1)

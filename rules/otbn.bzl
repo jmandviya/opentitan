@@ -23,7 +23,7 @@ def _otbn_assemble_sources(ctx, additional_srcs = []):
     ctx.actions.run(
         outputs = [obj],
         inputs = depset(
-            direct = files + [ctx.executable._otbn_as],
+            direct = files + ctx.files.includes + [ctx.executable._otbn_as],
             transitive = [cc_toolchain.all_files],
         ),
         env = {
@@ -217,7 +217,7 @@ def otbn_sim_test_suite(name, tests, **kwargs):
         tags = tags,
     )
 
-def otbn_sim_testgen(name, testgen, number, srcs = [], deps = [], type = "expectation", **kwargs):
+def otbn_sim_testgen(name, testgen, number, srcs = [], deps = [], includes = [], type = "expectation", **kwargs):
     """Bazel macro to automatically generate `number` of testcases.
 
     An index i for (0 <= i < `number`) will be appended to the test name.
@@ -230,6 +230,7 @@ def otbn_sim_testgen(name, testgen, number, srcs = [], deps = [], type = "expect
             name = tests[i],
             srcs = srcs,
             deps = deps,
+            includes = includes,
             testgen = testgen,
             seed = i,
             type = type,
@@ -351,6 +352,10 @@ otbn_library = rv_rule(
     implementation = _otbn_library,
     attrs = {
         "srcs": attr.label_list(allow_files = True),
+        "includes": attr.label_list(
+            allow_files = True,
+            doc = "Files that the sources pull in with .include directives.",
+        ),
         "args": attr.string_list(),
         "_riscv32_as": attr.label(
             default = Label("@lowrisc_rv32imcb_toolchain//:bin/riscv32-unknown-elf-as"),
@@ -373,6 +378,10 @@ otbn_binary = rv_rule(
     implementation = _otbn_binary,
     attrs = {
         "srcs": attr.label_list(allow_files = True),
+        "includes": attr.label_list(
+            allow_files = True,
+            doc = "Files that the sources pull in with .include directives.",
+        ),
         "deps": attr.label_list(providers = [DefaultInfo]),
         "args": attr.string_list(),
         "_riscv32_ar": attr.label(
@@ -424,6 +433,10 @@ otbn_sim_test = rv_rule(
     test = True,
     attrs = {
         "srcs": attr.label_list(allow_files = True),
+        "includes": attr.label_list(
+            allow_files = True,
+            doc = "Files that the sources pull in with .include directives.",
+        ),
         "deps": attr.label_list(providers = [DefaultInfo]),
         "binary": attr.label(providers = [DefaultInfo, OutputGroupInfo, CcInfo]),
         "exp": attr.label(allow_single_file = True),
@@ -488,6 +501,10 @@ otbn_autogen_sim_test = rv_rule(
     test = True,
     attrs = {
         "srcs": attr.label_list(allow_files = True),
+        "includes": attr.label_list(
+            allow_files = True,
+            doc = "Files that the sources pull in with .include directives.",
+        ),
         "deps": attr.label_list(providers = [DefaultInfo]),
         "_riscv32_ar": attr.label(
             default = Label("@lowrisc_rv32imcb_toolchain//:bin/riscv32-unknown-elf-ar"),

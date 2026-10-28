@@ -41,6 +41,7 @@ class otbn_env_cov extends cip_base_env_cov #(.CFG_T(otbn_env_cfg));
   `DEF_MNEM(mnem_csrrs,         "csrrs");
   `DEF_MNEM(mnem_csrrw,         "csrrw");
   `DEF_MNEM(mnem_ecall,         "ecall");
+  `DEF_MNEM(mnem_wfi,           "wfi");
   `DEF_MNEM(mnem_loop,          "loop");
   `DEF_MNEM(mnem_loopi,         "loopi");
   `DEF_MNEM(mnem_bn_add,        "bn.add");
@@ -110,6 +111,7 @@ class otbn_env_cov extends cip_base_env_cov #(.CFG_T(otbn_env_cfg));
   `DEF_MNEM_BIN(mnem_beq);           `DEF_MNEM_BIN(mnem_bne);           \
   `DEF_MNEM_BIN(mnem_jal);           `DEF_MNEM_BIN(mnem_jalr);          \
   `DEF_MNEM_BIN(mnem_csrrs);         `DEF_MNEM_BIN(mnem_csrrw);         \
+  `DEF_MNEM_BIN(mnem_wfi);                                              \
   `DEF_MNEM_BIN(mnem_loop);          `DEF_MNEM_BIN(mnem_loopi);         \
   `DEF_MNEM_BIN(mnem_bn_add);        `DEF_MNEM_BIN(mnem_bn_addc);       \
   `DEF_MNEM_BIN(mnem_bn_addi);       `DEF_MNEM_BIN(mnem_bn_addm);       \
@@ -327,7 +329,7 @@ class otbn_env_cov extends cip_base_env_cov #(.CFG_T(otbn_env_cfg));
       12'h7d5: return 8;   // MOD5
       12'h7d6: return 9;   // MOD6
       12'h7d7: return 10;  // MOD7
-      12'hfc8: return 11;  // RND_PREFETCH
+      12'h7d8: return 11;  // RND_PREFETCH
       12'hfc0: return 12;  // RND
       12'hfc1: return 13;  // URND
       default: return -1;  // (invalid)
@@ -906,7 +908,7 @@ class otbn_env_cov extends cip_base_env_cov #(.CFG_T(otbn_env_cfg));
   covergroup enc_bnan_cg
     with function sample(mnem_str_t    mnemonic,
                          logic [31:0]  insn_data,
-                         logic [255:0] wdr_operand_a,
+                         logic [255:0] wdr_operand_b,
                          flags_t       flags_write_data [2],
                          logic [255:0] wdr_write_data);
 
@@ -915,11 +917,11 @@ class otbn_env_cov extends cip_base_env_cov #(.CFG_T(otbn_env_cfg));
       illegal_bins other = default;
     }
 
-    // The shifted version of wdr_operand_a is nonzero
+    // The shifted version of wdr_operand_b is nonzero
     `DEF_SEEN_CP(nz_shifted_cp,
                  0 != (insn_data[30] ?
-                       (wdr_operand_a >> {insn_data[29:25], 3'b0}) :
-                       (wdr_operand_a << {insn_data[29:25], 3'b0})))
+                       (wdr_operand_b >> {insn_data[29:25], 3'b0}) :
+                       (wdr_operand_b << {insn_data[29:25], 3'b0})))
 
     sb_cp: coverpoint insn_data[29:25] { bins extremes[] = {'0, '1}; }
     st_cp: coverpoint insn_data[30];
@@ -930,7 +932,7 @@ class otbn_env_cov extends cip_base_env_cov #(.CFG_T(otbn_env_cfg));
     `DEF_MNEM_CROSS3(st, sb, nz_shifted)
 
     // Toggle coverage of the input result
-    `DEF_WDR_TOGGLE_COV(wrs, wdr_operand_a)
+    `DEF_WDR_TOGGLE_COV(wrs, wdr_operand_b)
 
     // BN.NOT can write the M, L and Z flags, but does not affect the carry flag (bit 0 in the
     // flags_t struct).
@@ -1214,11 +1216,12 @@ class otbn_env_cov extends cip_base_env_cov #(.CFG_T(otbn_env_cfg));
     `DEF_GPR_TOGGLE_CROSS(grs2)
   endgroup
 
-  covergroup enc_ecall_cg with function sample(mnem_str_t mnemonic, logic [31:0] insn_data);
-    // Used by the ECALL instruction. Although it uses the I encoding in the tooling, it has no
-    // immediate or register operands so we give it a separate covergroup here.
+  covergroup enc_fixed_cg with function sample(mnem_str_t mnemonic, logic [31:0] insn_data);
+    // Used by the ECALL and WFI instructions. Although they use the I encoding in the tooling, they
+    // have no immediate or register operands so we give them a separate covergroup here.
     mnemonic_cp: coverpoint mnemonic {
       `DEF_MNEM_BIN(mnem_ecall);
+      `DEF_MNEM_BIN(mnem_wfi);
       illegal_bins other = default;
     }
   endgroup
@@ -2170,7 +2173,7 @@ class otbn_env_cov extends cip_base_env_cov #(.CFG_T(otbn_env_cfg));
     `DEF_SEEN_CP(underflow_and_bad_addr_cp,
                  call_stack_underflow &&
                  (grs1 != 5'd1) &&
-                 ((0 < addr) || (addr >= DmemSizeByte) || ((addr & 32'd31) != 0)))
+                 ((addr < 0) || (addr >= DmemSizeByte) || ((addr & 32'd31) != 0)))
     `DEF_MNEM_CROSS(underflow_and_bad_addr)
 
     // Set both increments and have a bad WDR index in *grd/*grs2.
@@ -2182,14 +2185,14 @@ class otbn_env_cov extends cip_base_env_cov #(.CFG_T(otbn_env_cfg));
     `DEF_SEEN_CP(inc_both_and_bad_addr_cp,
                  inc_both &&
                  !call_stack_underflow &&
-                 ((0 < addr) || (addr >= DmemSizeByte) || ((addr & 32'd31) != 0)))
+                 ((addr < 0) || (addr >= DmemSizeByte) || ((addr & 32'd31) != 0)))
     `DEF_MNEM_CROSS(inc_both_and_bad_addr)
 
     // Have a bad WDR index and also compute a bad address
     `DEF_SEEN_CP(bad_wdr_and_bad_addr_cp,
                  !call_stack_underflow &&
                  (operand_b >= 32) &&
-                 ((0 < addr) || (addr >= DmemSizeByte) || ((addr & 32'd31) != 0)))
+                 ((addr < 0) || (addr >= DmemSizeByte) || ((addr & 32'd31) != 0)))
     `DEF_MNEM_CROSS(bad_wdr_and_bad_addr)
 
     // Underflow call stack with grs1, set both increments, and have a bad WDR index in *grd/*grs2
@@ -2205,7 +2208,7 @@ class otbn_env_cov extends cip_base_env_cov #(.CFG_T(otbn_env_cfg));
                  call_stack_underflow &&
                  inc_both &&
                  (grs1 != 5'd1) &&
-                 ((0 < addr) || (addr >= DmemSizeByte) || ((addr & 32'd31) != 0)))
+                 ((addr < 0) || (addr >= DmemSizeByte) || ((addr & 32'd31) != 0)))
     `DEF_MNEM_CROSS(underflow_and_inc_both_and_bad_addr)
 
     // Set both increments, have a bad WDR index and compute a bad address
@@ -2213,7 +2216,7 @@ class otbn_env_cov extends cip_base_env_cov #(.CFG_T(otbn_env_cfg));
                  inc_both &&
                  !call_stack_underflow &&
                  (operand_b >= 32) &&
-                 ((0 < addr) || (addr >= DmemSizeByte) || ((addr & 32'd31) != 0)))
+                 ((addr < 0) || (addr >= DmemSizeByte) || ((addr & 32'd31) != 0)))
     `DEF_MNEM_CROSS(inc_both_and_bad_wdr_and_bad_addr)
   endgroup
 
@@ -2312,7 +2315,7 @@ class otbn_env_cov extends cip_base_env_cov #(.CFG_T(otbn_env_cfg));
     enc_bns_cg = new;
     enc_bnxid_cg = new;
     enc_b_cg = new;
-    enc_ecall_cg = new;
+    enc_fixed_cg = new;
     enc_i_cg = new;
     enc_is_cg = new;
     enc_j_cg = new;
@@ -2380,7 +2383,8 @@ class otbn_env_cov extends cip_base_env_cov #(.CFG_T(otbn_env_cfg));
     insn_encodings[mnem_jalr]          = "I";
     insn_encodings[mnem_csrrs]         = "I";
     insn_encodings[mnem_csrrw]         = "I";
-    insn_encodings[mnem_ecall]         = "ecall";
+    insn_encodings[mnem_ecall]         = "fixed";
+    insn_encodings[mnem_wfi]           = "fixed";
     insn_encodings[mnem_loop]          = "loop";
     insn_encodings[mnem_loopi]         = "loopi";
     insn_encodings[mnem_bn_add]        = "bnaf";
@@ -2433,10 +2437,13 @@ class otbn_env_cov extends cip_base_env_cov #(.CFG_T(otbn_env_cfg));
     last_mnem = '0;
   endfunction
 
-  // Called on each change of operational state
-  function void on_state_change(operational_state_e new_state);
+  // Called on each change of STATUS
+  function void on_state_change(otbn_pkg::status_e new_status);
     last_err_bits = 0;
-    last_mnem = '0;
+    // A WFI pause does not end the program, so keep tracking instruction pairs across it
+    if (!(new_status inside {otbn_pkg::StatusBusyExecute, otbn_pkg::StatusPaused})) begin
+      last_mnem = '0;
+    end
     // Sample bad internal state related signals here because otherwise they tend to not get
     // captured.
     bad_internal_state_cg.sample(cfg.trace_vif.urnd_all_zero_q,
@@ -2659,8 +2666,10 @@ class otbn_env_cov extends cip_base_env_cov #(.CFG_T(otbn_env_cfg));
       "bnam":
         enc_bnam_cg.sample(mnem, insn_data, rtl_item.wdr_operand_a, rtl_item.wdr_operand_b);
       "bnan":
+        // BN.NOT has a single source, which is encoded in the rs2 field. The RTL reads it on
+        // bignum read port B and leaves port A disabled.
         enc_bnan_cg.sample(mnem, insn_data,
-                           rtl_item.wdr_operand_a,
+                           rtl_item.wdr_operand_b,
                            rtl_item.flags_write_data,
                            rtl_item.wdr_write_data);
       "bnaq":
@@ -2691,8 +2700,8 @@ class otbn_env_cov extends cip_base_env_cov #(.CFG_T(otbn_env_cfg));
         enc_bnxid_cg.sample(mnem, insn_data, rtl_item.gpr_operand_a, rtl_item.gpr_operand_b);
       "B":
         enc_b_cg.sample(mnem, insn_data, rtl_item.gpr_operand_a, rtl_item.gpr_operand_b);
-      "ecall":
-        enc_ecall_cg.sample(mnem, insn_data);
+      "fixed":
+        enc_fixed_cg.sample(mnem, insn_data);
       "I":
         enc_i_cg.sample(mnem, insn_data, rtl_item.gpr_operand_a);
       "Is":

@@ -18,7 +18,11 @@ module i3c_target
   parameter int unsigned NumTargets = 2,
   parameter int unsigned DataWidth  = 32,
   parameter int unsigned FIFODepthW = i3c_fifo_pkg::DepthW,
-  parameter bit          TargetExt  = 1'b0
+  parameter bit          TargetExt  = 1'b0,
+
+  // Derived parameters.
+  // Mask of the Virtual Targets implemented by this instance.
+  localparam logic [MaxTargets-1:0] TargPresent = MaxTargets'({NumTargets{1'b1}})
 ) (
   // Clock and reset for system interface.
   input                     clk_i,
@@ -65,13 +69,12 @@ module i3c_target
   input                     bus_idle_i,
 
   // State information, presented via TTI.
-  output   [NumTargets-1:0] dynaddr_de_o,
+  output   [MaxTargets-1:0] dynaddr_de_o,
   output                    dynaddr_valid_d_o,
-  output              [6:0] dynaddr_d_o[NumTargets],
-  output                    virt_targ_det_o,
-  output   [NumTargets-1:0] mwl_de_o,
-  output   [NumTargets-1:0] mrl_de_o,
-  output   [NumTargets-1:0] ibi_de_o,
+  output              [6:0] dynaddr_d_o[MaxTargets],
+  output   [MaxTargets-1:0] mwl_de_o,
+  output   [MaxTargets-1:0] mrl_de_o,
+  output   [MaxTargets-1:0] ibi_de_o,
   output             [15:0] mwl_d_o,
   output             [15:0] mrl_d_o,
   output              [7:0] ibi_d_o,
@@ -82,13 +85,13 @@ module i3c_target
   output                    grp_addr_de_o[MaxGroups],
   output                    grp_targ_de_o[MaxGroups],
   output              [6:0] grp_addr_d_o[MaxGroups],
-  output   [NumTargets-1:0] grp_targ_d_o[MaxGroups],
-  output   [NumTargets-1:0] act_state_de_o,
+  output   [MaxTargets-1:0] grp_targ_d_o[MaxGroups],
+  output   [MaxTargets-1:0] act_state_de_o,
   output              [1:0] act_state_d_o,
-  output   [NumTargets-1:0] endxfer_cand_de_o,
+  output   [MaxTargets-1:0] endxfer_cand_de_o,
   output              [2:0] endxfer_cand_d_o,
-  output   [NumTargets-1:0] endxfer_de_o,
-  output              [2:0] endxfer_d_o[NumTargets],
+  output   [MaxTargets-1:0] endxfer_de_o,
+  output              [2:0] endxfer_d_o[MaxTargets],
   output                    vend_test_mode_o,
   output                    protocol_error_o,
   output                    hj_request_clear_o,
@@ -97,7 +100,7 @@ module i3c_target
   output i3c_targ_intr_t    intr_o,
 
   // Target device descriptions to the transceiver.
-  output i3c_targ_dev_t     targ_dev_o[NumTargets],
+  output i3c_targ_dev_t     targ_dev_o[MaxTargets],
   // Group address descriptions to the transceiver.
   output i3c_grp_addr_t     grp_addr_o[NumGroups],
 
@@ -105,7 +108,7 @@ module i3c_target
   // - SDA lowered to request Start signaling, and partial address phase.
   output                    sreq_sda_od_en_o,
   output                    sreq_sda_o,
-  // TODO: Handoff of the address arbitration to the transceiver logic.
+  // TODO(#31337): Handoff of the address arbitration to the transceiver logic.
 
   // Status indications from the transceiver. Originates in SCL domain, must be glitch free.
   input                     rep_start_det_i,
@@ -113,11 +116,11 @@ module i3c_target
   input                     ddr_mode_i,
 
   // Transmission from Virtual Target(s) suspended.
-  output   [NumTargets-1:0] suspend_tx_o,
+  output   [MaxTargets-1:0] suspend_tx_o,
   // IBI Transmission suspended.
   output                    ibi_suspend_tx_o,
   // Clear the Abort status when transmission is resumed.
-  output   [NumTargets-1:0] abort_clr_o,
+  output   [MaxTargets-1:0] abort_clr_o,
   output                    ibi_abort_clr_o,
 
   // Transmission Descriptor access.
@@ -156,9 +159,9 @@ module i3c_target
   input      [FIFODepthW:0] ibi_rused_i,
 
   // Transmit data to the transceiver, for Private Read transfers.
-  output logic              trx_dvalid_o[NumTargets],
-  input                     trx_dready_i[NumTargets],
-  output i3c_targ_trx_txd_t trx_dreq_o[NumTargets],
+  output logic              trx_dvalid_o[MaxTargets],
+  input                     trx_dready_i[MaxTargets],
+  output i3c_targ_trx_txd_t trx_dreq_o[MaxTargets],
 
   // Transmit data for Direct Read CCCs.
   output logic              trx_ctvalid_o,
@@ -233,17 +236,19 @@ module i3c_target
                                                 {7{stby_cr_staddr_valid}} & stby_cr_staddr_i[6:0];
 
   // Device description for each Target in turn.
-  i3c_targ_dev_t targ_dev[NumTargets];
+  // Note: Descriptions of Virtual Targets that this instance does not implement stay at zero, so
+  //       they are never enabled and therefore never match an address in the transceiver logic.
+  i3c_targ_dev_t targ_dev[MaxTargets];
   always_comb begin
     // Ensure that all target descriptions have been initialized.
     // - use a valid static address only until a valid dynamic address has been supplied.
+    targ_dev = '{default: '0};
     for (int unsigned t = 0; t < NumTargets; t++) begin
       logic dynaddr_valid, stataddr_valid;
 
       stataddr_valid = reg2hw_i.targ_addr[t].static_addr_valid.q;
       dynaddr_valid  = reg2hw_i.targ_addr[t].dynamic_addr_valid.q;
 
-      targ_dev[t] = '0;
       targ_dev[t].en            = reg2hw_i.targ_enable[t].q;
       targ_dev[t].addr          = dynaddr_valid ? reg2hw_i.targ_addr[t].dynamic_addr.q
                                                 : reg2hw_i.targ_addr[t].static_addr.q;
@@ -268,8 +273,8 @@ module i3c_target
   for (genvar g = 0; g < NumGroups; g++) begin : g_assign_grp_addr
     assign grp_addr_o[g] = '{
       addr:       reg2hw_i.targ_group[g].group_addr.q,
-      addr_valid: |reg2hw_i.targ_group[g].targets.q[NumTargets-1:0],
-      targets:    reg2hw_i.targ_group[g].targets.q[NumTargets-1:0]
+      addr_valid: |(reg2hw_i.targ_group[g].targets.q & TargPresent),
+      targets:      reg2hw_i.targ_group[g].targets.q & TargPresent
     };
   end
 
@@ -322,9 +327,9 @@ module i3c_target
   );
 
   // Target Reset Detector request.
-  // TODO: Needs to interact with the RSTACT CCC handling when that exists.
+  // TODO(#31128): Needs to interact with the RSTACT CCC handling when that exists.
   assign rstdet_req_o = '{
-    activate:   enable_i, // TODO: This is incomplete.
+    activate:   enable_i, // TODO(#31128): This is incomplete.
     deep_sleep: reg2hw_i.reset_det_ctrl.sleep_req.q,
     rst_periph: reg2hw_i.reset_det_ctrl.rst_periph_en.q && (rstact_i == RstAct_ResetPeripheral),
     rst_target: reg2hw_i.reset_det_ctrl.rst_target_en.q && (rstact_i == RstAct_ResetTarget)
@@ -336,9 +341,9 @@ module i3c_target
   // - subsequent reads can rely upon the transmission time giving enough time to respond.
   //
   // Private Read transfers.
-  logic txd_toggle_out[NumTargets];
-  logic txd_toggle_in[NumTargets];
-  i3c_targ_trx_txd_t txd_data_out[NumTargets];
+  logic txd_toggle_out[MaxTargets];
+  logic txd_toggle_in[MaxTargets];
+  i3c_targ_trx_txd_t txd_data_out[MaxTargets];
   // Direct Read CCCs.
   // - to ensure that there is no skew amongst the targets we use a single synchronizer and a wider
   //   data bus.
@@ -395,7 +400,6 @@ module i3c_target
     .dynaddr_de_o         (dynaddr_de_o),
     .dynaddr_valid_d_o    (dynaddr_valid_d_o),
     .dynaddr_d_o          (dynaddr_d_o),
-    .virt_targ_det_o      (virt_targ_det_o),
     .mwl_de_o             (mwl_de_o),
     .mrl_de_o             (mrl_de_o),
     .ibi_de_o             (ibi_de_o),
@@ -558,13 +562,22 @@ module i3c_target
       .src_toggle_i(txd_toggle_out[t]),
       .src_toggle_o(txd_toggle_in[t]),
       .src_data_i  (txd_data_out[t]),
+
       // SCL-clocked domain.
-      .clk_dst_i   (scl_ni),
-      .rst_dst_ni  (trx_rst_ni),
-      .dst_valid_o (trx_dvalid_o[t]),
-      .dst_ready_i (trx_dready_i[t]),
-      .dst_data_o  (trx_dreq_o[t])
+      .clk_dst_i     (scl_ni),
+      .rst_dst_ni    (trx_rst_ni),
+      .dst_valid_o   (trx_dvalid_o[t]),
+      .dst_ready_i   (trx_dready_i[t]),
+      .dst_data_o    (trx_dreq_o[t]),
+      .dst_dataloss_o()
     );
+  end
+
+  // Virtual Targets that this instance does not implement have no transmit path.
+  for (genvar t = NumTargets; t < MaxTargets; t++) begin : gen_no_targ_txd_sync
+    assign txd_toggle_in[t] = 1'b0;
+    assign trx_dvalid_o[t]  = 1'b0;
+    assign trx_dreq_o[t]    = '0;
   end
 
   // Direct Read CCCs; all targets share a single synchronizer so that there is no skew amongst
@@ -579,12 +592,14 @@ module i3c_target
     .src_toggle_i(txc_toggle_out),
     .src_toggle_o(txc_toggle_in),
     .src_data_i  (txc_data_out),
+
     // SCL-clocked domain.
-    .clk_dst_i   (scl_ni),
-    .rst_dst_ni  (trx_rst_ni),
-    .dst_valid_o (trx_ctvalid_o),
-    .dst_ready_i (trx_ctready_i),
-    .dst_data_o  (trx_ctreq_o)
+    .clk_dst_i     (scl_ni),
+    .rst_dst_ni    (trx_rst_ni),
+    .dst_valid_o   (trx_ctvalid_o),
+    .dst_ready_i   (trx_ctready_i),
+    .dst_data_o    (trx_ctreq_o),
+    .dst_dataloss_o()
   );
 
   // Send arbitration requests to the transceiver.
@@ -598,28 +613,34 @@ module i3c_target
     .src_toggle_i(arb_toggle_out),
     .src_toggle_o(arb_toggle_in),
     .src_data_i  (arb_data),
+
     // SCL-clocked domain.
-    .clk_dst_i   (scl_ni),
-    .rst_dst_ni  (trx_rst_ni),
-    .dst_valid_o (trx_avalid_o),
-    .dst_ready_i (trx_aready_i),
-    .dst_data_o  (trx_areq_o)
+    .clk_dst_i     (scl_ni),
+    .rst_dst_ni    (trx_rst_ni),
+    .dst_valid_o   (trx_avalid_o),
+    .dst_ready_i   (trx_aready_i),
+    .dst_data_o    (trx_areq_o),
+    .dst_dataloss_o()
   );
 
   // Synchronize the received data into the IP clock domain.
-  i3c_sync_data #(.Width($bits(i3c_targ_trx_rxd_t))) u_trx_rxd_sync (
-    // Source clock domain.
+  i3c_sync_data #(
+    .Width($bits(i3c_targ_trx_rxd_t))
+  ) u_trx_rxd_sync (
+    // SCL-clocked domain.
     .clk_src_i   (1'b0),  // Not used.
     .rst_src_ni  (1'b1),  // Not used.
     .src_toggle_i(trx_rtoggle_i),
     .src_toggle_o(),  // Not used.
     .src_data_i  (trx_rxd_i),
-    // Destination clock domain.
-    .clk_dst_i   (clk_i),
-    .rst_dst_ni  (trx_rst_ni),
-    .dst_valid_o (trx_rvalid),
-    .dst_ready_i (trx_rready),
-    .dst_data_o  (trx_rxd)
+
+    // IP block domain.
+    .clk_dst_i     (clk_i),
+    .rst_dst_ni    (trx_rst_ni),
+    .dst_valid_o   (trx_rvalid),
+    .dst_ready_i   (trx_rready),
+    .dst_data_o    (trx_rxd),
+    .dst_dataloss_o()
   );
 
   // Interrupt generation.
@@ -628,9 +649,11 @@ module i3c_target
     // Reception uses a single buffer for all Targets.
     intr_o = '0;  // Note: this provides drivers for non-extant Virtual Targets.
     intr_o.rx_desc_ready   = |reg2hw_i.targ_queue_thld_ctrl.rx_desc_thld.q &&
-                             (rx_desc_wused_i >= reg2hw_i.targ_queue_thld_ctrl.rx_desc_thld.q);
+                             (32'(rx_desc_wused_i) >=
+                              32'(reg2hw_i.targ_queue_thld_ctrl.rx_desc_thld.q));
     intr_o.ibi_status_thld = |reg2hw_i.targ_queue_thld_ctrl.ibi_status_thld.q &&
-                             (ibi_desc_ravail_i >= reg2hw_i.targ_queue_thld_ctrl.ibi_status_thld.q);
+                             (32'(ibi_desc_ravail_i) >=
+                              32'(reg2hw_i.targ_queue_thld_ctrl.ibi_status_thld.q));
     intr_o.async_evt_ready = !async_empty_i;  // TODO: Need to reconsider if CCC becomes multi-desc?
     intr_o.transfer_abort  = transfer_aborted;
     intr_o.transfer_err    = transfer_err;
@@ -641,9 +664,9 @@ module i3c_target
     // Transmission requires per-Target buffers.
     for (int unsigned t = 0; t < NumTargets; t++) begin
       intr_o.tx_thld[t] = |reg2hw_i.targ_tx_thld_ctrl[t].tx_buf_free_thld.q &&
-        (buf_ravail_i[t] >= reg2hw_i.targ_tx_thld_ctrl[t].tx_buf_free_thld.q);
+        (32'(buf_ravail_i[t]) >= 32'(reg2hw_i.targ_tx_thld_ctrl[t].tx_buf_free_thld.q));
       intr_o.tx_desc_ready[t] = |reg2hw_i.targ_tx_thld_ctrl[t].tx_desc_empty_thld.q &&
-        (tx_desc_ravail_i[t] >= reg2hw_i.targ_tx_thld_ctrl[t].tx_desc_empty_thld.q);
+        (32'(tx_desc_ravail_i[t]) >= 32'(reg2hw_i.targ_tx_thld_ctrl[t].tx_desc_empty_thld.q));
     end
 
     // Raise an interrupt to software when any of the Target Error counts is non-zero.
@@ -653,21 +676,35 @@ module i3c_target
                   reg2hw_i.targ_error.te1.q, reg2hw_i.targ_error.te0.q};
   end
 
-  // TODO: When we have logic for detecting TE0/TE1 we are required to enable the
-  // HDR Exit Pattern Detector then too.
-  // TODO: This may need to come from the transceiver.
+  // TODO(#31333): When we have logic for detecting TE0/TE1 we are required to enable the
+  // HDR Exit Pattern Detector then too. This may need to come from the transceiver.
   assign hdr_exit_det_en_o = 1'b1;
 
   // Clear Hot-Join request once it has been acknowledged by the Active Controller.
   // TODO: We cannot yet issue a Hot-Join request.
   assign hj_request_clear_o = 1'b0;
 
-  // TTI Data Structures that must fit into one buffer data word (currently fixed to 32b).
-  if ($bits(i3c_tti_tx_desc_t) != DataWidth)    $fatal(1, "TTI Tx Descriptor has incorrect size.");
-  if ($bits(i3c_tti_rx_desc_t) != DataWidth)    $fatal(1, "TTI Rx Descriptor has incorrect size.");
-  if ($bits(i3c_tti_ibi_status_t) != DataWidth) $fatal(1, "TTI IBI Status Descriptor has incorrect size.");
-
   // Assertions.
+  // TTI Data Structures that must fit into one buffer data word (currently fixed to 32b).
+  `ASSERT_INIT(TtiTxDescWidthIsDataWidth_A, $bits(i3c_tti_tx_desc_t) == DataWidth)
+  `ASSERT_INIT(TtiRxDescWidthIsDataWidth_A, $bits(i3c_tti_rx_desc_t) == DataWidth)
+  `ASSERT_INIT(TtiIbiStatusWidthIsDataWidth_A, $bits(i3c_tti_ibi_status_t) == DataWidth)
+
   `ASSERT_INIT(NumTargetsLegal, NumTargets <= MaxTargets)
+
+  // Signals that the logic does not use (yet).
+  // - TODO(#31035): HDR Exit and HDR Restart are not handled yet.
+  // - TODO: `rstdet_rsp_sync` and `buf_wused_i` are not used yet (see above).
+  logic unused_targ_inputs;
+  assign unused_targ_inputs = ^{hdr_exit_det_i, hdr_restart_det_i, buf_wused_i, rstdet_rsp_sync};
+  // - the transmit data and handshake of the Virtual Targets that are not implemented. The Target
+  //   core ties the data off and no synchronizer is instantiated for them.
+  logic unused_absent_vt;
+  always_comb begin
+    unused_absent_vt = 1'b0;
+    for (int unsigned t = NumTargets; t < MaxTargets; t++) begin
+      unused_absent_vt ^= ^{trx_dready_i[t], txd_toggle_out[t], txd_data_out[t]};
+    end
+  end
 
 endmodule

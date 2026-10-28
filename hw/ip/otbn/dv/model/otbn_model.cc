@@ -374,15 +374,15 @@ int OtbnModel::otp_key_cdc_done() {
   return 0;
 }
 
-int OtbnModel::set_keymgr_value(svLogicVecVal *key0 /* logic [383:0] */,
-                                svLogicVecVal *key1 /* logic [383:0] */,
+int OtbnModel::set_keymgr_value(svLogicVecVal *key0 /* logic [511:0] */,
+                                svLogicVecVal *key1 /* logic [511:0] */,
                                 unsigned char valid) {
   ISSWrapper *iss = ensure_wrapper();
 
-  std::array<uint32_t, 12> key0_arr;
-  std::array<uint32_t, 12> key1_arr;
+  std::array<uint32_t, 16> key0_arr;
+  std::array<uint32_t, 16> key1_arr;
   assert(valid == 0 || valid == 1);
-  for (int i = 0; i < 12; i++) {
+  for (int i = 0; i < 16; i++) {
     key0_arr[i] = key0[i].aval;
     key1_arr[i] = key1[i].aval;
   }
@@ -577,6 +577,22 @@ int OtbnModel::set_wfi_enabled(unsigned char new_val) {
   } catch (const std::exception &err) {
     std::cerr << "Error when setting wfi_enabled bit in ISS: " << err.what()
               << "\n";
+    return -1;
+  }
+
+  return 0;
+}
+
+int OtbnModel::set_urnd_ctrl_enabled(unsigned char new_val) {
+  ISSWrapper *iss = ensure_wrapper();
+  if (!iss)
+    return -1;
+
+  try {
+    iss->set_urnd_ctrl_enabled(new_val);
+  } catch (const std::exception &err) {
+    std::cerr << "Error when setting urnd_ctrl_enabled bit in ISS: "
+              << err.what() << "\n";
     return -1;
   }
 
@@ -1090,6 +1106,11 @@ int otbn_model_set_software_errs_fatal(OtbnModel *model,
 int otbn_model_set_wfi_enabled(OtbnModel *model, unsigned char new_val) {
   assert(model);
   return model->set_wfi_enabled(new_val);
+}
+
+int otbn_model_set_urnd_ctrl_enabled(OtbnModel *model, unsigned char new_val) {
+  assert(model);
+  return model->set_urnd_ctrl_enabled(new_val);
 }
 
 void otbn_model_tolerate_result_mismatch(OtbnModel *model,

@@ -16,7 +16,11 @@ module i3c_target_fsm
   parameter int unsigned NumTargets = 2,
   parameter int unsigned DataWidth  = 32,
   parameter int unsigned FIFODepthW = i3c_fifo_pkg::DepthW,
-  parameter bit          TargetExt  = 1'b0
+  parameter bit          TargetExt  = 1'b0,
+
+  // Derived parameters.
+  // Mask of the Virtual Targets implemented by this instance.
+  localparam logic [MaxTargets-1:0] TargPresent = MaxTargets'({NumTargets{1'b1}})
 ) (
   input                     clk_i,
   input                     rst_ni,
@@ -42,15 +46,13 @@ module i3c_target_fsm
   input               [6:0] addr_blocked_i[NumBlocked],
   input               [6:0] mask_blocked_i[NumBlocked],
 
-  // Status information.
-  output logic              virt_targ_det_o,
   // Updating configuration.
-  output   [NumTargets-1:0] dynaddr_de_o,
+  output   [MaxTargets-1:0] dynaddr_de_o,
   output                    dynaddr_valid_d_o,
-  output              [6:0] dynaddr_d_o[NumTargets],
-  output   [NumTargets-1:0] mwl_de_o,
-  output   [NumTargets-1:0] mrl_de_o,
-  output   [NumTargets-1:0] ibi_de_o,
+  output              [6:0] dynaddr_d_o[MaxTargets],
+  output   [MaxTargets-1:0] mwl_de_o,
+  output   [MaxTargets-1:0] mrl_de_o,
+  output   [MaxTargets-1:0] ibi_de_o,
   output             [15:0] mwl_d_o,
   output             [15:0] mrl_d_o,
   output              [7:0] ibi_d_o,
@@ -61,13 +63,13 @@ module i3c_target_fsm
   output                    grp_addr_de_o[MaxGroups],
   output                    grp_targ_de_o[MaxGroups],
   output              [6:0] grp_addr_d_o[MaxGroups],
-  output   [NumTargets-1:0] grp_targ_d_o[MaxGroups],
-  output   [NumTargets-1:0] act_state_de_o,
+  output   [MaxTargets-1:0] grp_targ_d_o[MaxGroups],
+  output   [MaxTargets-1:0] act_state_de_o,
   output              [1:0] act_state_d_o,
-  output   [NumTargets-1:0] endxfer_cand_de_o,
+  output   [MaxTargets-1:0] endxfer_cand_de_o,
   output              [2:0] endxfer_cand_d_o,
-  output   [NumTargets-1:0] endxfer_de_o,
-  output              [2:0] endxfer_d_o[NumTargets],
+  output   [MaxTargets-1:0] endxfer_de_o,
+  output              [2:0] endxfer_d_o[MaxTargets],
   output                    vend_test_mode_o,
   output                    protocol_error_o,
 
@@ -83,7 +85,7 @@ module i3c_target_fsm
   input                     stby_cr_enabled_i,
 
   // Target device descriptions.
-  input  i3c_targ_dev_t     targ_dev_i[NumTargets],
+  input  i3c_targ_dev_t     targ_dev_i[MaxTargets],
 
   // Start request to the transceiver.
   // - SDA lowered to request Start signaling, and partial address phase.
@@ -96,11 +98,11 @@ module i3c_target_fsm
   input                     ddr_mode_i,
 
   // Transmission from Virtual Target(s) suspended.
-  output   [NumTargets-1:0] suspend_tx_o,
+  output   [MaxTargets-1:0] suspend_tx_o,
   // IBI Transmission suspended.
   output                    ibi_suspend_tx_o,
   // Clear the Abort status when transmission is resumed.
-  output   [NumTargets-1:0] abort_clr_o,
+  output   [MaxTargets-1:0] abort_clr_o,
   output                    ibi_abort_clr_o,
 
   // Transmission Descriptor access.
@@ -140,9 +142,9 @@ module i3c_target_fsm
   input      [FIFODepthW:0] ibi_rused_i,
 
   // Transmit data for Private Read transfers.
-  output logic              txd_toggle_o[NumTargets],
-  input                     txd_toggle_i[NumTargets],
-  output i3c_targ_trx_txd_t txd_data_o[NumTargets],
+  output logic              txd_toggle_o[MaxTargets],
+  input                     txd_toggle_i[MaxTargets],
+  output i3c_targ_trx_txd_t txd_data_o[MaxTargets],
 
   // Transmit data for Direct Read CCCs.
   output logic              txc_toggle_o,
@@ -206,7 +208,9 @@ module i3c_target_fsm
   import i3c_tti_pkg::*;
 
   // Local parameters.
-  localparam int unsigned NumTargetsW = $clog2(NumTargets);
+  // Width of an index over the implemented Virtual Targets; this sizes the arbiter indices, which
+  // must match `prim_arbiter_fixed`. Indices into the `MaxTargets`-sized structures use `Log2MT`.
+  localparam int unsigned NumTargetsW = prim_util_pkg::vbits(NumTargets);
   localparam int unsigned MaxGroupsW  = $clog2(MaxGroups);
 
   // Additional Target info required by the Target Core logic; this is required for CCC handling,
@@ -258,13 +262,12 @@ module i3c_target_fsm
   logic virt_targ_det;
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) virt_targ_det <= 1'b0;
-    // TODO: Other conditions can modify the programmed Reset Action.
+    // TODO(#31337): Other conditions can modify the programmed Reset Action.
     else if (rstact_de_o && rstact_d_o inside {RstAct_VirtualTargDet, RstAct_NoReset}) begin
       if (rstact_d_o == RstAct_NoReset)             virt_targ_det <= 1'b0; // Clear reset action
       else if (rstact_d_o == RstAct_VirtualTargDet) virt_targ_det <= 1'b1; // Set reset action
     end
   end
-  assign virt_targ_det_o = virt_targ_det;
 
   // Vendor Test Mode active/inactive?
   // - this state bit is the only part implemented in hardware; the provision of a random PID is the
@@ -290,7 +293,7 @@ module i3c_target_fsm
   end
   assign protocol_error_o = protocol_error_q;  // to register interface.
 
-  // TODO(#31068): Protocol errors are not yet detected/set; only the GETSTATUS-triggered clear
+  // TODO(#31333): Protocol errors are not yet detected/set; only the GETSTATUS-triggered clear
   // (Table 27) is connected so far (from the Target CCC handling below).
   logic protocol_error_de_ccc;
   logic protocol_error_d_ccc;
@@ -336,17 +339,18 @@ module i3c_target_fsm
 
     // Reinterpret as a descriptor.
     assign tx_desc[t] = i3c_tti_tx_desc_t'(tx_desc_rdata_i[t]);
-    // Descriptor is valid if it is a pending read notification or contains data.
-    assign tx_desc_valid[t] = |{tx_desc[t].prn.notify, tx_desc[t].tx.data_length};
-    // TODO: Aborting is not yet implemented.
+    // Descriptor is valid if it is a pending read notification with valid length, or contains data.
+    assign tx_desc_valid[t] = tx_desc[t].prn.notify ? ~&tx_desc[t].prn.len :
+                                                       |tx_desc[t].tx.data_length;
+    // TODO(#31337): Aborting is not yet implemented.
     assign tx_suspended = reg2hw_i.targ_pio_control.suspended.q[t];
-    // TODO: Post response and/or raise error interrupt if not valid.
+    // TODO(#31337): Post response and/or raise error interrupt if not valid.
 
     // Have we enough data available to commence transmission? Fire on either
     // - At least as many DWORDs in buffer as dictated in descriptor, or
     // - At least as many DWORDs in buffer as dictated by tx threshold (threshold is power-of-two)
     assign tx_start_thld       = reg2hw_i.targ_tx_thld_ctrl[t].tx_start_thld.q;
-    assign tx_desc_len_reached = {buf_rused_i[t], 2'b00} >= tx_desc[t].tx.data_length;
+    assign tx_desc_len_reached = 32'({buf_rused_i[t], 2'b00}) >= 32'(tx_desc[t].tx.data_length);
     assign tx_thld_reached     = |(buf_rused_i[t][FIFODepthW:1] >> tx_start_thld);
 
     assign tx_start = (tx_desc_len_reached || tx_thld_reached) && !tx_suspended;
@@ -418,7 +422,7 @@ module i3c_target_fsm
         // This ensures that `tx_data_len` returns to zero, even if the requested data length is not
         // a multiple of the transfer unit.
         tx_data_len <= {16{!rlast}} & (tx_data_len - unit_bytes);
-        // TODO: I guess we don't have a verdict until there's a reply from the transceiver,
+        // TODO(#31337): I guess we don't have a verdict until there's a reply from the transceiver,
         // so keep tx_active asserted?
         tx_active   <= !rlast;
       end
@@ -434,15 +438,26 @@ module i3c_target_fsm
 
     // Consume the descriptor only when all data has been presented for transmission and it is no
     // longer required, or if it's invalid.
-    // TODO: We must receive some kind of verdict from the transceiver, not just wait until accepted
+    // TODO(#31337): We must receive some kind of verdict from the transceiver, not just wait until
+    // accepted
     assign tx_desc_consumed = tx_rvalid & (tx_suspended | &{tx_active, rlast, unit_ready});
-    assign tx_desc_rready_o[t] = tx_desc_consumed | (arb_toggle_edge & arb_gnt_q[t+2]);
+    assign tx_desc_rready_o[t] = tx_desc_consumed |                  // Private Read transfer.
+                                (arb_toggle_edge & arb_gnt_q[t+2]);  // Pending Read Notification.
 
     // Suspend transmissions from this Virtual Target in the event of an error.
     assign suspend_tx_o[t] = tx_rvalid & !tx_desc_valid[t];
     // Clear the 'Abort' status when resuming.
     assign abort_clr_o[t]  = reg2hw_i.targ_pio_control.suspended.qe &
                              reg2hw_i.targ_pio_control.suspended.q[t];
+  end
+
+  // Virtual Targets that this instance does not implement have no transmit path; tie off the
+  // outputs that `gen_splitters` would otherwise have driven.
+  for (genvar t = NumTargets; t < MaxTargets; t++) begin : gen_no_splitters
+    assign txd_toggle_o[t] = 1'b0;
+    assign txd_data_o[t]   = '0;
+    assign suspend_tx_o[t] = 1'b0;
+    assign abort_clr_o[t]  = 1'b0;
   end
 
   // Similarly, we supply data for Direct GET CCCs using another inverting toggle.
@@ -459,9 +474,10 @@ module i3c_target_fsm
 
   // Direct Read CCC data for all Targets.
   always_comb begin : drv_txc_data
+    // Slices belonging to Virtual Targets that are not present keep this default of zero.
     txc_data_o = '0;
     for (int unsigned t = 0; t < NumTargets; t++) begin
-      // TODO: rdata_first is hardcoded to 1'b0, which fails DDR CCC reads
+      // TODO(#31337): rdata_first is hardcoded to 1'b0, which fails DDR CCC reads
       fmt_data_out(txc_data_o.rdata_nq[t], txc_data_o.rdata_pq[t], txc_data_o.rlast[t],
                    {8'b0, ccc_rsp.req_cdata[t]}, 1'b0, {1'b0, ccc_rsp.req_clast});
     end
@@ -470,7 +486,7 @@ module i3c_target_fsm
   // A very simple FSM mediates the handling of Common Command Codes (CCCs).
   typedef enum logic [2:0] {
     Inactive,
-    // TODO: Idle may imply that the VT has become enabled and shall respond to queues?
+    // TODO(#31337): Idle may imply that the VT has become enabled and shall respond to queues?
     Idle,
 
     PrivXfer,
@@ -506,12 +522,12 @@ module i3c_target_fsm
   wire prv_rvalid = trx_rvalid_i & !ccc_rvalid;
 
   // Accept responses immediately.
-  // TODO: we should still be detecting and reporting any data loss here, e.g. unresponsive
+  // TODO(#31333): we should still be detecting and reporting any data loss here, e.g. unresponsive
   // Rx data buffer. Buffer may be full, in particular.
   assign prv_rready = prv_rvalid;
 
-  // TODO: May need to handle buffer full conditions here; async event queue, perhaps rx buffer
-  // for some very specific CCCs with large payloads such as DEFTGTS?
+  // TODO(#31333): May need to handle buffer full conditions here; async event queue, perhaps rx
+  // buffer for some very specific CCCs with large payloads such as DEFTGTS?
   assign ccc_rready = ccc_rvalid;
 
   assign trx_rready_o = ccc_rready | prv_rready;
@@ -525,13 +541,14 @@ module i3c_target_fsm
   logic proceed;
   always_comb begin : drv_proceed
     proceed = 1'b0;
-    case (state_q)
+    unique case (state_q)
       Inactive: proceed = trx_rvalid_i;
-      PrivXfer: proceed = stop_det_i;  // TODO: Want to define here what happens w.r.t. Sr?
-                                       //       Important e.g., for the legal combination of
-                                       //       S | Addr+W | RegAddr | Sr | Addr+R | ReadData | P
-      CCC:      proceed = ccc_tx_start | stop_det_i;  // TODO: Shall likely want error-handling.
-      CCC_Tx:   proceed = ccc_unit_ready | stop_det_i;  // TODO: Shall likely want error-handling.
+      PrivXfer: proceed = stop_det_i;  // TODO(#31337): Want to define here what happens w.r.t. Sr?
+                                       //  Important e.g., for the legal combination of
+                                       //  S | Addr+W | RegAddr | Sr | Addr+R | ReadData | P
+      // TODO(#31333): Shall likely want error-handling.
+      CCC:      proceed = ccc_tx_start | stop_det_i;
+      CCC_Tx:   proceed = ccc_unit_ready | stop_det_i;
       // All other states are immediately responsive.
       default:  proceed = 1'b1;
     endcase
@@ -539,16 +556,16 @@ module i3c_target_fsm
 
   always_comb begin
     state_d = state_q;
-    case (state_q)
+    unique case (state_q)
       Inactive: begin
-          case (trx_rxd_i.ccc_state)
+          unique case (trx_rxd_i.ccc_state)
             CCC_Setup: state_d = CCC;
             default:   state_d = PrivXfer;
           endcase
         end
       PrivXfer: state_d = Inactive;
       CCC:      state_d = stop_det_i ? CCC_P : CCC_Tx;
-      // TODO: ENTDAA perhaps requires a transmission back to CCC?
+      // TODO(#31333): ENTDAA perhaps requires a transmission back to CCC?
       CCC_Tx:   state_d = stop_det_i ? CCC_P : (ccc_rsp.req_clast ? CCC : CCC_Tx);
       CCC_P:    state_d = Inactive;
       default:  state_d = Inactive;
@@ -571,9 +588,9 @@ module i3c_target_fsm
   end
 
   // We must start prefetching the read data before the address has been matched.
-  // TODO: Once basically working, I think we need to re-express this - perhaps with the cooperation
-  // of the _trx logic - as additional states to indicate whether we're in a read-prefetching
-  // segment, a write segment or a setup segment.
+  // TODO(#31337): Once basically working, I think we need to re-express this - perhaps with the
+  // cooperation of the _trx logic - as additional states to indicate whether we're in a
+  // read-prefetching segment, a write segment or a setup segment.
   wire ccc_rd_prefetch = direct_get(reg_state[TargCR_CCC]) &&
                          (trx_rxd_i.ccc_state inside {CCC_SegAddr, CCC_SegData});
 
@@ -582,11 +599,11 @@ module i3c_target_fsm
   // Construction of request to the CCC handling.
   always_comb begin : drv_ccc_req
     ccc_req = '0;
-    // TODO: We could action the P a cycle earlier and drop the additional states?
+    // TODO(#31337): We could action the P a cycle earlier and drop the additional states?
     // Is there potential for the P to leapfrog the final byte, in which case we
     // perhaps use _P to retain that information and treat `trx_rvalid_i` the same in
     // each state?
-    case (state_q)
+    unique case (state_q)
       Inactive: ccc_req.en = trx_rvalid_i & (trx_rxd_i.ccc_state == CCC_Setup);
       CCC:      ccc_req.en = trx_rvalid_i;
       CCC_Tx:   ccc_req.en = ccc_unit_ready;
@@ -594,10 +611,10 @@ module i3c_target_fsm
       default:  ccc_req.en = 1'b0;
     endcase
     // The transceiver logic has already done the CCC phase and index tracking for us.
-    // TODO: Presently the Sr and P processing relies on - for example - the idx being stable,
-    //       we may need to capture it, to be certain of the segment/phase length.
+    // TODO(#31337): Presently the Sr and P processing relies on - for example - the idx being
+    //       stable, we may need to capture it, to be certain of the segment/phase length.
     ccc_req.idx = ccc_rd_prefetch + (trx_rxd_i.ccc_state == CCC_SegData) + trx_rxd_i.ccc_idx[3:0];
-    case (state_q)
+    unique case (state_q)
       Inactive,
       CCC: begin
         if (trx_rxd_i.sr) begin
@@ -638,12 +655,13 @@ module i3c_target_fsm
       reg_state[ccc_rsp.reg_widx] <= ccc_rsp.reg_wdata;
       // When capturing the CCC or DEFB we also need to modify other state; since this is true for
       // all Common Command Codes we opt to do it here.
-      case (ccc_rsp.reg_widx)
+      unique case (ccc_rsp.reg_widx)
         TargCR_CCC: begin
           // Set the initial set of Targets involved in this CCC.
           // - note that a Broadcast CCC affects only the responsive targets, and the transceiver
           //   has already determined this for us.
-          reg_state[TargCR_Targets] <= broadcast_ccc(ccc_rsp.reg_wdata) ? trx_rxd_i.targ_set : 'b0;
+          reg_state[TargCR_Targets] <= broadcast_ccc(ccc_rsp.reg_wdata) ?
+                                       TargCRWidth'(trx_rxd_i.targ_set) : '0;
           // Declare 'no DEFB' until it is received.
           reg_state[TargCR_Status][TargStat_HasDEFB] <= 1'b0;
         end
@@ -659,7 +677,7 @@ module i3c_target_fsm
   logic                  grp_set;
   logic                  grp_rst;
   // SETGRPA and RSTGRPA may subscribe/unsubscribe multiple targets.
-  logic [NumTargets-1:0] grp_targets;
+  logic [MaxTargets-1:0] grp_targets;
   // RSTGRPA may affect all groups or rather than just a single Group address.
   logic                  grp_all;
   logic            [6:0] grp_addr;
@@ -714,19 +732,19 @@ module i3c_target_fsm
   );
 
   // Transmission outcome; for completion signaling and error reporting.
-  logic [NumTargetsW-1:0] tx_targ_id;
-  assign tx_targ_id = '0;  // TODO: FSM Tracks target.
+  logic [Log2MT-1:0] tx_targ_id;
+  assign tx_targ_id = '0;  // TODO(#31337): FSM Tracks target.
   i3c_tti_tx_desc_t tx_desc_curr;
-  assign tx_desc_curr = i3c_tti_tx_desc_t'(tx_desc_rdata_i[tx_targ_id]);
+  assign tx_desc_curr = i3c_tti_tx_desc_t'(tx_desc_rdata_i[NumTargetsW'(tx_targ_id)]);
   i3c_tti_ibi_status_t ibi_desc;
   assign ibi_desc = i3c_tti_ibi_status_t'(ibi_desc_rdata_i);
 
-  // TODO: Status outcomes.
+  // TODO(#31337): Status outcomes.
   i3c_err_status_e txd_status, ibi_status;
   assign txd_status = ErrStatus_OK;
   assign ibi_status = ErrStatus_OK;
 
-  // TODO: Remaining byte count; this is multiplexed from the various transmission paths.
+  // TODO(#31337): Remaining byte count; this is multiplexed from the various transmission paths.
   logic [15:0] tx_bytes_left;
   assign tx_bytes_left = 16'hffff;
 
@@ -761,7 +779,7 @@ module i3c_target_fsm
   end
 
   // Note also that i3c_dword_collector does not store the DWORD presently, so we do that here.
-  // TODO: Adjust the i3c_dword_collector for a better fit.
+  // TODO(#31337): Adjust the i3c_dword_collector for a better fit.
   logic                 buf_wvalid;
   logic                 buf_wvalid_q;
   logic [DataWidth-1:0] buf_wdata;
@@ -783,17 +801,17 @@ module i3c_target_fsm
 
   // Broadcast CCCs received in Standby Controller Mode.
   // - these must be posted into HCI IBI Queue (HCI 8.6.7)
-  assign stby_bcst_wvalid_o = buf_wvalid_q; // TODO: This must be further qualified.
+  assign stby_bcst_wvalid_o = buf_wvalid_q; // TODO(#31308): This must be further qualified.
   assign stby_bcst_wdata_o  = buf_wdata_q;
 
   // Excess Private Write Data from the Active Controller must just be dropped; there is no
   // accept/reject signaling mechanism on I3C SDR.
-  // TODO: Provide up-front indication to the transceiver of max DDR length transmission?
+  // TODO(#31337): Provide up-front indication to the transceiver of max DDR length transmission?
   logic rx_drop, rx_flush;
 
   wire dtype_crc  = (trx_rxd_i.dtype == I3CDType_CRCWord);
   wire dtype_data = (trx_rxd_i.dtype inside {I3CDType_DataWord, I3CDType_SDRBytes});
-  // TODO: trx_rready_o is currently OR-wired to prv_rvalid
+  // TODO(#31337): trx_rready_o is currently OR-wired to prv_rvalid
   wire rx_data_beat = prv_rvalid & dtype_data & trx_rready_o;
   wire rx_accepted  = rx_data_beat & !rx_drop;
 
@@ -806,8 +824,8 @@ module i3c_target_fsm
   // - zero or more intermediate descriptors are then written, describing the transfer as segments.
   // - the final descriptor for the transfer must include `status` and set `complete.`
   //
-  // TODO: The TTI was extended _after_ this logic was built. It was realized that support for
-  // transfers longer than the allocated space will be required, in which case we must construct
+  // TODO(#31337): The TTI was extended _after_ this logic was built. It was realized that support
+  // for transfers longer than the allocated space will be required, in which case we must construct
   // multiple connected descriptors, see `i3c_tti_pkg`
   i3c_tti_rx_desc_t rx_desc_q, rx_desc_d;
   logic [13:0] next_data_len;
@@ -822,8 +840,8 @@ module i3c_target_fsm
     // itself is reported via `rx_desc_ovl_o` and must not be attributed to this transfer, which
     // is a later one than the transfer whose descriptor was lost.
     rx_desc_d.status      = rx_flood_q ? TTIRxStatus_RxOverflow : trx_rxd_i.status;
-    rx_desc_d.targets     = (trx_rxd_i.targ_id < NumTargets) ? NumTargets'('b1 << trx_rxd_i.targ_id)
-                                                             : NumTargets'(trx_rxd_i.targ_set);
+    rx_desc_d.targets     = (trx_rxd_i.targ_id < NumTargets) ? MaxTargets'('b1 << trx_rxd_i.targ_id)
+                                                             : trx_rxd_i.targ_set;
     rx_desc_d.address     = trx_rxd_i.addr;
     rx_desc_d.is_group    = trx_rxd_i.is_group;
     rx_desc_d.data_length = rx_data_len;
@@ -835,26 +853,26 @@ module i3c_target_fsm
   // Will we have to drop any more read data at this point?
   // - note that `rx_flood_q` makes any drop persistent for the remainder of the transfer,
   //   whatever its cause, so that a transfer is never captured only in part.
-  // TODO: rx_data_len will always have even values if trx_rxd_i.dtype != I3CDType_SDRBytes, so
-  //       &rx_data_len will never fire in the DDR case: We therefore need to check for
+  // TODO(#31337): rx_data_len will always have even values if trx_rxd_i.dtype != I3CDType_SDRBytes,
+  //       so &rx_data_len will never fire in the DDR case: We therefore need to check for
   //       &rx_data_len[13:1] in DDR mode instead.
   assign rx_drop = |{buf_wvalid_q & !buf_wready_i, // Transient: Data path full.
                      rx_desc_stall,                // Transient: Descriptor path full.
                      rx_flood_q, &rx_data_len};    // Persistent until end of the transfer.
 
-  // TODO: For SDR, flush is currently only triggered on a per-frame basis on a P. This means that
-  //       with frames which contain segments to multiple targets (separated via Sr), all traffic
-  //       ends up in the rx buffer with the address in the descriptor set to the target that the
-  //       first block of data was meant for.
+  // TODO(#31337): For SDR, flush is currently only triggered on a per-frame basis on a P. This
+  //       means that frames which contain segments to multiple targets (separated via Sr), all
+  //       traffic ends up in the rx buffer with the address in the descriptor set to the target
+  //       that the first block of data was meant for.
   assign rx_flush = (stop_det_i & rx_active_q) ||  // SDR
                     (prv_rvalid & dtype_crc);      // HDR-DDR
 
   // Descriptor written to buffer
   assign rx_desc_accepted = rx_desc_wvalid & rx_desc_wready_i;
 
-  // TODO: tx downcounting and rx upcounting could probably be combined if careful, certainly
-  // the adder and perhaps the storage too? We'd have to accommodate the prefetching, probably by
-  // keeping the descriptor available, but we may want that for 'wroc' et al anyway.
+  // TODO(#31337): tx downcounting and rx upcounting could probably be combined if careful,
+  // certainly the adder and perhaps the storage too? We'd have to accommodate the prefetching,
+  // probably by keeping the descriptor available, but we may want that for 'wroc' et al anyway.
   assign next_data_len = rx_data_len + ((trx_rxd_i.dtype == I3CDType_SDRBytes) ? 14'h1 : 14'h2);
 
   // Track the number of bytes of received data and then emit the TTI Rx Descriptor.
@@ -935,7 +953,7 @@ module i3c_target_fsm
 
   // Remove the IBI Status Descriptor from the FIFO once we've been granted the bus.
   assign ibi_desc_rready_o = enable_i & arb_toggle_edge & arb_gnt_q[0];
-  // TODO: Drop the IBI data immediately for now...
+  // TODO(#31337): Drop the IBI data immediately for now...
   assign ibi_rready_o = enable_i & ((ibi_desc_rvalid_i & ibi_rvalid_i) | sink_rready[0]);
 
   wire         ibi_desc_consumed = 1'b0;
@@ -963,7 +981,7 @@ module i3c_target_fsm
     .data_o    (ibi_unit_data)
   );
 
-  // TODO: Splitter it not used because IBI transmission is incomplete.
+  // TODO(#31337): Splitter is not used because IBI transmission is incomplete.
   assign ibi_unit_ready = ibi_unit_valid;
 
   // Is the first Target operating as a Standby Controller that requires attention?
@@ -999,14 +1017,13 @@ module i3c_target_fsm
   localparam int unsigned IBIArbDataW = $bits(i3c_targ_trx_arb_t);
   i3c_targ_trx_arb_t ibi_arb_in[NumTargets + 2];
   logic  [NumTargets+1:0] ibi_arb_req, ibi_arb_gnt;
-  logic [NumTargetsW-1:0] ibi_targ_id_clamp;
+  logic      [Log2MT-1:0] ibi_targ_id_clamp;
   always_comb begin
     for (int unsigned c = 0; c < NumTargets + 2; c++) ibi_arb_in[c] = '0;
-    ibi_targ_id_clamp = ibi_stat_desc.targ_id < NumTargets ? NumTargetsW'(ibi_stat_desc.targ_id)
-                                                           : '0;
+    ibi_targ_id_clamp = ibi_stat_desc.targ_id < NumTargets ? Log2MT'(ibi_stat_desc.targ_id) : '0;
     // The highest-priority contender is any In-Band Interrupt from the queue.
     ibi_arb_req[0] = ibi_dispatch;
-    ibi_arb_in[0].targ_id  = ibi_stat_desc.targ_id;
+    ibi_arb_in[0].targ_id  = TargIDW'(ibi_stat_desc.targ_id);
     ibi_arb_in[0].addr     = targ_dev_i[ibi_targ_id_clamp].addr;
     ibi_arb_in[0].ibi      = 1'b1;
     ibi_arb_in[0].rdata_nq = mand_data_nq(ibi_stat_desc.mdb, ibi_stat_desc.data_length);
@@ -1053,7 +1070,8 @@ module i3c_target_fsm
   );
 
   // Present the arbitration request of the winning target to the transceiver.
-  // TODO: Consider whether we shall ever need to retract an arbitration request or re-prioritize.
+  // TODO(#31337): Consider whether we shall ever need to retract an arbitration request or
+  // re-prioritize.
   // The Bus Available Condition is 1us.
   always_ff @(posedge clk_i or negedge trx_rst_ni) begin
     if (!trx_rst_ni) begin
@@ -1102,9 +1120,10 @@ module i3c_target_fsm
   // Notification of transmission outcomes.
   // - there can only be a single transmission outcome at a time.
   //
-  // TODO: We want a response from the transceiver to indicate the outcome of the transmission.
-  // TODO: We then have a question what we should do if the transfer did not complete successfully;
-  // leave software to purge the Tx and Tx Desc FIFOs? Does it even have the means to do that yet?
+  // TODO(#31337): We want a response from the transceiver to indicate the outcome of the
+  // transmission. We then have a question what we should do if the transfer did not complete
+  // successfully; leave software to purge the Tx and Tx Desc FIFOs? Does it even have the means to
+  // do that yet?
   logic ibi_result;
   logic txd_result;
   always_comb begin
@@ -1196,10 +1215,10 @@ module i3c_target_fsm
     for (int grp = MaxGroups - 1; grp >= 0; grp--) begin
       if (reg2hw_i.targ_group[grp].group_addr.q == grp_addr) begin
         grp_match_valid = 1'b1;
-        grp_match_idx   = MaxGroupsW'(grp);
+        grp_match_idx   = MaxGroupsW'($unsigned(grp));
       end else if (reg2hw_i.targ_group[grp].targets.q == '0) begin
         grp_free_valid  = 1'b1;
-        grp_free_idx    = MaxGroupsW'(grp);
+        grp_free_idx    = MaxGroupsW'($unsigned(grp));
       end
     end
     // An entry already describing this group address always takes precedence.
@@ -1208,24 +1227,28 @@ module i3c_target_fsm
     grp_idx       = grp_match_valid ? grp_match_idx : grp_free_idx;
   end
 
-  logic [NumTargets-1:0] targs_curr;
-  logic [NumTargets-1:0] targs_set;
-  logic [NumTargets-1:0] targs_rst;
-  assign targs_curr = {NumTargets{~grp_add}} & reg2hw_i.targ_group[grp_idx].targets.q;
-  assign targs_set  = {NumTargets{ grp_set}} & grp_targets;
-  assign targs_rst  = {NumTargets{ grp_rst}} & grp_targets;
+  // The subscription registers are sized for `MaxTargets`, so trim them to the Virtual Targets
+  // that are present; `grp_targets` is already trimmed by the CCC handling.
+  logic [MaxTargets-1:0] targs_curr;
+  logic [MaxTargets-1:0] targs_set;
+  logic [MaxTargets-1:0] targs_rst;
+  assign targs_curr = {MaxTargets{~grp_add}} & TargPresent &
+                      reg2hw_i.targ_group[grp_idx].targets.q;
+  assign targs_set  = {MaxTargets{ grp_set}} & grp_targets;
+  assign targs_rst  = {MaxTargets{ grp_rst}} & grp_targets;
 
   // Just leave group addresses in place when all targets become unsubscribed; we can reallocate
   // those entries above.
   for (genvar grp = 0; grp < MaxGroups; grp++) begin : gen_grp_addr
-    logic [NumTargets-1:0] grp_curr;
-    assign grp_curr           = grp_all ? reg2hw_i.targ_group[grp].targets.q[NumTargets-1:0]
+    logic [MaxTargets-1:0] grp_curr;
+    assign grp_curr           = grp_all ? reg2hw_i.targ_group[grp].targets.q & TargPresent
                                         : targs_curr;
     // Are we adding a new group address?
     assign grp_addr_de_o[grp] = grp_set & grp_add & grp_idx_valid & (grp == grp_idx);
     assign grp_addr_d_o[grp]  = grp_addr;
     // Update the list of subscribed targets.
-    assign grp_targ_de_o[grp] = (grp_set | grp_rst) & (grp_all | (grp_idx_valid & (grp == grp_idx)));
+    assign grp_targ_de_o[grp] = (grp_set | grp_rst) &
+                                (grp_all | (grp_idx_valid & (grp == grp_idx)));
     assign grp_targ_d_o[grp]  = (grp_curr | targs_set) & ~targs_rst;
   end
 
@@ -1308,10 +1331,52 @@ module i3c_target_fsm
     assign ext_present_o = 1'b0;
     assign ext_info_o    = 'b0;
     assign ext_hw2reg_o  = 'b0;
+    logic unused_ext_reg2hw;
+    assign unused_ext_reg2hw = ^ext_reg2hw_i;
   end
 
-  // TODO: Dummy drivers for now.
+  // TODO(#31333): Dummy drivers for now.
   assign transfer_err_o = 1'b0;
   assign transfer_aborted_o = 1'b0;
+
+  // Signals that the logic does not use (yet).
+  // - TODO(#31304): blocked addresses are not checked yet.
+  logic unused_blocked;
+  always_comb begin
+    unused_blocked = 1'b0;
+    for (int unsigned b = 0; b < NumBlocked; b++) begin
+      unused_blocked ^= ^{addr_blocked_i[b], mask_blocked_i[b]};
+    end
+  end
+  // - Target device configuration, information and Tx Descriptor queue levels that the
+  //   transceiver uses instead or that are not used yet, and Pending Read Notification fields that
+  //   are not used yet.
+  logic unused_targ_dev;
+  always_comb begin
+    unused_targ_dev = 1'b0;
+    for (int unsigned t = 0; t < NumTargets; t++) begin
+      unused_targ_dev ^= ^{targ_info[t], tx_desc[t].prn.reserved, tx_desc[t].prn.tid,
+                           tx_desc[t].prn.wroc, tx_desc_rused_i[t], tx_desc_ravail_i[t]};
+    end
+    for (int unsigned t = 0; t < MaxTargets; t++) unused_targ_dev ^= ^targ_dev_i[t];
+    // - the transmit-data handshake and the Direct Read CCC data of the Virtual Targets that
+    //   are not implemented.
+    for (int unsigned t = NumTargets; t < MaxTargets; t++) begin
+      unused_targ_dev ^= ^{txd_toggle_i[t], ccc_rsp.req_cdata[t]};
+    end
+  end
+  // - inputs that are not used yet (see the TODOs at their declarations).
+  logic unused_fsm_inputs;
+  assign unused_fsm_inputs = ^{rstact_i, bus_avail_i, rx_desc_wused_i, rx_desc_wfull_i,
+                               ibi_rused_i, buf_wavail_i, stby_bcst_wready_i};
+  // - descriptor fields, grants, DAA state and the Virtual Target Detect bit that are not used yet.
+  logic unused_fsm_signals;
+  assign unused_fsm_signals = ^{ccc_rsp.inc_idx, ccc_rsp.rst_idx, arb_gnt_q[1],
+                                tx_desc_curr.tx.data_length, tx_desc_curr.tx.notify,
+                                tx_desc_curr.tx.reserved, tx_desc_curr.tx.wroc,
+                                ibi_desc.data_length, ibi_desc.mdb, ibi_desc.reserved,
+                                ibi_desc.wroc, daa_targ_valid, daa_targ_id, ibi_unit_data,
+                                ibi_stat_desc.reserved, ibi_stat_desc.tid, ibi_stat_desc.wroc,
+                                ibi_arb_winner, virt_targ_det};
 
 endmodule
